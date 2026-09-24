@@ -337,8 +337,27 @@ class ForwardedHeadersMiddleware:
         return scope
 
 
+IPV6_CLIENT_PREFIX = 64
+
+
+def rate_limit_key(ip: str) -> str:
+    """The bucket a client address is counted in.
+
+    IPv4: the address itself. IPv6: its /64, since one host usually holds a
+    whole /64 and could otherwise rotate addresses to reset its budget.
+    Anything that isn't an address (e.g. ``"unknown"``) is used as-is.
+    """
+    address = _parse_ip(ip)
+    if isinstance(address, ipaddress.IPv6Address):
+        network = ipaddress.IPv6Network((address, IPV6_CLIENT_PREFIX), strict=False)
+        return str(network)
+    return str(address) if address is not None else ip
+
+
 class LoginRateLimiter:
     """In-memory, per-IP sliding window of login attempts; thread-safe.
+
+    IPv6 clients are counted per /64 (see :func:`rate_limit_key`).
 
     :meth:`try_begin` reserves an attempt atomically *before* the password is
     checked, so parallel requests can't slip past the limit: at most
@@ -393,6 +412,7 @@ class LoginRateLimiter:
 
     def try_begin(self, ip: str) -> bool:
         """Reserve one login attempt for ``ip``; ``False`` if it is blocked."""
+        ip = rate_limit_key(ip)
         with self._lock:
             now = self._clock()
             self._maybe_sweep(now)
@@ -405,11 +425,13 @@ class LoginRateLimiter:
             return True
 
     def succeeded(self, ip: str) -> None:
-        """A login from ``ip`` worked: forget its attempts."""
+        """A login from ``ip`` worked: forget its attempts (its whole /64 for IPv6)."""
+        ip = rate_limit_key(ip)
         with self._lock:
             self._attempts.pop(ip, None)
 
     def attempts(self, ip: str) -> int:
+        ip = rate_limit_key(ip)
         with self._lock:
             return self._expire(ip, self._clock())
 

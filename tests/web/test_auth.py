@@ -499,3 +499,35 @@ def test_app_start_up_precomputes_the_dummy_hash(tmp_path: Path) -> None:
     users._dummy_hash.cache_clear()
     create_app(tmp_path, start_scheduler=False)
     assert users._dummy_hash.cache_info().currsize == 1
+
+
+# --- IPv6 clients are counted per /64 ---------------------------------------------
+
+
+def test_ipv6_addresses_in_one_slash_64_share_one_budget() -> None:
+    limiter = LoginRateLimiter(max_failures=3)
+    for host in ("::1", "::2", "::3"):
+        assert limiter.try_begin(f"2001:db8:1:2{host}")
+    # A fresh address from the same /64 (one host can pick any of 2**64) is still blocked.
+    assert not limiter.try_begin("2001:db8:1:2:ffff:ffff:ffff:ffff")
+    assert limiter.attempts("2001:db8:1:2::abcd") == 3
+    # Another /64 has its own budget.
+    assert limiter.try_begin("2001:db8:1:3::1")
+
+
+def test_success_from_one_address_clears_its_slash_64() -> None:
+    limiter = LoginRateLimiter(max_failures=2)
+    assert limiter.try_begin("2001:db8::1")
+    assert limiter.try_begin("2001:db8::2")
+    assert not limiter.try_begin("2001:db8::9")
+    limiter.succeeded("2001:db8::3")
+    assert limiter.try_begin("2001:db8::4")
+
+
+def test_ipv4_and_non_address_keys_are_counted_as_they_are() -> None:
+    limiter = LoginRateLimiter(max_failures=1)
+    assert limiter.try_begin("192.0.2.1")
+    assert limiter.try_begin("192.0.2.2")
+    assert not limiter.try_begin("192.0.2.1")
+    assert limiter.try_begin("unknown")
+    assert not limiter.try_begin("unknown")
