@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -6,6 +7,7 @@ import pytest
 import uvicorn
 
 from threatcull import cli
+from threatcull.web.routes.feeds import FeedTokenAccessFilter
 
 # Brief requires proving an explicit non-default host is passed through untouched;
 # this is never a real bind (uvicorn.run is monkeypatched in every test below).
@@ -51,3 +53,20 @@ def test_serve_never_defaults_to_a_non_loopback_host(
 ) -> None:
     cli.main(["--data-dir", str(tmp_path), "serve"])
     assert captured_run["host"] != _EXPLICIT_HOST
+
+
+def test_serve_installs_the_feed_token_access_log_filter(
+    tmp_path: Path, captured_run: dict[str, Any]
+) -> None:
+    logger = logging.getLogger("uvicorn.access")
+    for existing in list(logger.filters):
+        if isinstance(existing, FeedTokenAccessFilter):
+            logger.removeFilter(existing)
+    try:
+        assert cli.main(["--data-dir", str(tmp_path), "serve"]) == cli.EXIT_OK
+        installed = [f for f in logger.filters if isinstance(f, FeedTokenAccessFilter)]
+        assert len(installed) == 1
+    finally:
+        for existing in list(logger.filters):
+            if isinstance(existing, FeedTokenAccessFilter):
+                logger.removeFilter(existing)

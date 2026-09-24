@@ -20,7 +20,10 @@ from threatcull.store.errors import NotFoundError
 
 OutputFormat = Literal["plain", "hosts", "adguard", "rpz", "csv", "json"]
 DOMAIN_ONLY_FORMATS: frozenset[str] = frozenset({"hosts", "adguard", "rpz"})
-_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+# Public so callers that must validate a name before it becomes an OutputSpec
+# (e.g. the web layer's /o/{name} route, before it ever touches the
+# database) can reuse this exact pattern instead of duplicating it.
+NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 _IP_CATEGORIES = frozenset({"malicious", "c2", "scanner"})
 
 
@@ -36,7 +39,7 @@ class OutputSpec:
     last_published_at: str | None = None
 
     def __post_init__(self) -> None:
-        if not _NAME.fullmatch(self.name):
+        if not NAME_PATTERN.fullmatch(self.name):
             raise ValueError(f"Output name {self.name!r} must be lowercase letters, digits, dashes")
         if self.kind == "ip" and self.format in DOMAIN_ONLY_FORMATS:
             raise ValueError(f"Output format {self.format} only suits domain Outputs")

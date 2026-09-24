@@ -36,6 +36,7 @@ from threatcull.store.sources import (
 )
 from threatcull.store.users import count_users, create_user
 from threatcull.web.app import create_app
+from threatcull.web.routes.feeds import install_feed_token_redaction
 
 DB_NAME = "threatcull.db"
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED = 0, 1, 2
@@ -317,6 +318,7 @@ def _serve(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
             return EXIT_ERROR
         create_user(conn, "admin", password, now=utcnow())
         print(f"created user admin from {ADMIN_ENV_VAR}")
+    install_feed_token_redaction()  # Feed Tokens must never land in the access log
     uvicorn.run(create_app(args.data_dir), host=args.host, port=args.port, log_level="info")
     return EXIT_OK
 
