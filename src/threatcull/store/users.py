@@ -96,6 +96,12 @@ def count_users(conn: sqlite3.Connection) -> int:
     return count
 
 
+def list_users(conn: sqlite3.Connection) -> list[tuple[str, str]]:
+    """``(username, created_at)`` for every user, by username; never the hashes."""
+    rows = conn.execute("SELECT username, created_at FROM users ORDER BY username").fetchall()
+    return [(row["username"], row["created_at"]) for row in rows]
+
+
 def set_password(conn: sqlite3.Connection, username: str, password: str) -> None:
     _check_password(password)
     cursor = conn.execute(

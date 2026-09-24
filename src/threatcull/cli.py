@@ -37,7 +37,7 @@ from threatcull.store.sources import (
     set_enabled,
     sync_catalog,
 )
-from threatcull.store.users import count_users, create_user
+from threatcull.store.users import count_users, create_user, list_users, set_password
 from threatcull.web.app import create_app
 from threatcull.web.routes.feeds import install_feed_token_redaction
 from threatcull.web.security import parse_trusted_proxies
@@ -109,13 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
     out_sub.add_parser("list")
     out_sub.add_parser("rotate-token").add_argument("name")
 
-    user = sub.add_parser("user", help="Manage web UI users")
-    user_sub = user.add_subparsers(dest="action", required=True)
-    user_create = user_sub.add_parser("create", help="Create a web UI user")
-    user_create.add_argument("username")
-    user_create.add_argument(
-        "--password-stdin", action="store_true", help="Read the password from one line of stdin"
-    )
+    _add_user_parser(sub)
 
     _add_serve_parser(sub)
     _add_api_token_parser(sub)
@@ -141,6 +135,24 @@ def _add_home_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -
         help="Also ask api.ipify.org for this network's public IP (contacts the internet)",
     )
     detect.add_argument("--apply", action="store_true", help="Add every candidate (origin=auto)")
+
+
+def _add_user_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    user = sub.add_parser("user", help="Manage web UI users")
+    user_sub = user.add_subparsers(dest="action", required=True)
+    user_create = user_sub.add_parser("create", help="Create a web UI user")
+    user_create.add_argument("username")
+    user_create.add_argument(
+        "--password-stdin", action="store_true", help="Read the password from one line of stdin"
+    )
+    user_pw = user_sub.add_parser(
+        "set-password", help="Change a user's password (ends their web sessions)"
+    )
+    user_pw.add_argument("username")
+    user_pw.add_argument(
+        "--password-stdin", action="store_true", help="Read the password from one line of stdin"
+    )
+    user_sub.add_parser("list", help="List web UI users")
 
 
 def _add_serve_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -410,6 +422,23 @@ def _user_create(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _user_set_password(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    # Sessions carry a fingerprint of the password hash, so every web session
+    # of this user stops working on its next request.
+    set_password(conn, args.username, _read_new_password(args.password_stdin))
+    print(f"password changed for {args.username}; their web sessions are signed out")
+    return EXIT_OK
+
+
+def _user_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    users = list_users(conn)
+    if not users:
+        print("no web UI users yet (create one with `threatcull user create <name>`)")
+    for username, created_at in users:
+        print(f"{username:<24} created={created_at}")
+    return EXIT_OK
+
+
 def _serve(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     if count_users(conn) == 0:
         password = os.environ.get(ADMIN_ENV_VAR)
@@ -475,6 +504,8 @@ _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("outputs", "list"): _outputs_list,
     ("outputs", "rotate-token"): _outputs_rotate,
     ("user", "create"): _user_create,
+    ("user", "set-password"): _user_set_password,
+    ("user", "list"): _user_list,
     ("serve", None): _serve,
     ("api-token", "create"): _api_token_create,
     ("api-token", "list"): _api_token_list,

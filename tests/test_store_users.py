@@ -128,3 +128,12 @@ def test_verify_user_upgrades_an_outdated_hash(
     assert new != old
     assert not users._HASHER.check_needs_rehash(new)
     assert verify_user(conn, "admin", PASSWORD) is True
+
+
+def test_list_users_is_sorted_and_hash_free(conn: sqlite3.Connection) -> None:
+    create_user(conn, "zed", PASSWORD, now=NOW)
+    create_user(conn, "amy", PASSWORD, now=NOW)
+    assert users.list_users(conn) == [
+        ("amy", "2026-09-24T12:00:00+00:00"),
+        ("zed", "2026-09-24T12:00:00+00:00"),
+    ]

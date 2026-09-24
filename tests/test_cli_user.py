@@ -5,10 +5,13 @@ from typing import Any
 
 import pytest
 import uvicorn
+from fastapi.testclient import TestClient
 
+from tests.web.conftest import login
 from threatcull import cli
 from threatcull.store.db import connect
 from threatcull.store.users import count_users, verify_user
+from threatcull.web.app import create_app
 
 PASSWORD = "correct horse battery"  # noqa: S105 - test-only credential
 
@@ -92,6 +95,95 @@ def test_user_create_reports_a_duplicate(
     monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
     assert cli.main(argv) == cli.EXIT_ERROR
     assert "already exists" in capsys.readouterr().err
+
+
+# --- user set-password / list -------------------------------------------------
+
+
+NEW_PASSWORD = "a brand new passphrase"  # noqa: S105 - test-only credential
+
+
+def _create(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, username: str) -> None:
+    monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
+    argv = ["--data-dir", str(tmp_path), "user", "create", username, "--password-stdin"]
+    assert cli.main(argv) == cli.EXIT_OK
+
+
+def test_user_set_password_from_stdin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _create(tmp_path, monkeypatch, "alice")
+    monkeypatch.setattr("sys.stdin", io.StringIO(NEW_PASSWORD + "\n"))
+    argv = ["--data-dir", str(tmp_path), "user", "set-password", "alice", "--password-stdin"]
+    assert cli.main(argv) == cli.EXIT_OK
+    assert "password changed for alice" in capsys.readouterr().out
+    assert _user_ok(tmp_path, "alice", NEW_PASSWORD)
+    assert not _user_ok(tmp_path, "alice", PASSWORD)
+
+
+def test_user_set_password_prompts_twice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _create(tmp_path, monkeypatch, "alice")
+    prompts: list[str] = []
+
+    def fake_getpass(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return NEW_PASSWORD
+
+    monkeypatch.setattr("getpass.getpass", fake_getpass)
+    assert cli.main(["--data-dir", str(tmp_path), "user", "set-password", "alice"]) == 0
+    assert len(prompts) == 2
+    assert _user_ok(tmp_path, "alice", NEW_PASSWORD)
+
+
+def test_user_set_password_for_an_unknown_user_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("sys.stdin", io.StringIO(NEW_PASSWORD + "\n"))
+    argv = ["--data-dir", str(tmp_path), "user", "set-password", "nobody", "--password-stdin"]
+    assert cli.main(argv) == cli.EXIT_ERROR
+    assert "nobody" in capsys.readouterr().err
+
+
+def test_user_set_password_enforces_the_password_rules(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _create(tmp_path, monkeypatch, "alice")
+    monkeypatch.setattr("sys.stdin", io.StringIO("short\n"))
+    argv = ["--data-dir", str(tmp_path), "user", "set-password", "alice", "--password-stdin"]
+    assert cli.main(argv) == cli.EXIT_ERROR
+    assert "12 characters" in capsys.readouterr().err
+    assert _user_ok(tmp_path, "alice", PASSWORD)
+
+
+def test_user_set_password_ends_existing_web_sessions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _create(tmp_path, monkeypatch, "admin")
+    with TestClient(create_app(tmp_path, start_scheduler=False)) as client:
+        login(client, "admin", PASSWORD)
+        assert client.get("/api/v1/me").status_code == 200
+        monkeypatch.setattr("sys.stdin", io.StringIO(NEW_PASSWORD + "\n"))
+        argv = ["--data-dir", str(tmp_path), "user", "set-password", "admin", "--password-stdin"]
+        assert cli.main(argv) == cli.EXIT_OK
+        assert client.get("/api/v1/me").status_code == 401
+
+
+def test_user_list_shows_usernames_never_hashes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _create(tmp_path, monkeypatch, "bob")
+    _create(tmp_path, monkeypatch, "alice")
+    capsys.readouterr()
+    assert cli.main(["--data-dir", str(tmp_path), "user", "list"]) == cli.EXIT_OK
+    lines = capsys.readouterr().out.splitlines()
+    assert [line.split()[0] for line in lines] == ["alice", "bob"]
+    assert all("created=" in line for line in lines)
+    assert "argon2" not in "\n".join(lines)
+
+
+def test_user_list_with_no_users(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "user", "list"]) == cli.EXIT_OK
+    assert "no web UI users" in capsys.readouterr().out
 
 
 # --- serve bootstrap ------------------------------------------------------------
