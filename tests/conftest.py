@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.fixture_server import FixtureServer
 from threatcull.store.db import connect
 
 
@@ -19,3 +20,11 @@ def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 @pytest.fixture
 def now() -> datetime:
     return datetime(2026, 9, 24, 12, 0, tzinfo=UTC)
+
+
+@pytest.fixture
+def fixture_server() -> Iterator[FixtureServer]:
+    server = FixtureServer()
+    server.start()
+    yield server
+    server.stop()
