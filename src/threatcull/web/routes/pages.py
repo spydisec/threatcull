@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Annotated
+from collections import Counter
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, Request
 from pydantic import ValidationError
@@ -12,14 +13,15 @@ from starlette.responses import RedirectResponse, Response
 
 from threatcull.clock import utcnow
 from threatcull.compiling import stale_source_ids
+from threatcull.store.allowlist import add_entry, builtin_entries, operator_entries, remove_entry
 from threatcull.store.errors import NotFoundError, PolicyError
-from threatcull.store.outputs import list_outputs
+from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
 from threatcull.store.runs import last_run, recent_runs
 from threatcull.store.settings import load_settings
 from threatcull.store.sources import add_custom_source, list_sources, set_business_mode
 from threatcull.store.sources import set_enabled as store_set_enabled
 from threatcull.web.deps import check_csrf, get_conn, require_user
-from threatcull.web.schemas import CustomSourceIn
+from threatcull.web.schemas import AllowlistEntryIn, CustomSourceIn, OutputCreateIn
 from threatcull.web.templating import render, render_fragment
 
 router = APIRouter()
@@ -73,17 +75,97 @@ def sources_page(
     return render(request, "sources.html", {"sources": list_sources(conn)})
 
 
+def _outputs_context(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
+    return {"outputs": list_outputs(conn), "base_url": str(request.base_url)}
+
+
 @router.get("/outputs")
 def outputs_page(
     request: Request,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
-    return render(
-        request,
-        "outputs.html",
-        {"outputs": list_outputs(conn), "base_url": str(request.base_url)},
+    return render(request, "outputs.html", _outputs_context(request, conn))
+
+
+@router.post("/outputs/{name}/rotate", dependencies=[Depends(check_csrf)])
+def rotate_output_token_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    name: str,
+) -> Response:
+    try:
+        token = rotate_token(conn, name)
+    except NotFoundError as exc:
+        context = _outputs_context(request, conn)
+        context["error"] = str(exc)
+        return render(request, "outputs.html", context, status_code=404)
+    context = _outputs_context(request, conn)
+    context.update({"revealed_name": name, "revealed_token": token, "revealed_rotated": True})
+    return render(request, "outputs.html", context, headers={"Cache-Control": "no-store"})
+
+
+def _create_output_error(request: Request, conn: sqlite3.Connection, message: str) -> Response:
+    context = _outputs_context(request, conn)
+    context["create_error"] = message
+    return render(request, "outputs.html", context, status_code=400)
+
+
+@router.post("/outputs", dependencies=[Depends(check_csrf)])
+def create_output_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    *,
+    # Defaulted to "" (not required): an empty *required* Form field is
+    # treated by FastAPI as missing (a 422 that would bypass our inline 400),
+    # so these fall through to OutputCreateIn's own validation instead.
+    name: Annotated[str, Form()] = "",
+    kind: Annotated[str, Form()] = "",
+    categories: Annotated[tuple[str, ...], Form()] = (),
+    min_tier: Annotated[str, Form()] = "high",
+    max_entries: Annotated[str, Form()] = "",
+    format: Annotated[str, Form()] = "plain",
+) -> Response:
+    max_entries_value: int | None = None
+    if max_entries.strip():
+        try:
+            max_entries_value = int(max_entries.strip())
+        except ValueError:
+            return _create_output_error(request, conn, "max_entries must be a whole number")
+    try:
+        payload = OutputCreateIn(
+            name=name,
+            kind=kind,
+            categories=categories,
+            min_tier=min_tier,
+            max_entries=max_entries_value,
+            format=format,
+        )
+    except ValidationError as exc:
+        return _create_output_error(request, conn, _validation_message(exc))
+    try:
+        spec = OutputSpec(
+            payload.name,
+            payload.kind,
+            frozenset(payload.categories),
+            payload.min_tier,
+            payload.max_entries,
+            payload.format,
+        )
+    except ValueError as exc:
+        return _create_output_error(request, conn, str(exc))
+    try:
+        token = create_output(conn, spec)
+    except sqlite3.IntegrityError:
+        message = f"an Output named {payload.name!r} already exists"
+        return _create_output_error(request, conn, message)
+    context = _outputs_context(request, conn)
+    context.update(
+        {"revealed_name": payload.name, "revealed_token": token, "revealed_rotated": False}
     )
+    return render(request, "outputs.html", context, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/runs")
@@ -93,6 +175,81 @@ def runs_page(
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
     return render(request, "runs.html", {"runs": recent_runs(conn, RUNS_PAGE_LIMIT)})
+
+
+def _allowlist_context(conn: sqlite3.Connection) -> dict[str, Any]:
+    builtin_counts = Counter(entry.origin for entry in builtin_entries(conn))
+    return {
+        "operator_entries": operator_entries(conn),
+        "allowlist_sources": list_sources(conn, role="allowlist"),
+        "builtin_counts": builtin_counts,
+    }
+
+
+@router.get("/allowlist")
+def allowlist_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    return render(request, "allowlist.html", _allowlist_context(conn))
+
+
+def _allowlist_error(
+    request: Request,
+    conn: sqlite3.Connection,
+    message: str,
+    *,
+    value: str,
+    note: str,
+    status_code: int,
+) -> Response:
+    context = _allowlist_context(conn)
+    context.update({"error": message, "value": value, "note": note})
+    return render(request, "allowlist.html", context, status_code=status_code)
+
+
+@router.post("/allowlist", dependencies=[Depends(check_csrf)])
+def add_allowlist_entry_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    # Defaults to "" (not required): FastAPI treats an empty *required* Form
+    # field as missing (a 422), which would bypass our own inline 400 for an
+    # empty value; letting it through and relying on AllowlistEntryIn's own
+    # min_length=1 check keeps the 400 path reachable.
+    value: Annotated[str, Form()] = "",
+    note: Annotated[str, Form()] = "",
+) -> Response:
+    try:
+        payload = AllowlistEntryIn(value=value, note=note)
+    except ValidationError as exc:
+        return _allowlist_error(
+            request, conn, _validation_message(exc), value=value, note=note, status_code=400
+        )
+    try:
+        add_entry(conn, payload.value, payload.note, now=utcnow())
+    except ValueError as exc:
+        return _allowlist_error(
+            request, conn, str(exc), value=payload.value, note=payload.note, status_code=400
+        )
+    return RedirectResponse("/allowlist", status_code=303)
+
+
+@router.post("/allowlist/remove", dependencies=[Depends(check_csrf)])
+def remove_allowlist_entry_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    value: Annotated[str, Form()] = "",
+) -> Response:
+    try:
+        remove_entry(conn, value)
+    except ValueError as exc:
+        return _allowlist_error(request, conn, str(exc), value=value, note="", status_code=400)
+    except NotFoundError as exc:
+        return _allowlist_error(request, conn, str(exc), value=value, note="", status_code=404)
+    return RedirectResponse("/allowlist", status_code=303)
 
 
 def _apply_enabled_change(

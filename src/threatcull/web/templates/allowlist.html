@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Allowlist · ThreatCull{% endblock %}
+{% block content %}
+<h1>Allowlist</h1>
+{% if error is defined and error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+<section class="card">
+  <h2>Operator entries</h2>
+  {% if operator_entries %}
+  <table class="table">
+    <thead>
+      <tr><th>Value</th><th>Kind</th><th>Note</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      {% for entry in operator_entries %}
+      <tr>
+        <td>{{ entry.value }}</td>
+        <td>{{ entry.kind }}</td>
+        <td>{{ entry.note }}</td>
+        <td class="actions">
+          <form method="post" action="/allowlist/remove">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="value" value="{{ entry.value }}">
+            <button type="submit">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No operator Allowlist entries yet.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Add an entry</h2>
+  <form class="inline-form" method="post" action="/allowlist">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Value
+      <input type="text" name="value" placeholder="1.2.3.4, 10.0.0.0/8 or example.com"
+             value="{{ value if value is defined else '' }}" required>
+    </label>
+    <label>Note
+      <input type="text" name="note" value="{{ note if note is defined else '' }}">
+    </label>
+    <button type="submit">Add entry</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Built-in Allowlist Sources</h2>
+  {% if allowlist_sources %}
+  <table class="table">
+    <thead>
+      <tr><th>Source</th><th>Enabled</th><th>Built-in entries</th></tr>
+    </thead>
+    <tbody>
+      {% for source in allowlist_sources %}
+      <tr>
+        <td>{{ source.name }}</td>
+        <td>{{ "yes" if source.enabled else "no" }}</td>
+        <td>{{ builtin_counts.get(source.id, 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No allowlist Sources configured.</p>
+  {% endif %}
+</section>
+{% endblock %}

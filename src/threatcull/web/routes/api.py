@@ -13,16 +13,20 @@ from __future__ import annotations
 import sqlite3
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
+from threatcull.clock import utcnow
+from threatcull.store.allowlist import AllowlistEntry, add_entry, builtin_entries, operator_entries
+from threatcull.store.allowlist import remove_entry as store_remove_entry
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.outputs import OutputSpec, list_outputs
+from threatcull.store.outputs import rotate_token as store_rotate_token
 from threatcull.store.runs import Run, recent_runs
 from threatcull.store.settings import Settings, load_settings
 from threatcull.store.sources import Source, list_sources
 from threatcull.store.sources import set_enabled as store_set_enabled
 from threatcull.web.deps import check_csrf, get_conn, require_api_user
-from threatcull.web.schemas import SourceEnableIn
+from threatcull.web.schemas import AllowlistEntryIn, SourceEnableIn
 
 router = APIRouter(prefix="/api/v1")
 
@@ -65,6 +69,15 @@ def _output_json(output: OutputSpec) -> dict[str, Any]:
         "format": output.format,
         "last_count": output.last_count,
         "last_published_at": output.last_published_at,
+    }
+
+
+def _allowlist_json(entry: AllowlistEntry) -> dict[str, Any]:
+    return {
+        "value": entry.value,
+        "kind": entry.kind,
+        "note": entry.note,
+        "origin": entry.origin,
     }
 
 
@@ -135,6 +148,59 @@ def api_outputs(
     user: Annotated[str, Depends(require_api_user)],
 ) -> list[dict[str, Any]]:
     return [_output_json(output) for output in list_outputs(conn)]
+
+
+@router.post("/outputs/{name}/rotate", dependencies=[Depends(check_csrf)])
+def api_rotate_output_token(
+    name: str,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_api_user)],
+    response: Response,
+) -> dict[str, Any]:
+    try:
+        token = store_rotate_token(conn, name)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    # A Feed Token is shown once; never let a cache keep a copy of this body.
+    response.headers["Cache-Control"] = "no-store"
+    return {"name": name, "token": token}
+
+
+@router.get("/allowlist")
+def api_allowlist(
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_api_user)],
+) -> list[dict[str, Any]]:
+    entries = [*operator_entries(conn), *builtin_entries(conn)]
+    return [_allowlist_json(entry) for entry in entries]
+
+
+@router.post("/allowlist", dependencies=[Depends(check_csrf)])
+def api_add_allowlist_entry(
+    body: AllowlistEntryIn,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_api_user)],
+) -> dict[str, Any]:
+    try:
+        entry = add_entry(conn, body.value, body.note, now=utcnow())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _allowlist_json(entry)
+
+
+@router.delete("/allowlist", dependencies=[Depends(check_csrf)])
+def api_remove_allowlist_entry(
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_api_user)],
+    value: Annotated[str, Query()],
+) -> dict[str, Any]:
+    try:
+        store_remove_entry(conn, value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"value": value, "removed": True}
 
 
 @router.get("/runs")

@@ -3,13 +3,30 @@
 {% block content %}
 <h1>Outputs</h1>
 <p>Rotate the token to get a new one. A Feed Token is shown only once, when it is created or rotated.</p>
+
+{% if error is defined and error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+{% if revealed_token is defined and revealed_token %}
+<section class="card">
+  <h2>New Feed Token for {{ revealed_name }}</h2>
+  <p class="error">
+    This token is shown once and will not be shown again.
+    {% if revealed_rotated %}The old token for {{ revealed_name }} has stopped working.{% endif %}
+  </p>
+  <p>Feed URL (query string):<br><code>{{ base_url }}o/{{ revealed_name }}?token={{ revealed_token }}</code></p>
+  <p>Feed URL (path segment):<br><code>{{ base_url }}o/{{ revealed_name }}/{{ revealed_token }}</code></p>
+</section>
+{% endif %}
+
 <section class="card">
   {% if outputs %}
   <table class="table">
     <thead>
       <tr>
         <th>Name</th><th>Kind</th><th>Format</th><th>Min Tier</th><th>Cap</th>
-        <th>Last count</th><th>Last published</th><th>URL</th>
+        <th>Last count</th><th>Last published</th><th>URL</th><th>Action</th>
       </tr>
     </thead>
     <tbody>
@@ -23,6 +40,12 @@
         <td>{{ output.last_count if output.last_count is not none else "never" }}</td>
         <td>{{ output.last_published_at or "never" }}</td>
         <td><code>{{ base_url }}o/{{ output.name }}?token=&lt;your Feed Token&gt;</code></td>
+        <td class="actions">
+          <form method="post" action="/outputs/{{ output.name }}/rotate">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button type="submit">Rotate token</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -30,5 +53,51 @@
   {% else %}
   <p>No Outputs configured.</p>
   {% endif %}
+</section>
+
+<section class="card">
+  <h2>Create an Output</h2>
+  {% if create_error is defined and create_error %}
+  <p class="error">{{ create_error }}</p>
+  {% endif %}
+  <form class="inline-form" method="post" action="/outputs">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Name
+      <input type="text" name="name" placeholder="my-output" required>
+    </label>
+    <label>Kind
+      <select name="kind">
+        <option value="ip">ip</option>
+        <option value="domain">domain</option>
+      </select>
+    </label>
+    <fieldset>
+      <legend>Categories</legend>
+      {% for cat in ["malicious", "c2", "scanner", "phishing", "spam", "ads_tracking", "infrastructure"] %}
+      <label><input type="checkbox" name="categories" value="{{ cat }}"> {{ cat }}</label>
+      {% endfor %}
+    </fieldset>
+    <label>Min tier
+      <select name="min_tier">
+        <option value="high">high</option>
+        <option value="medium">medium</option>
+        <option value="low">low</option>
+      </select>
+    </label>
+    <label>Max entries (optional)
+      <input type="text" name="max_entries" value="" placeholder="no cap">
+    </label>
+    <label>Format
+      <select name="format">
+        <option value="plain">plain</option>
+        <option value="hosts">hosts</option>
+        <option value="adguard">adguard</option>
+        <option value="rpz">rpz</option>
+        <option value="csv">csv</option>
+        <option value="json">json</option>
+      </select>
+    </label>
+    <button type="submit">Create Output</button>
+  </form>
 </section>
 {% endblock %}
