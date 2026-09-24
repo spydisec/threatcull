@@ -21,6 +21,26 @@ updates:
     labels:
       - dependencies
 
+  # Hook revs in .pre-commit-config.yaml. The ruff rev must match ruff in
+  # uv.lock; the uv entry above bumps the lock file in a separate PR.
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: dev
+    groups:
+      hooks:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci
+      include: scope
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - ci
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
