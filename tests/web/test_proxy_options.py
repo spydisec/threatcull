@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 import uvicorn
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
@@ -16,7 +17,7 @@ from threatcull import cli
 from threatcull.store.outputs import ensure_default_outputs
 from threatcull.web.app import create_app
 from threatcull.web.deps import open_db
-from threatcull.web.security import client_ip, parse_trusted_proxies
+from threatcull.web.security import ForwardedHeadersMiddleware, client_ip, parse_trusted_proxies
 
 # Documentation ranges (RFC 5737), never real hosts.
 CLIENT_A = "203.0.113.7"
@@ -275,3 +276,147 @@ def test_bare_ip_host_works_end_to_end(lan_client: TestClient, tmp_path: Path) -
     assert "1.2.3.4" in lan_client.get("/allowlist").text
     outputs = lan_client.get("/outputs").text
     assert f"{base}/o/" in outputs
+
+
+# --- review round 1: more X-Forwarded-For shapes ------------------------------------
+
+
+def test_client_ip_trailing_comma_leaves_an_empty_hop_so_the_peer_is_used() -> None:
+    request = _request("127.0.0.1", [f"{CLIENT_A},"], trusted=["127.0.0.1"])
+    assert client_ip(request) == "127.0.0.1"
+
+
+@pytest.mark.parametrize(
+    ("hop", "expected"),
+    [
+        ("[2001:db8::5]:1234", "2001:db8::5"),
+        ("[2001:db8::5]", "2001:db8::5"),
+        (f"{CLIENT_A}:5555", CLIENT_A),
+        ("[2001:db8::5]junk", "127.0.0.1"),
+        ("[2001:db8::5", "127.0.0.1"),
+        (f"{CLIENT_A}:port", "127.0.0.1"),
+    ],
+)
+def test_client_ip_reads_hops_with_ports(hop: str, expected: str) -> None:
+    assert client_ip(_request("127.0.0.1", [hop], trusted=["127.0.0.1"])) == expected
+
+
+def test_client_ip_long_chain_still_finds_the_right_most_untrusted_hop() -> None:
+    hops = ", ".join(["1.1.1.1"] * 10_000 + [CLIENT_A])
+    assert client_ip(_request("127.0.0.1", [hops], trusted=["127.0.0.1"])) == CLIENT_A
+
+
+def test_client_ip_too_many_trusted_hops_falls_back_to_the_peer() -> None:
+    hops = ", ".join([CLIENT_A] + ["10.0.0.2"] * 25)
+    assert client_ip(_request("10.0.0.1", [hops], trusted=["10.0.0.0/8"])) == "10.0.0.1"
+
+
+def test_client_ip_normalises_ipv4_mapped_ipv6() -> None:
+    request = _request("::ffff:127.0.0.1", [f"::ffff:{CLIENT_A}"], trusted=["127.0.0.1"])
+    assert client_ip(request) == CLIENT_A
+
+
+@pytest.mark.parametrize("wide", ["0.0.0.0/0", "::/0", "10.0.0.0/7", "fc00::/15"])
+def test_parse_trusted_proxies_rejects_too_wide_ranges(wide: str) -> None:
+    with pytest.raises(ValueError, match="too wide"):
+        parse_trusted_proxies([wide])
+
+
+def test_parse_trusted_proxies_accepts_the_narrowest_allowed_ranges() -> None:
+    assert len(parse_trusted_proxies(["10.0.0.0/8", "fc00::/16"])) == 2
+
+
+def test_serve_rejects_a_too_wide_trusted_proxy(
+    tmp_path: Path, captured_run: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--data-dir", str(tmp_path), "serve", "--trusted-proxy", "0.0.0.0/0"])
+    assert exc.value.code == 2
+    assert "too wide" in capsys.readouterr().err
+    assert "app" not in captured_run
+
+
+# --- review round 1: X-Forwarded-Proto / X-Forwarded-Host -------------------------
+
+
+@pytest.fixture
+def outputs_ready(tmp_path: Path, admin: str) -> None:
+    conn = open_db(tmp_path)
+    try:
+        ensure_default_outputs(conn)
+    finally:
+        conn.close()
+
+
+def _outputs_page(client: TestClient, headers: dict[str, str]) -> str:
+    login(client)
+    page: str = client.get("/outputs", headers=headers).text
+    return page
+
+
+def test_trusted_proxy_https_proto_shows_https_feed_urls(
+    tmp_path: Path, outputs_ready: None
+) -> None:
+    with _client(tmp_path, peer="127.0.0.1", trusted=["127.0.0.1"]) as client:
+        page = _outputs_page(client, {"X-Forwarded-Proto": "https"})
+    assert "https://testserver/o/" in page
+
+
+def test_the_right_most_forwarded_proto_wins(tmp_path: Path, outputs_ready: None) -> None:
+    with _client(tmp_path, peer="127.0.0.1", trusted=["127.0.0.1"]) as client:
+        page = _outputs_page(client, {"X-Forwarded-Proto": "http, HTTPS "})
+    assert "https://testserver/o/" in page
+
+
+def test_untrusted_peer_forwarded_proto_is_ignored(tmp_path: Path, outputs_ready: None) -> None:
+    with _client(tmp_path, peer=CLIENT_B, trusted=["127.0.0.1"]) as client:
+        page = _outputs_page(client, {"X-Forwarded-Proto": "https"})
+    assert "http://testserver/o/" in page
+    assert "https://" not in page
+
+
+def test_forwarded_proto_is_ignored_without_trusted_proxies(
+    tmp_path: Path, outputs_ready: None
+) -> None:
+    with _client(tmp_path, peer="127.0.0.1") as client:
+        app = client.app
+        assert isinstance(app, FastAPI)
+        installed: list[Any] = [m.cls for m in app.user_middleware]
+        assert ForwardedHeadersMiddleware not in installed
+        page = _outputs_page(client, {"X-Forwarded-Proto": "https"})
+    assert "http://testserver/o/" in page
+
+
+@pytest.mark.parametrize("proto", ["ftp", "https://evil", "", "httpss", "https;x"])
+def test_garbage_forwarded_proto_is_ignored(
+    tmp_path: Path, outputs_ready: None, proto: str
+) -> None:
+    with _client(tmp_path, peer="127.0.0.1", trusted=["127.0.0.1"]) as client:
+        page = _outputs_page(client, {"X-Forwarded-Proto": proto})
+    assert "http://testserver/o/" in page
+
+
+@pytest.mark.parametrize("host", ["feeds.lan:8443", "[2001:db8::1]:8443", "10.0.0.5"])
+def test_trusted_proxy_forwarded_host_is_used(
+    tmp_path: Path, outputs_ready: None, host: str
+) -> None:
+    with _client(tmp_path, peer="127.0.0.1", trusted=["127.0.0.1"]) as client:
+        page = _outputs_page(client, {"X-Forwarded-Proto": "https", "X-Forwarded-Host": host})
+    assert f"https://{host}/o/" in page
+
+
+@pytest.mark.parametrize(
+    "host", ["evil.example/x", "user@evil.example", "a b", "", "evil.example?x", "a\\b"]
+)
+def test_malformed_forwarded_host_is_ignored(
+    tmp_path: Path, outputs_ready: None, host: str
+) -> None:
+    with _client(tmp_path, peer="127.0.0.1", trusted=["127.0.0.1"]) as client:
+        page = _outputs_page(client, {"X-Forwarded-Host": host})
+    assert "http://testserver/o/" in page
+
+
+def test_untrusted_peer_forwarded_host_is_ignored(tmp_path: Path, outputs_ready: None) -> None:
+    with _client(tmp_path, peer=CLIENT_B, trusted=["127.0.0.1"]) as client:
+        page = _outputs_page(client, {"X-Forwarded-Host": "evil.example"})
+    assert "evil.example" not in page

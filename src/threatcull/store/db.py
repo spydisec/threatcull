@@ -95,7 +95,7 @@ _MIGRATIONS: tuple[str, ...] = (
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
         token_hash TEXT NOT NULL,
-        username TEXT NOT NULL,
+        username TEXT NOT NULL REFERENCES users (username) ON DELETE CASCADE,
         created_at TEXT NOT NULL,
         last_used_at TEXT
     );

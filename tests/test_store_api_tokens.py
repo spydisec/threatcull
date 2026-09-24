@@ -2,6 +2,7 @@
 import hashlib
 import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +13,7 @@ from threatcull.store.api_tokens import (
     revoke_api_token,
     verify_api_token,
 )
+from threatcull.store.db import connect
 from threatcull.store.errors import NotFoundError
 from threatcull.store.users import create_user
 
@@ -137,3 +139,29 @@ def test_list_never_returns_hashes(conn: sqlite3.Connection, now: datetime, admi
     assert not hasattr(info, "token_hash")
     stored = conn.execute("SELECT token_hash FROM api_tokens").fetchone()[0]
     assert stored not in repr(info)
+
+
+def test_deleting_a_user_deletes_their_tokens(
+    conn: sqlite3.Connection, now: datetime, admin: str
+) -> None:
+    token = create_api_token(conn, "script", admin, now=now)
+    conn.execute("DELETE FROM users WHERE username = ?", (admin,))
+    assert conn.execute("SELECT COUNT(*) FROM api_tokens").fetchone()[0] == 0
+    # Re-creating the same username must not revive the old token.
+    create_user(conn, admin, PASSWORD, now=now)
+    assert verify_api_token(conn, token, now=now) is None
+
+
+def test_a_busy_database_does_not_fail_verification(
+    conn: sqlite3.Connection, now: datetime, admin: str, tmp_path: Path
+) -> None:
+    token = create_api_token(conn, "script", admin, now=now)
+    other = connect(tmp_path / "test.db")
+    try:
+        other.execute("BEGIN IMMEDIATE")  # hold the write lock
+        conn.execute("PRAGMA busy_timeout = 0")
+        assert verify_api_token(conn, token, now=now) == admin
+        other.execute("ROLLBACK")
+    finally:
+        other.close()
+    assert conn.execute("SELECT last_used_at FROM api_tokens").fetchone()[0] is None

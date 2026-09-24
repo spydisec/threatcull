@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import secrets
 import sqlite3
@@ -12,6 +13,8 @@ from datetime import datetime, timedelta
 
 from threatcull.clock import ts
 from threatcull.store.errors import NotFoundError
+
+log = logging.getLogger(__name__)
 
 TOKEN_PREFIX = "tc_"  # noqa: S105  # nosec B105 - a public prefix, not a secret
 _NAME = re.compile(r"[A-Za-z0-9_.-]{1,64}")
@@ -75,7 +78,15 @@ def verify_api_token(conn: sqlite3.Connection, token: str, *, now: datetime) -> 
     stamp = ts(now)
     last_used: str | None = match["last_used_at"]
     if last_used is None or last_used <= ts(now - LAST_USED_RESOLUTION):
-        conn.execute("UPDATE api_tokens SET last_used_at = ? WHERE id = ?", (stamp, match["id"]))
+        try:
+            conn.execute(
+                "UPDATE api_tokens SET last_used_at = ? WHERE id = ?", (stamp, match["id"])
+            )
+        except sqlite3.OperationalError:
+            # Informational only: a busy database must not fail the request.
+            log.debug(
+                "last_used_at not recorded for row %s (database busy)", match["id"], exc_info=True
+            )
     username: str = match["username"]
     return username
 

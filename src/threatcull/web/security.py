@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 import secrets
 import threading
 import time
@@ -172,31 +173,76 @@ def csrf_token_matches(session: MutableMapping[str, Any], submitted: str | None)
 # --- Login rate limiting --------------------------------------------------------
 
 
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 TrustedProxies = tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]
+
+# A trusted-proxy range this wide would trust (nearly) every client, which
+# makes X-Forwarded-For forgeable by anyone; refuse it outright.
+MIN_TRUSTED_PREFIX = {4: 8, 6: 16}
+# client_ip() reads at most this many X-Forwarded-For hops from the right.
+MAX_FORWARDED_HOPS = 20
 
 
 def parse_trusted_proxies(values: Iterable[str]) -> TrustedProxies:
-    """Parse ``--trusted-proxy`` values (IP addresses or CIDRs); ``ValueError`` if bad."""
+    """Parse ``--trusted-proxy`` values (IP addresses or CIDRs); ``ValueError`` if bad.
+
+    Ranges wider than /8 (IPv4) or /16 (IPv6), such as ``0.0.0.0/0``, are
+    refused: they would let any client forge its address.
+    """
     networks = []
     for value in values:
         try:
-            networks.append(ipaddress.ip_network(value.strip(), strict=False))
+            network = ipaddress.ip_network(value.strip(), strict=False)
         except ValueError as exc:
             raise ValueError(f"not a valid trusted proxy IP or CIDR: {value!r}") from exc
+        minimum = MIN_TRUSTED_PREFIX[network.version]
+        if network.prefixlen < minimum:
+            raise ValueError(
+                f"trusted proxy range {value!r} is too wide (use /{minimum} or narrower): "
+                "it would let any client forge its address"
+            )
+        networks.append(network)
     return tuple(networks)
 
 
-def _parse_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+def _normalise(address: IPAddress) -> IPAddress:
+    """``::ffff:10.0.0.1`` is ``10.0.0.1`` (dual-stack sockets report the former)."""
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        return address.ipv4_mapped
+    return address
+
+
+def _parse_ip(value: str) -> IPAddress | None:
     try:
-        return ipaddress.ip_address(value.strip())
+        return _normalise(ipaddress.ip_address(value.strip()))
     except ValueError:
         return None
 
 
-def _is_trusted(
-    address: ipaddress.IPv4Address | ipaddress.IPv6Address, trusted: TrustedProxies
-) -> bool:
+def _parse_hop(value: str) -> IPAddress | None:
+    """One ``X-Forwarded-For`` hop: ``ip``, ``ip:port`` (IPv4) or ``[ipv6]`` / ``[ipv6]:port``."""
+    hop = value.strip()
+    if hop.startswith("["):
+        end = hop.find("]")
+        rest = hop[end + 1 :]
+        if end < 0 or (rest and not (rest.startswith(":") and rest[1:].isdigit())):
+            return None
+        return _parse_ip(hop[1:end])
+    host, colon, port = hop.partition(":")
+    if colon and "." in host and ":" not in port and port.isdigit():
+        return _parse_ip(host)
+    return _parse_ip(hop)
+
+
+def _is_trusted(address: IPAddress, trusted: TrustedProxies) -> bool:
     return any(address in network for network in trusted)
+
+
+def _trusted_peer(client: tuple[str, int] | None, trusted: TrustedProxies) -> bool:
+    if not trusted or client is None:
+        return False
+    peer = _parse_ip(client[0])
+    return peer is not None and _is_trusted(peer, trusted)
 
 
 def client_ip(request: Request) -> str:
@@ -206,29 +252,89 @@ def client_ip(request: Request) -> str:
     peer is one of the app's trusted proxies (``serve --trusted-proxy``) is the
     header used: walking it from the right, skipping trusted hops, the first
     untrusted address is the client. The left-most entries are whatever the
-    client sent, so they are never taken on trust. A hop that isn't an IP
-    address means the chain can't be read; the peer is used then.
+    client sent, so they are never taken on trust.
+
+    Fallbacks (all to the direct peer, the conservative choice): a hop that
+    isn't an address (garbage, or the empty hop a trailing comma leaves), or
+    ``MAX_FORWARDED_HOPS`` trusted hops in a row without reaching an untrusted
+    one. If every hop of a shorter chain is trusted, the left-most is used.
     """
     if request.client is None:
         return "unknown"
     peer = request.client.host
     trusted: TrustedProxies = getattr(request.app.state, "trusted_proxies", ())
-    peer_ip = _parse_ip(peer)
-    if not trusted or peer_ip is None or not _is_trusted(peer_ip, trusted):
+    if not _trusted_peer((request.client.host, request.client.port), trusted):
         return peer
     hops = [
         hop for header in request.headers.getlist("x-forwarded-for") for hop in header.split(",")
     ]
-    if not hops:
-        return peer
-    parsed: ipaddress.IPv4Address | ipaddress.IPv6Address | None = None
-    for hop in reversed(hops):
-        parsed = _parse_ip(hop)
-        if parsed is None:
-            return peer
-        if not _is_trusted(parsed, trusted):
-            return str(parsed)
-    return str(parsed)  # every hop is a trusted proxy: the left-most one
+    forwarded = _forwarded_client(hops, trusted)
+    return str(forwarded) if forwarded is not None else peer
+
+
+def _forwarded_client(hops: list[str], trusted: TrustedProxies) -> IPAddress | None:
+    """The right-most untrusted hop; ``None`` means "use the peer" (see ``client_ip``)."""
+    parsed: IPAddress | None = None
+    for hop in hops[::-1][:MAX_FORWARDED_HOPS]:
+        parsed = _parse_hop(hop)
+        if parsed is None or not _is_trusted(parsed, trusted):
+            return parsed
+    if len(hops) > MAX_FORWARDED_HOPS:
+        return None
+    return parsed  # every hop is a trusted proxy: the left-most one (None if no hops)
+
+
+# Syntax only (never an allowlist: homelab rule): host or IP, optional port.
+_FORWARDED_HOST = re.compile(r"[A-Za-z0-9.\-:\[\]]{1,255}")
+
+
+def _last_header_value(headers: list[tuple[bytes, bytes]], name: bytes) -> str | None:
+    """The right-most comma-separated value across every ``name`` header."""
+    values = [value for key, value in headers if key.lower() == name]
+    if not values:
+        return None
+    try:
+        joined = b",".join(values).decode("latin-1")
+    except UnicodeDecodeError:  # pragma: no cover - latin-1 decodes any byte
+        return None
+    return joined.rsplit(",", 1)[-1].strip()
+
+
+class ForwardedHeadersMiddleware:
+    """Believe ``X-Forwarded-Proto`` / ``X-Forwarded-Host`` from trusted proxies only.
+
+    Installed only with ``serve --trusted-proxy``. When the direct peer is a
+    trusted proxy: the right-most ``X-Forwarded-Proto`` sets the scheme if it
+    is exactly ``http`` or ``https``; the right-most ``X-Forwarded-Host``
+    replaces ``Host`` if it is syntactically ``host[:port]``. Anything else,
+    or any other peer, leaves the request untouched. Feed URLs then show the
+    address clients actually use (``https://`` behind a TLS proxy).
+    """
+
+    def __init__(self, app: ASGIApp, trusted: TrustedProxies) -> None:
+        self.app = app
+        self.trusted = trusted
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] in ("http", "websocket") and _trusted_peer(
+            scope.get("client"), self.trusted
+        ):
+            scope = self._apply(scope)
+        await self.app(scope, receive, send)
+
+    @staticmethod
+    def _apply(scope: Scope) -> Scope:
+        headers: list[tuple[bytes, bytes]] = list(scope.get("headers", []))
+        scope = dict(scope)
+        proto = _last_header_value(headers, b"x-forwarded-proto")
+        if proto is not None and proto.lower() in ("http", "https"):
+            scope["scheme"] = proto.lower()
+        host = _last_header_value(headers, b"x-forwarded-host")
+        if host is not None and _FORWARDED_HOST.fullmatch(host):
+            headers = [(k, v) for k, v in headers if k.lower() != b"host"]
+            headers.append((b"host", host.encode("latin-1")))
+            scope["headers"] = headers
+        return scope
 
 
 class LoginRateLimiter:

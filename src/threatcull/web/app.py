@@ -19,6 +19,7 @@ from threatcull.web.routes import api, auth, feeds, health, pages
 from threatcull.web.scheduler import Scheduler
 from threatcull.web.security import (
     CsrfError,
+    ForwardedHeadersMiddleware,
     LoginRateLimiter,
     LoginRequiredError,
     SecurityHeadersMiddleware,
@@ -110,6 +111,9 @@ def create_app(
         https_only=secure_cookies,
     )
     app.add_middleware(SecurityHeadersMiddleware)
+    if app.state.trusted_proxies:
+        # Outermost, so every route and middleware sees the proxy's scheme/host.
+        app.add_middleware(ForwardedHeadersMiddleware, trusted=app.state.trusted_proxies)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(health.router)
     app.include_router(auth.router)

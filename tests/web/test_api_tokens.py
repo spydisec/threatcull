@@ -201,3 +201,16 @@ def test_other_authorization_schemes_are_ignored(client: TestClient, logged_in: 
     client.cookies.clear()
     response = client.get("/api/v1/me", headers={"Authorization": "Basic YWRtaW46eA=="})
     assert response.status_code == 401
+
+
+@pytest.mark.parametrize("name", ["backup", "bad name"])
+def test_cli_create_with_a_duplicate_or_bad_name_fails_without_a_token(
+    admin: str, tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str
+) -> None:
+    _token(tmp_path, name="backup")
+    capsys.readouterr()
+    argv = ["--data-dir", str(tmp_path), "api-token", "create", name, "--user", admin]
+    assert cli.main(argv) == cli.EXIT_ERROR
+    captured = capsys.readouterr()
+    assert "tc_" not in captured.out
+    assert "error:" in captured.err
