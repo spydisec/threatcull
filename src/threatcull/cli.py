@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import os
 import sqlite3
 import sys
@@ -33,10 +34,12 @@ from threatcull.store.sources import (
     set_enabled,
     sync_catalog,
 )
+from threatcull.store.users import count_users, create_user
 from threatcull.web.app import create_app
 
 DB_NAME = "threatcull.db"
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED = 0, 1, 2
+ADMIN_ENV_VAR = "THREATCULL_ADMIN_PASSWORD"
 Handler = Callable[[sqlite3.Connection, argparse.Namespace], int]
 
 
@@ -98,6 +101,14 @@ def build_parser() -> argparse.ArgumentParser:
     out_sub = outputs.add_subparsers(dest="action", required=True)
     out_sub.add_parser("list")
     out_sub.add_parser("rotate-token").add_argument("name")
+
+    user = sub.add_parser("user", help="Manage web UI users")
+    user_sub = user.add_subparsers(dest="action", required=True)
+    user_create = user_sub.add_parser("create", help="Create a web UI user")
+    user_create.add_argument("username")
+    user_create.add_argument(
+        "--password-stdin", action="store_true", help="Read the password from one line of stdin"
+    )
 
     serve = sub.add_parser("serve", help="Run the web UI")
     serve.add_argument("--host", default="127.0.0.1")
@@ -279,7 +290,33 @@ def _outputs_rotate(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _read_new_password(from_stdin: bool) -> str:
+    if from_stdin:
+        return sys.stdin.readline().rstrip("\r\n")
+    password = getpass.getpass("Password: ")
+    if getpass.getpass("Repeat password: ") != password:
+        raise ValueError("passwords do not match")
+    return password
+
+
+def _user_create(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    create_user(conn, args.username, _read_new_password(args.password_stdin), now=utcnow())
+    print(f"created user {args.username}")
+    return EXIT_OK
+
+
 def _serve(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    if count_users(conn) == 0:
+        password = os.environ.get(ADMIN_ENV_VAR)
+        if not password:
+            print(
+                "error: no web UI users yet. Create one with `threatcull user create <name>` "
+                f"(or set {ADMIN_ENV_VAR} to create 'admin' on first start).",
+                file=sys.stderr,
+            )
+            return EXIT_ERROR
+        create_user(conn, "admin", password, now=utcnow())
+        print(f"created user admin from {ADMIN_ENV_VAR}")
     uvicorn.run(create_app(args.data_dir), host=args.host, port=args.port, log_level="info")
     return EXIT_OK
 
@@ -300,5 +337,6 @@ _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("lookup", None): _lookup,
     ("outputs", "list"): _outputs_list,
     ("outputs", "rotate-token"): _outputs_rotate,
+    ("user", "create"): _user_create,
     ("serve", None): _serve,
 }

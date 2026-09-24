@@ -3,29 +3,28 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
-from threatcull.store.db import connect
-from threatcull.web.routes import health
+from threatcull.web.deps import DB_NAME, open_db
+from threatcull.web.routes import auth, health
 from threatcull.web.security import (
+    LoginRateLimiter,
+    LoginRequiredError,
     SecurityHeadersMiddleware,
     load_or_create_secret,
+    login_required_response,
     unhandled_exception_response,
 )
+from threatcull.web.templating import STATIC_DIR
 
-DB_NAME = "threatcull.db"
+__all__ = ["DB_NAME", "SESSION_COOKIE", "SESSION_MAX_AGE", "create_app", "open_db"]
 
-
-def open_db(data_dir: Path) -> sqlite3.Connection:
-    """Open (and migrate) the database in ``data_dir``.
-
-    Catalog sync and default Outputs are NOT done here: the CLI (``init``,
-    ``serve``) does that once at start-up, not on every request.
-    """
-    return connect(data_dir / DB_NAME)
+SESSION_COOKIE = "threatcull_session"
+SESSION_MAX_AGE = 12 * 60 * 60  # seconds
 
 
 def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
@@ -38,9 +37,22 @@ def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     app.state.data_dir = data_dir
     app.state.start_scheduler = start_scheduler
     app.state.secret_key = load_or_create_secret(data_dir)
+    app.state.login_limiter = LoginRateLimiter()
     # Covers the one response SecurityHeadersMiddleware can't reach: Starlette's
     # own fallback 500 for a truly unhandled exception (see security.py).
     app.add_exception_handler(Exception, unhandled_exception_response)
+    app.add_exception_handler(LoginRequiredError, login_required_response)
+    # Homelab first: plain HTTP on a bare IP works, so no Secure flag by default.
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=app.state.secret_key.hex(),
+        session_cookie=SESSION_COOKIE,
+        max_age=SESSION_MAX_AGE,
+        same_site="strict",
+        https_only=False,
+    )
     app.add_middleware(SecurityHeadersMiddleware)
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(health.router)
+    app.include_router(auth.router)
     return app

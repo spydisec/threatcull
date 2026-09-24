@@ -117,3 +117,17 @@ def test_get_conn_yields_a_connection_and_closes_it_after_use(tmp_path: Path) ->
         next(generator)
     with pytest.raises(sqlite3.ProgrammingError):
         conn.execute("SELECT 1")
+
+
+def test_security_headers_present_on_a_422_validation_error(tmp_path: Path) -> None:
+    app = create_app(tmp_path, start_scheduler=False)
+
+    @app.get("/needs-int")
+    def needs_int(n: int) -> dict[str, int]:
+        return {"n": n}
+
+    with TestClient(app) as test_client:
+        response = test_client.get("/needs-int", params={"n": "not-a-number"})
+    assert response.status_code == 422
+    for name, value in _SECURITY_HEADERS.items():
+        assert response.headers[name] == value

@@ -15,6 +15,8 @@ _EXPLICIT_HOST = "0.0.0.0"  # noqa: S104
 @pytest.fixture
 def captured_run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     captured: dict[str, Any] = {}
+    # serve refuses to start with no users; let it bootstrap the admin account.
+    monkeypatch.setenv("THREATCULL_ADMIN_PASSWORD", "correct horse battery")
 
     def fake_run(app: Any, **kwargs: Any) -> None:
         captured["app"] = app

@@ -80,6 +80,15 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     PRAGMA user_version = 1;
     """,
+    """
+    CREATE TABLE users (
+        id INTEGER PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+    PRAGMA user_version = 2;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)

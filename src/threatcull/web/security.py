@@ -1,15 +1,20 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Security headers middleware and the per-install session secret."""
+"""Security headers, session secret, CSRF tokens and the login rate limiter."""
 
 from __future__ import annotations
 
 import os
 import secrets
+import threading
+import time
+from collections import deque
+from collections.abc import Callable, MutableMapping
 from pathlib import Path
+from typing import Any
 
 from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response
+from starlette.responses import PlainTextResponse, RedirectResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 KEY_FILE_NAME = "secret.key"
@@ -130,3 +135,112 @@ def load_or_create_secret(data_dir: Path) -> bytes:
     finally:
         tmp_path.unlink(missing_ok=True)
     return secret
+
+
+# --- CSRF: session-bound synchronizer token (no Origin/Referer checks) -----------
+
+CSRF_SESSION_KEY = "csrf"
+CSRF_FORM_FIELD = "csrf"
+CSRF_HEADER = "X-CSRF-Token"
+
+
+def ensure_csrf_token(session: MutableMapping[str, Any]) -> str:
+    """Return the session's CSRF token, creating one on first use."""
+    token = session.get(CSRF_SESSION_KEY)
+    if not isinstance(token, str) or not token:
+        token = secrets.token_urlsafe(32)
+        session[CSRF_SESSION_KEY] = token
+    return token
+
+
+def rotate_csrf_token(session: MutableMapping[str, Any]) -> str:
+    """Replace the session's CSRF token (done on login)."""
+    token = secrets.token_urlsafe(32)
+    session[CSRF_SESSION_KEY] = token
+    return token
+
+
+def csrf_token_matches(session: MutableMapping[str, Any], submitted: str | None) -> bool:
+    """Constant-time check of a submitted token against the session's one."""
+    expected = session.get(CSRF_SESSION_KEY)
+    if not isinstance(expected, str) or not expected or not submitted:
+        return False
+    return secrets.compare_digest(expected.encode(), submitted.encode())
+
+
+# --- Login rate limiting --------------------------------------------------------
+
+
+def client_ip(request: Request) -> str:
+    """The address login attempts are counted against.
+
+    The direct peer only; ``X-Forwarded-For`` is never trusted here (opt-in
+    trusted-proxy handling belongs in this one function).
+    """
+    return request.client.host if request.client is not None else "unknown"
+
+
+class LoginRateLimiter:
+    """In-memory, per-IP sliding window of failed logins; thread-safe.
+
+    An IP is blocked once it has ``max_failures`` failures inside the last
+    ``window_seconds``; blocked attempts are not counted, so the block lifts
+    when the oldest failure leaves the window.
+    """
+
+    _PRUNE_ABOVE = 1024  # tracked IPs before stale ones are swept
+
+    def __init__(
+        self,
+        *,
+        max_failures: int = 5,
+        window_seconds: float = 300.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.max_failures = max_failures
+        self.window_seconds = window_seconds
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._failures: dict[str, deque[float]] = {}
+
+    def _recent(self, ip: str, now: float) -> deque[float]:
+        """Failures for ``ip`` still inside the window (caller holds the lock)."""
+        stamps = self._failures.get(ip)
+        if stamps is None:
+            return deque()
+        while stamps and stamps[0] <= now - self.window_seconds:
+            stamps.popleft()
+        if not stamps:
+            del self._failures[ip]
+        return stamps
+
+    def failures(self, ip: str) -> int:
+        with self._lock:
+            return len(self._recent(ip, self._clock()))
+
+    def is_blocked(self, ip: str) -> bool:
+        return self.failures(ip) >= self.max_failures
+
+    def record_failure(self, ip: str) -> None:
+        with self._lock:
+            now = self._clock()
+            if len(self._failures) > self._PRUNE_ABOVE:
+                for other in list(self._failures):
+                    self._recent(other, now)
+            self._failures.setdefault(ip, deque()).append(now)
+
+    def reset(self, ip: str) -> None:
+        with self._lock:
+            self._failures.pop(ip, None)
+
+
+# --- Login redirect for HTML pages ----------------------------------------------
+
+
+class LoginRequiredError(Exception):
+    """Raised by ``require_user``; turned into a ``303`` to ``/login``."""
+
+
+async def login_required_response(request: Request, exc: Exception) -> Response:
+    del request, exc
+    return RedirectResponse("/login", status_code=303)
