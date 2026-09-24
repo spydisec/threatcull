@@ -24,5 +24,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen
+      - name: Sync Vale styles (tests/test_prose_rules.py runs Vale directly)
+        run: uvx vale sync
       - name: Tests (offline) with coverage floor
         run: uv run pytest --cov --cov-report=term-missing
