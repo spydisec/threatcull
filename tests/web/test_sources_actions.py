@@ -167,6 +167,76 @@ def test_htmx_unknown_source_comes_back_as_an_error_row(client: TestClient, logg
     assert 'role="alert"' in response.text
 
 
+def _custom_form(csrf: str, url: str) -> dict[str, str]:
+    return {
+        "csrf": csrf,
+        "id": "custom-honeypot",
+        "name": "Our honeypot",
+        "url": url,
+        "format": "plain",
+        "kind": "ip",
+        "category": "scanner",
+        "csv_column": "0",
+        "json_keys": "",
+        "business_use": "unknown",
+    }
+
+
+def _custom_ids(tmp_path: Path) -> list[str]:
+    conn = open_db(tmp_path)
+    try:
+        return [row[0] for row in conn.execute("SELECT id FROM sources WHERE custom = 1")]
+    finally:
+        conn.close()
+
+
+def test_app_creates_the_imports_dir(client: TestClient, tmp_path: Path) -> None:
+    assert (tmp_path / "imports").is_dir()
+
+
+def test_web_file_source_under_data_imports_is_accepted(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    feed = tmp_path / "imports" / "sub dir" / "hp.txt"
+    feed.parent.mkdir(parents=True)
+    feed.write_text("45.9.21.1\n", encoding="utf-8")
+    response = client.post(
+        "/sources/custom", data=_custom_form(logged_in, feed.as_uri()), follow_redirects=False
+    )
+    assert response.status_code == 303, response.text
+    assert _custom_ids(tmp_path) == ["custom-honeypot"]
+
+
+def _escapes(tmp_path: Path) -> list[str]:
+    imports = tmp_path / "imports"
+    outside = tmp_path / "secret.txt"
+    outside.write_text("45.9.21.1\n", encoding="utf-8")
+    link = imports / "link.txt"
+    link.symlink_to(outside)
+    return [
+        "file:///etc/passwd",
+        outside.as_uri(),
+        f"file://{imports}/../secret.txt",
+        f"file://{imports}/%2e%2e/secret.txt",
+        link.as_uri(),
+        f"file://{tmp_path}/imports-evil/x.txt",  # a sibling, not a child
+        f"file://otherhost{imports}/x.txt",
+        imports.as_uri(),  # the directory itself
+    ]
+
+
+def test_web_file_source_outside_data_imports_is_refused(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    for url in _escapes(tmp_path):
+        response = client.post(
+            "/sources/custom", data=_custom_form(logged_in, url), follow_redirects=False
+        )
+        assert response.status_code == 400, url
+        assert "imports" in response.text, url
+    assert _custom_ids(tmp_path) == []
+
+
 def test_custom_source_happy_path(client: TestClient, logged_in: str, tmp_path: Path) -> None:
     response = client.post(
         "/sources/custom",
@@ -174,7 +244,7 @@ def test_custom_source_happy_path(client: TestClient, logged_in: str, tmp_path: 
             "csrf": logged_in,
             "id": "custom-honeypot",
             "name": "Our honeypot",
-            "url": "file:///data/hp.txt",
+            "url": (tmp_path / "imports" / "hp.txt").as_uri(),
             "format": "plain",
             "kind": "ip",
             "category": "scanner",

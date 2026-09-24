@@ -14,7 +14,7 @@ from starlette.responses import Response
 
 from threatcull.home_detect import detect_candidates, public_ip_fetcher
 from threatcull.store.users import warm_up as warm_up_password_checks
-from threatcull.web.deps import DB_NAME, open_db
+from threatcull.web.deps import DB_NAME, IMPORTS_DIR, open_db
 from threatcull.web.jobs import PipelineRunner
 from threatcull.web.routes import api, auth, feeds, health, pages
 from threatcull.web.scheduler import Scheduler
@@ -83,6 +83,8 @@ def create_app(
         title="ThreatCull", docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan
     )
     app.state.data_dir = data_dir
+    # Where web-added file:// Sources read from (air-gap: drop feed files here).
+    (data_dir / IMPORTS_DIR).mkdir(parents=True, exist_ok=True)
     app.state.start_scheduler = start_scheduler
     app.state.scheduler = None
     app.state.secret_key = load_or_create_secret(data_dir)

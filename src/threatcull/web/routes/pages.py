@@ -35,6 +35,7 @@ from threatcull.web.deps import (
     notify_sources_changed,
     public_ip_fetcher_factory,
     require_user,
+    web_file_url_error,
 )
 from threatcull.web.jobs import PipelineRunner
 from threatcull.web.scheduler import Scheduler
@@ -575,6 +576,14 @@ def add_custom_source_page(
             request,
             "sources.html",
             {"sources": list_sources(conn), "custom_error": _validation_message(exc)},
+            status_code=400,
+        )
+    refusal = web_file_url_error(payload.url, request.app.state.data_dir)
+    if refusal is not None:
+        return render(
+            request,
+            "sources.html",
+            {"sources": list_sources(conn), "custom_error": refusal},
             status_code=400,
         )
     try:

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from secrets import compare_digest
 from typing import Annotated
+from urllib.parse import unquote, urlparse
 
 from fastapi import Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
@@ -31,6 +32,8 @@ from threatcull.web.security import (
 log = logging.getLogger(__name__)
 
 DB_NAME = "threatcull.db"
+# Web/API-added file:// Sources may only read files under <data-dir>/imports/.
+IMPORTS_DIR = "imports"
 SESSION_USER_KEY = "user"
 SESSION_FINGERPRINT_KEY = "pwfp"
 _FORM_TYPES = ("application/x-www-form-urlencoded", "multipart/form-data")
@@ -43,6 +46,32 @@ def open_db(data_dir: Path) -> sqlite3.Connection:
     ``serve``) does that once at start-up, not on every request.
     """
     return connect(data_dir / DB_NAME)
+
+
+def web_file_url_error(url: str, data_dir: Path) -> str | None:
+    """Why a ``file://`` Source URL is refused from the web UI; ``None`` if allowed.
+
+    A logged-in web user must not turn ThreatCull into a reader of arbitrary
+    server files, so web-added ``file://`` Sources are confined to
+    ``<data-dir>/imports/``: the path is resolved (``..`` and symlinks
+    followed) and must land strictly inside that directory. Other schemes
+    are not this function's business (``None``). The CLI keeps full
+    ``file://`` access; whoever runs it already has the shell.
+    """
+    if not url.lower().startswith("file:"):
+        return None
+    imports = (data_dir / IMPORTS_DIR).resolve()
+    refusal = (
+        f"file:// Sources added here must be files under {imports}/ "
+        "(copy the file there; the CLI can use any path)"
+    )
+    parsed = urlparse(url)
+    if parsed.netloc not in ("", "localhost"):
+        return refusal
+    target = Path(unquote(parsed.path)).resolve()
+    if target == imports or not target.is_relative_to(imports):
+        return refusal
+    return None
 
 
 def notify_sources_changed(request: Request) -> None:
