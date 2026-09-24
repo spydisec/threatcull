@@ -198,9 +198,11 @@ def _allow_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
 
 
 def _fetch(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    failed = False
     for outcome in fetch_all(conn, HttpFetcher(), now=utcnow(), source_ids=args.source_ids or None):
         if outcome.status == "failed":
-            print(f"FAIL {outcome.source_id}: {outcome.error}")
+            failed = True
+            print(f"FAIL {outcome.source_id}: {outcome.error}", file=sys.stderr)
         elif outcome.status == "not_modified":
             print(f"same {outcome.source_id}")
         else:
@@ -208,7 +210,7 @@ def _fetch(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
                 f"ok   {outcome.source_id}: {outcome.valid} valid, {outcome.invalid} invalid, "
                 f"+{outcome.added} -{outcome.removed}"
             )
-    return EXIT_OK
+    return EXIT_ERROR if failed else EXIT_OK
 
 
 def _compile(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
@@ -226,8 +228,10 @@ def _compile(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
 
 def _run(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     args.source_ids = []
-    _fetch(conn, args)
-    return _compile(conn, args)
+    fetch_code = _fetch(conn, args)
+    # Compile even after failed Fetches: their Sources keep their previous Sightings.
+    compile_code = _compile(conn, args)
+    return compile_code if compile_code != EXIT_OK else fetch_code
 
 
 def _lookup(conn: sqlite3.Connection, args: argparse.Namespace) -> int:

@@ -98,6 +98,8 @@ def test_offline_pipeline_end_to_end(
 
     # Second run: conditional requests are sent; one upstream now serves an HTML error page.
     fixture_server.add("/ip2.txt", (200, b"<html>rate limited</html>\n", {}))
-    assert main([*cli, "run"]) == 0
+    capsys.readouterr()
+    assert main([*cli, "run"]) == 1  # Compile still publishes; the failed Fetch sets exit 1
+    assert "FAIL ip-two: looks like an HTML page" in capsys.readouterr().err
     assert fixture_server.routes["/ip1.txt"].request_headers[-1]["If-None-Match"] == '"v1"'
     assert body("ip-medium.txt") == ["45.9.20.1", "45.9.20.2"]

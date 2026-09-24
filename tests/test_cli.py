@@ -141,6 +141,32 @@ def test_custom_source(cli: list[str], tmp_path: Path) -> None:
     assert main([*cli, "fetch", "custom-hp"]) == 0
 
 
+def test_fetch_reports_failures_on_stderr_and_exits_1(
+    cli: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "feeds" / "b.txt").unlink()
+    assert main([*cli, "fetch"]) == 1
+    captured = capsys.readouterr()
+    assert "FAIL src-b: cannot read" in captured.err
+    assert "FAIL" not in captured.out
+    assert "ok   src-a" in captured.out
+    assert "ok   src-c" in captured.out
+
+
+def test_run_compiles_after_a_failed_fetch_then_exits_1(
+    cli: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main([*cli, "run"]) == 0
+    (tmp_path / "feeds" / "b.txt").unlink()
+    (tmp_path / "data" / "outputs" / "ip-high.txt").unlink()
+    capsys.readouterr()
+    assert main([*cli, "run"]) == 1
+    captured = capsys.readouterr()
+    assert "FAIL src-b" in captured.err
+    assert "ip-high: 1" in captured.out
+    assert (tmp_path / "data" / "outputs" / "ip-high.txt").exists()
+
+
 def test_compile_blocked_exit_code(
     cli: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
