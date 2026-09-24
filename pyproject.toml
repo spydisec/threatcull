@@ -63,6 +63,12 @@ plugins = ["pydantic.mypy"]
 addopts = "-ra --strict-markers -m 'not network'"
 testpaths = ["tests"]
 markers = ["network: reaches real upstream URLs (run explicitly with -m network)"]
+filterwarnings = [
+    # Our pinned fastapi/starlette still supports httpx for TestClient; httpx2 is
+    # not on the Plan 2 approved dependency list. Narrowly targeted: exact
+    # message and category, so any other deprecation still surfaces normally.
+    'ignore:Using `httpx` with `starlette\.testclient` is deprecated; install `httpx2` instead\.:starlette.exceptions.StarletteDeprecationWarning',
+]
 
 [tool.coverage.run]
 source = ["threatcull"]

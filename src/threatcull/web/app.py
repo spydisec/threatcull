@@ -10,7 +10,11 @@ from fastapi import FastAPI
 
 from threatcull.store.db import connect
 from threatcull.web.routes import health
-from threatcull.web.security import SecurityHeadersMiddleware, load_or_create_secret
+from threatcull.web.security import (
+    SecurityHeadersMiddleware,
+    load_or_create_secret,
+    unhandled_exception_response,
+)
 
 DB_NAME = "threatcull.db"
 
@@ -34,6 +38,9 @@ def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     app.state.data_dir = data_dir
     app.state.start_scheduler = start_scheduler
     app.state.secret_key = load_or_create_secret(data_dir)
+    # Covers the one response SecurityHeadersMiddleware can't reach: Starlette's
+    # own fallback 500 for a truly unhandled exception (see security.py).
+    app.add_exception_handler(Exception, unhandled_exception_response)
     app.add_middleware(SecurityHeadersMiddleware)
     app.include_router(health.router)
     return app
