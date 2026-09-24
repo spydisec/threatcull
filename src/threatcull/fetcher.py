@@ -81,6 +81,10 @@ class HttpFetcher:
                 return self._read(url, response)
         except httpx.TransportError as exc:
             raise _RetryableError(f"{type(exc).__name__} fetching {url}: {exc}") from exc
+        except httpx.RequestError as exc:
+            # Non-transport request errors (e.g. DecodingError, TooManyRedirects) are
+            # not transient, so fail immediately instead of retrying.
+            raise FetchError(f"{type(exc).__name__} fetching {url}: {exc}") from exc
 
     def _read(self, url: str, response: httpx.Response) -> FetchResult:
         etag = response.headers.get("ETag")

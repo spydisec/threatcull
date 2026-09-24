@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 from pathlib import Path
 
+import httpx
 import pytest
 
 from tests.fixture_server import FixtureServer
@@ -43,6 +44,16 @@ def test_gives_up_after_retries(fixture_server: FixtureServer) -> None:
 def test_client_errors_are_not_retried(fixture_server: FixtureServer) -> None:
     with pytest.raises(FetchError, match="HTTP 404"):
         _fetcher()(fixture_server.url("/missing"), etag=None, last_modified=None)
+
+
+def test_redirect_loop_is_a_fetch_error_and_not_retried(fixture_server: FixtureServer) -> None:
+    url = fixture_server.url("/loop")
+    fixture_server.add("/loop", (302, b"", {"Location": url}))
+    max_redirects = 3
+    client = httpx.Client(follow_redirects=True, max_redirects=max_redirects)
+    with pytest.raises(FetchError, match="TooManyRedirects"):
+        _fetcher(client=client)(url, etag=None, last_modified=None)
+    assert fixture_server.routes["/loop"].calls == max_redirects + 1
 
 
 def test_size_cap(fixture_server: FixtureServer) -> None:
