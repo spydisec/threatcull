@@ -1,0 +1,7 @@
+# Adapted from stop-slop by Hardik Pandya (MIT) — see NOTICE.md
+extends: existence
+message: "Replace the em dash with a comma, colon or full stop."
+level: error
+nonword: true
+tokens:
+  - '—'

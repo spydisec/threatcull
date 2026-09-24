@@ -24,3 +24,9 @@ CONTEXT.md
 CONTEXT-MAP.md
 docs/adr/
 docs/agents/
+.superpowers/
+
+# Vale: downloaded packages (restored by `vale sync`)
+.vale/styles/*
+!.vale/styles/ThreatCull/
+!.vale/styles/config/
