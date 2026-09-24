@@ -101,6 +101,18 @@ _MIGRATIONS: tuple[str, ...] = (
     );
     PRAGMA user_version = 3;
     """,
+    """
+    CREATE TABLE home_network (
+        id INTEGER PRIMARY KEY,
+        value TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL CHECK (kind IN ('ip', 'cidr', 'domain')),
+        note TEXT NOT NULL DEFAULT '',
+        origin TEXT NOT NULL CHECK (origin IN ('manual', 'auto')),
+        created_at TEXT NOT NULL
+    );
+    ALTER TABLE runs ADD COLUMN home_hits TEXT NOT NULL DEFAULT '[]';
+    PRAGMA user_version = 4;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)

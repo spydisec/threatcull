@@ -3,6 +3,24 @@
 {% block content %}
 <h1>Dashboard</h1>
 
+{% if home_alerts %}
+<section class="alert-banner" role="alert">
+  <h2>Your Home Network appears in upstream feeds</h2>
+  <p>
+    The last Compile kept these values out of every Output. Check why the Sources list
+    them (Lookup explains each one).
+  </p>
+  <ul>
+    {% for value, sources in home_alerts %}
+    <li><a href="/lookup?q={{ value | urlencode }}">{{ value }}</a>, listed by {{ sources }}</li>
+    {% endfor %}
+  </ul>
+  {% if home_hit_count > home_alerts | length %}
+  <p>and {{ home_hit_count - home_alerts | length }} more.</p>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="card">
   <h2>Pipeline</h2>
   {% include "_status.html" %}

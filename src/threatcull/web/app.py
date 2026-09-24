@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 
+from threatcull.home_detect import detect_candidates, public_ip_fetcher
 from threatcull.store.users import warm_up as warm_up_password_checks
 from threatcull.web.deps import DB_NAME, open_db
 from threatcull.web.jobs import PipelineRunner
@@ -94,6 +95,10 @@ def create_app(
     # One runner per app: "Run now", force Compile and the scheduler share its
     # lock, so only one pipeline run happens at a time.
     app.state.runner = PipelineRunner(data_dir)
+    # Home Network "Detect" reads local files only; the public-IP Fetcher is
+    # built (and api.ipify.org contacted) only when an operator presses its button.
+    app.state.home_detector = detect_candidates
+    app.state.public_ip_fetcher_factory = public_ip_fetcher
     warm_up_password_checks()  # no first-login timing tell for unknown usernames
     # Covers the one response SecurityHeadersMiddleware can't reach: Starlette's
     # own fallback 500 for a truly unhandled exception (see security.py).

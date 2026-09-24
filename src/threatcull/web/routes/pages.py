@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""HTML pages: dashboard, Sources, Outputs, Allowlist, Runs, Lookup and Settings."""
+"""HTML pages: dashboard, Sources, Outputs, Allowlist, Home Network, Runs, Lookup, Settings."""
 
 from __future__ import annotations
 
@@ -13,18 +13,27 @@ from starlette.responses import RedirectResponse, Response
 
 from threatcull.clock import ts, utcnow
 from threatcull.compiling import stale_source_ids
+from threatcull.home_detect import public_ip_candidate
 from threatcull.lookup import lookup, output_labels
 from threatcull.store.allowlist import add_entry, builtin_entries, operator_entries, remove_entry
 from threatcull.store.errors import NotFoundError, PolicyError
+from threatcull.store.home import add_home, home_allow_entries, home_entries, remove_home
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
 from threatcull.store.runs import last_run, recent_runs
 from threatcull.store.settings import load_settings
 from threatcull.store.sources import add_custom_source, list_sources, set_business_mode
 from threatcull.store.sources import set_enabled as store_set_enabled
-from threatcull.web.deps import check_csrf, get_conn, notify_sources_changed, require_user
+from threatcull.web.deps import (
+    check_csrf,
+    get_conn,
+    home_detector,
+    notify_sources_changed,
+    public_ip_fetcher_factory,
+    require_user,
+)
 from threatcull.web.jobs import PipelineRunner
 from threatcull.web.scheduler import Scheduler
-from threatcull.web.schemas import AllowlistEntryIn, CustomSourceIn, OutputCreateIn
+from threatcull.web.schemas import AllowlistEntryIn, CustomSourceIn, HomeEntryIn, OutputCreateIn
 from threatcull.web.templating import flash, render, render_fragment
 
 router = APIRouter()
@@ -69,6 +78,12 @@ def dashboard(
     scheduler: Scheduler | None = getattr(request.app.state, "scheduler", None)
     next_run = scheduler.next_compile_at() if scheduler is not None else None
     next_compile = ts(next_run) if next_run is not None else None
+    last_compile = last_run(conn, "compile")
+    source_names = {source.id: source.name for source in list_sources(conn)}
+    home_alerts = [
+        (value, ", ".join(source_names.get(sid, sid) for sid in sources.split(",")))
+        for value, sources in (last_compile.home_hits if last_compile else ())
+    ]
     return render(
         request,
         "dashboard.html",
@@ -77,7 +92,9 @@ def dashboard(
             "enabled_blocklist_count": len(enabled_blocklists),
             "stale_count": len(stale_ids),
             "allowlist_count": len(allowlist_sources),
-            "last_compile": last_run(conn, "compile"),
+            "last_compile": last_compile,
+            "home_alerts": home_alerts,
+            "home_hit_count": last_compile.counts.get("home_hits", 0) if last_compile else 0,
             "outputs": list_outputs(conn),
             "scheduler_on": scheduler is not None,
             "next_compile_at": next_compile,
@@ -333,6 +350,110 @@ def remove_allowlist_entry_page(
     except NotFoundError as exc:
         return _allowlist_error(request, conn, str(exc), value=value, note="", status_code=404)
     return RedirectResponse("/allowlist", status_code=303)
+
+
+def _home_context(conn: sqlite3.Connection) -> dict[str, Any]:
+    return {"entries": home_entries(conn), "candidates": None}
+
+
+@router.get("/home")
+def home_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    return render(request, "home.html", _home_context(conn))
+
+
+def _home_error(
+    request: Request,
+    conn: sqlite3.Connection,
+    message: str,
+    *,
+    value: str,
+    note: str,
+    status_code: int,
+) -> Response:
+    context = _home_context(conn)
+    context.update({"error": message, "value": value, "note": note})
+    return render(request, "home.html", context, status_code=status_code)
+
+
+@router.post("/home", dependencies=[Depends(check_csrf)])
+def add_home_entry_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    *,
+    # Defaulted to "" for the same reason as the Allowlist form: keep the inline 400.
+    value: Annotated[str, Form()] = "",
+    note: Annotated[str, Form()] = "",
+    origin: Annotated[str, Form()] = "manual",
+) -> Response:
+    try:
+        payload = HomeEntryIn(value=value, note=note, origin=origin)
+    except ValidationError as exc:
+        return _home_error(
+            request, conn, _validation_message(exc), value=value, note=note, status_code=400
+        )
+    try:
+        add_home(conn, payload.value, payload.note, origin=payload.origin, now=utcnow())
+    except ValueError as exc:
+        return _home_error(
+            request, conn, str(exc), value=payload.value, note=payload.note, status_code=400
+        )
+    return RedirectResponse("/home", status_code=303)
+
+
+@router.post("/home/remove", dependencies=[Depends(check_csrf)])
+def remove_home_entry_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    value: Annotated[str, Form()] = "",
+) -> Response:
+    try:
+        remove_home(conn, value)
+    except ValueError as exc:
+        return _home_error(request, conn, str(exc), value=value, note="", status_code=400)
+    except NotFoundError as exc:
+        return _home_error(request, conn, str(exc), value=value, note="", status_code=404)
+    return RedirectResponse("/home", status_code=303)
+
+
+@router.post("/home/detect", dependencies=[Depends(check_csrf)])
+def detect_home_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    """Show local candidates, each with its own Add button; never adds anything itself."""
+    context = _home_context(conn)
+    context["candidates"] = home_detector(request)(
+        existing=home_allow_entries(conn), extra_hosts=_request_hosts(request)
+    )
+    return render(request, "home.html", context)
+
+
+@router.post("/home/detect-public", dependencies=[Depends(check_csrf)])
+def detect_public_ip_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    """Ask api.ipify.org for the public IP: only ever on this explicit request."""
+    context = _home_context(conn)
+    public, candidate = public_ip_candidate(
+        public_ip_fetcher_factory(request)(), existing=home_allow_entries(conn)
+    )
+    context["candidates"] = [candidate] if candidate is not None else []
+    context["public_ip_failed"] = public is None
+    return render(request, "home.html", context)
+
+
+def _request_hosts(request: Request) -> list[str]:
+    """The host this server was reached at, as a candidate (filtered like the rest)."""
+    return [request.url.hostname] if request.url.hostname else []
 
 
 def _apply_enabled_change(

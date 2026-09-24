@@ -142,3 +142,16 @@ code { word-break: break-all; }
 .actions label { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85em; }
 form.inline-form { display: grid; gap: 0.5rem; max-width: 28rem; }
 form.inline-form label { display: grid; gap: 0.2rem; font-size: 0.9em; color: var(--muted); }
+
+.badge-auto { color: var(--accent); border-color: var(--accent); }
+
+.alert-banner {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  color: var(--error-fg);
+  background: var(--error-bg);
+  border: 1px solid var(--error-fg);
+  border-radius: 6px;
+}
+.alert-banner h2 { margin: 0 0 0.5rem; font-size: 1.1em; }
+.alert-banner ul { margin: 0; padding-left: 1.25rem; }

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
@@ -26,6 +26,8 @@ class Run:
     status: RunStatus
     counts: dict[str, int]
     error: str | None
+    # A Compile's Home Network hits: (value, comma-joined Source ids), capped.
+    home_hits: tuple[tuple[str, str], ...] = ()
 
 
 def start_run(
@@ -46,10 +48,19 @@ def finish_run(
     now: datetime,
     counts: Mapping[str, int] | None = None,
     error: str | None = None,
+    home_hits: Sequence[tuple[str, str]] = (),
 ) -> None:
     conn.execute(
-        "UPDATE runs SET finished_at = ?, status = ?, counts = ?, error = ? WHERE id = ?",
-        (ts(now), status, json.dumps(dict(counts or {})), error, run_id),
+        "UPDATE runs SET finished_at = ?, status = ?, counts = ?, error = ?, home_hits = ? "
+        "WHERE id = ?",
+        (
+            ts(now),
+            status,
+            json.dumps(dict(counts or {})),
+            error,
+            json.dumps([list(hit) for hit in home_hits]),
+            run_id,
+        ),
     )
 
 
@@ -63,6 +74,7 @@ def _to_run(row: sqlite3.Row) -> Run:
         status=row["status"],
         counts=json.loads(row["counts"]),
         error=row["error"],
+        home_hits=tuple((value, sources) for value, sources in json.loads(row["home_hits"])),
     )
 
 

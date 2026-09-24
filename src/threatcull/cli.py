@@ -20,6 +20,7 @@ from threatcull.clock import utcnow
 from threatcull.compiling import compile_outputs
 from threatcull.fetcher import HttpFetcher
 from threatcull.fetching import fetch_all
+from threatcull.home_detect import detect_candidates, public_ip_candidate, public_ip_fetcher
 from threatcull.indicators import SourceKind
 from threatcull.lookup import lookup, output_labels
 from threatcull.parsers import SourceFormat
@@ -27,6 +28,7 @@ from threatcull.store.allowlist import add_entry, operator_entries, remove_entry
 from threatcull.store.api_tokens import create_api_token, list_api_tokens, revoke_api_token
 from threatcull.store.db import connect
 from threatcull.store.errors import NotFoundError, PolicyError
+from threatcull.store.home import add_home, home_allow_entries, home_entries, remove_home
 from threatcull.store.outputs import ensure_default_outputs, list_outputs, rotate_token
 from threatcull.store.sources import (
     add_custom_source,
@@ -93,6 +95,8 @@ def build_parser() -> argparse.ArgumentParser:
     allow_sub.add_parser("remove").add_argument("value")
     allow_sub.add_parser("list")
 
+    _add_home_parser(sub)
+
     sub.add_parser("fetch", help="Fetch enabled Sources").add_argument("source_ids", nargs="*")
     sub.add_parser("compile", help="Compile Outputs").add_argument("--force", action="store_true")
     sub.add_parser("run", help="Fetch every enabled Source, then Compile").add_argument(
@@ -116,6 +120,27 @@ def build_parser() -> argparse.ArgumentParser:
     _add_serve_parser(sub)
     _add_api_token_parser(sub)
     return parser
+
+
+def _add_home_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    home = sub.add_parser(
+        "home", help="Manage the Home Network (your own networks; never published)"
+    )
+    home_sub = home.add_subparsers(dest="action", required=True)
+    home_add = home_sub.add_parser("add")
+    home_add.add_argument("value")
+    home_add.add_argument("--note", default="")
+    home_sub.add_parser("remove").add_argument("value")
+    home_sub.add_parser("list")
+    detect = home_sub.add_parser(
+        "detect", help="Suggest entries from this host's addresses, gateway and DNS resolvers"
+    )
+    detect.add_argument(
+        "--public-ip",
+        action="store_true",
+        help="Also ask api.ipify.org for this network's public IP (contacts the internet)",
+    )
+    detect.add_argument("--apply", action="store_true", help="Add every candidate (origin=auto)")
 
 
 def _add_serve_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -254,6 +279,46 @@ def _allow_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _home_add(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    entry = add_home(conn, args.value, args.note, now=utcnow())
+    print(f"added {entry.value} to the Home Network")
+    return EXIT_OK
+
+
+def _home_remove(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    remove_home(conn, args.value)
+    print(f"removed {args.value.strip()} from the Home Network")
+    return EXIT_OK
+
+
+def _home_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    for entry in home_entries(conn):
+        print(f"{entry.value}  {entry.origin}  {entry.note}")
+    return EXIT_OK
+
+
+def _home_detect(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    existing = home_allow_entries(conn)
+    candidates = detect_candidates(existing=existing)
+    if args.public_ip:
+        public, candidate = public_ip_candidate(
+            public_ip_fetcher(), existing=existing, found=candidates
+        )
+        if public is None:
+            print("could not learn the public IP from api.ipify.org", file=sys.stderr)
+        elif candidate is not None:
+            candidates.append(candidate)
+    if not candidates:
+        print("no new Home Network candidates")
+    for candidate in candidates:
+        if args.apply:
+            add_home(conn, candidate.value, candidate.reason, origin="auto", now=utcnow())
+            print(f"added {candidate.value}  {candidate.reason}")
+        else:
+            print(f"{candidate.value}  {candidate.reason}")
+    return EXIT_OK
+
+
 def _fetch(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     failed = False
     for outcome in fetch_all(conn, HttpFetcher(), now=utcnow(), source_ids=args.source_ids or None):
@@ -275,6 +340,11 @@ def _compile(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     for name, count in report.counts.items():
         print(f"{name}: {count}")
     print(f"allowlisted: {report.allowlisted}")
+    for value, sources in report.home_hits:
+        print(f"WARNING: Home Network listed by {sources}: {value}", file=sys.stderr)
+    if report.home_hit_count > len(report.home_hits):
+        more = report.home_hit_count - len(report.home_hits)
+        print(f"WARNING: Home Network listed {more} more times", file=sys.stderr)
     for reason in report.reasons:
         print(f"guard: {reason}")
     if report.status == "blocked":
@@ -394,6 +464,10 @@ _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("allow", "add"): _allow_add,
     ("allow", "remove"): _allow_remove,
     ("allow", "list"): _allow_list,
+    ("home", "add"): _home_add,
+    ("home", "remove"): _home_remove,
+    ("home", "list"): _home_list,
+    ("home", "detect"): _home_detect,
     ("fetch", None): _fetch,
     ("compile", None): _compile,
     ("run", None): _run,

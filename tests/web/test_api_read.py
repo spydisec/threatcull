@@ -58,6 +58,7 @@ RUN_KEYS = {
     "status",
     "counts",
     "error",
+    "home_hits",
 }
 SETTINGS_KEYS = {
     "business_mode",

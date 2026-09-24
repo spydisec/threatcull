@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from secrets import compare_digest
@@ -14,6 +14,8 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request
 
 from threatcull.clock import utcnow
+from threatcull.fetcher import Fetcher
+from threatcull.home_detect import HomeDetector
 from threatcull.store.api_tokens import verify_api_token
 from threatcull.store.db import connect
 from threatcull.store.users import password_fingerprint
@@ -192,3 +194,15 @@ async def check_csrf(
     if request.url.path.startswith("/api/"):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
     raise CsrfError
+
+
+def home_detector(request: Request) -> HomeDetector:
+    """The app's Home Network detector (tests swap in a fake via ``app.state``)."""
+    detector: HomeDetector = request.app.state.home_detector
+    return detector
+
+
+def public_ip_fetcher_factory(request: Request) -> Callable[[], Fetcher]:
+    """Builds the Fetcher for "Detect my public IP" (tests swap in a fake)."""
+    factory: Callable[[], Fetcher] = request.app.state.public_ip_fetcher_factory
+    return factory
