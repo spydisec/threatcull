@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Where Outputs live on disk, and how they are replaced atomically."""
+"""Where Outputs live on disk."""
 
 from __future__ import annotations
 
@@ -19,9 +19,3 @@ _EXTENSIONS = {
 
 def output_path(out_dir: Path, spec: OutputSpec) -> Path:
     return out_dir / f"{spec.name}.{_EXTENSIONS[spec.format]}"
-
-
-def atomic_write(path: Path, text: str) -> None:
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    tmp.replace(path)

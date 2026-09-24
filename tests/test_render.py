@@ -2,6 +2,9 @@
 import csv
 import io
 import json
+from dataclasses import replace
+
+import pytest
 
 from threatcull.outputs.render import Attribution, RenderContext, render
 from threatcull.policy.scoring import ScoredIndicator
@@ -113,3 +116,27 @@ def test_json() -> None:
 
 def test_empty_plain_output_is_just_the_header() -> None:
     assert render("plain", [], CTX).splitlines()[2] == "# Entries: 0"
+
+
+@pytest.mark.parametrize("items", [ITEMS, ITEMS[:1], []])
+def test_json_is_byte_identical_to_one_json_dumps(items: list[ScoredIndicator]) -> None:
+    doc = json.loads(render("json", items, CTX))
+    assert render("json", items, CTX) == json.dumps(doc, indent=2) + "\n"
+
+
+def test_csv_quotes_like_the_csv_module() -> None:
+    odd = replace(ITEMS[1], source_ids=("src-x",))
+    ctx = replace(CTX, source_names={"src-x": 'Quoted, "odd" name'})
+    buffer = io.StringIO()
+    csv.writer(buffer, lineterminator="\n").writerow(
+        [
+            odd.value,
+            odd.kind,
+            odd.score,
+            odd.tier,
+            'Quoted, "odd" name',
+            odd.first_seen,
+            odd.last_seen,
+        ]
+    )
+    assert render("csv", [odd], ctx).splitlines(keepends=True)[1] == buffer.getvalue()

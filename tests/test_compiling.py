@@ -3,11 +3,14 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from tests.factories import make_entry
 from threatcull.compiling import compile_outputs, shrink_reasons
 from threatcull.indicators import Indicator
+from threatcull.outputs.render import tail
 from threatcull.store.allowlist import add_entry
-from threatcull.store.outputs import OutputSpec, create_output, get_output
+from threatcull.store.outputs import OutputFormat, OutputSpec, create_output, get_output
 from threatcull.store.runs import recent_runs
 from threatcull.store.settings import Settings
 from threatcull.store.sightings import record_fetch_success
@@ -123,3 +126,34 @@ def test_shrink_reasons_rules() -> None:
     assert shrink_reasons({"x": 100}, {"x": 60}, stale=0, enabled=4, settings=settings) == []
     assert shrink_reasons({"x": None}, {"x": 0}, stale=0, enabled=4, settings=settings) == []
     assert len(shrink_reasons({"x": 100}, {"x": 40}, stale=2, enabled=4, settings=settings)) == 2
+
+
+def test_blocked_compile_leaves_no_temp_files(
+    conn: sqlite3.Connection, now: datetime, tmp_path: Path
+) -> None:
+    _setup(conn, now)
+    report = compile_outputs(conn, tmp_path / "out", now=now + timedelta(hours=80))
+    assert report.status == "blocked"
+    assert list((tmp_path / "out").iterdir()) == []
+
+
+def test_failure_mid_compile_publishes_nothing_and_cleans_up(
+    conn: sqlite3.Connection, now: datetime, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(conn, now)
+    out_dir = tmp_path / "out"
+    calls: list[str] = []
+
+    def flaky(fmt: OutputFormat, count: int) -> str:
+        calls.append(fmt)
+        if len(calls) == 2:
+            raise OSError("disk full")
+        return tail(fmt, count)
+
+    # The first Output is fully staged, the second fails while being written.
+    monkeypatch.setattr("threatcull.outputs.stream.tail", flaky)
+    with pytest.raises(OSError, match="disk full"):
+        compile_outputs(conn, out_dir, now=now)
+    assert list(out_dir.iterdir()) == []
+    assert recent_runs(conn)[0].status == "failed"
+    assert get_output(conn, "ips").last_count is None

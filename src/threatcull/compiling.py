@@ -1,27 +1,29 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Compile: Sightings → Allowlist → score → Tier → select → render → publish."""
+"""Compile: Sightings → score → Allowlist → Tier → select → render → publish.
+
+Scoring happens in a SQLite TEMP table and every Output is streamed to a temp file,
+so memory stays bounded however many Indicators the Sources list.
+"""
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
 from threatcull.clock import ts
-from threatcull.outputs.files import atomic_write, output_path
-from threatcull.outputs.render import Attribution, RenderContext, render
-from threatcull.outputs.select import select
+from threatcull.outputs.stream import StagedOutput, mark_allowlisted, stage_output
 from threatcull.policy.allowlist import Allowlist
-from threatcull.policy.scoring import ScoredIndicator, scored_indicators
+from threatcull.policy.scoring import create_scored_table, drop_scored_table
 from threatcull.store.allowlist import builtin_entries, operator_entries
 from threatcull.store.outputs import list_outputs, record_published
 from threatcull.store.runs import finish_run, start_run
 from threatcull.store.settings import Settings, load_settings
 from threatcull.store.sightings import prune
-from threatcull.store.sources import Source, list_sources
+from threatcull.store.sources import list_sources
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,48 +89,37 @@ def _compile(
     stale = tuple(
         s.id for s in blocklists if s.last_success_at is None or s.last_success_at < cutoff
     )
-    allowlist = Allowlist([*operator_entries(conn), *builtin_entries(conn)])
-    scored = scored_indicators(conn, now=now, settings=settings)
-    kept = [item for item in scored if allowlist.match(item.value, item.kind) is None]
-    sources = {source.id: source for source in list_sources(conn)}
-    specs = list_outputs(conn)
-    rendered: dict[str, tuple[Path, str, int]] = {}
-    for spec in specs:
-        items = select(kept, spec)
-        ctx = RenderContext(
-            output_name=spec.name,
-            generated_at=ts(now),
-            attributions=_attributions(items, sources),
-            source_names={source_id: source.name for source_id, source in sources.items()},
+    create_scored_table(conn, now=now, settings=settings)
+    staged: list[StagedOutput] = []
+    try:
+        allowlisted = mark_allowlisted(
+            conn, Allowlist([*operator_entries(conn), *builtin_entries(conn)])
         )
-        rendered[spec.name] = (
-            output_path(out_dir, spec),
-            render(spec.format, items, ctx),
-            len(items),
+        sources = {source.id: source for source in list_sources(conn)}
+        specs = list_outputs(conn)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for spec in specs:
+            staged.append(
+                stage_output(
+                    conn, spec, out_dir, generated_at=ts(now), sources=sources, settings=settings
+                )
+            )
+        counts = {output.name: output.count for output in staged}
+        reasons = shrink_reasons(
+            {spec.name: spec.last_count for spec in specs},
+            counts,
+            stale=len(stale),
+            enabled=len(blocklists),
+            settings=settings,
         )
-    counts = {name: count for name, (_, _, count) in rendered.items()}
-    reasons = shrink_reasons(
-        {spec.name: spec.last_count for spec in specs},
-        counts,
-        stale=len(stale),
-        enabled=len(blocklists),
-        settings=settings,
-    )
-    allowlisted = len(scored) - len(kept)
-    if reasons and not force:
-        return CompileReport("blocked", counts, tuple(reasons), allowlisted, stale)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for name, (path, text, count) in rendered.items():
-        atomic_write(path, text)
-        record_published(conn, name, count, now=now)
-    return CompileReport("ok", counts, tuple(reasons), allowlisted, stale)
-
-
-def _attributions(
-    items: Sequence[ScoredIndicator], sources: Mapping[str, Source]
-) -> tuple[Attribution, ...]:
-    ids = sorted({sid for item in items for sid in item.source_ids}, key=lambda s: sources[s].name)
-    return tuple(
-        Attribution(sources[sid].name, sources[sid].licence, sources[sid].licence_url)
-        for sid in ids
-    )
+        if reasons and not force:
+            return CompileReport("blocked", counts, tuple(reasons), allowlisted, stale)
+        for output in staged:
+            output.tmp.replace(output.path)
+            record_published(conn, output.name, output.count, now=now)
+        return CompileReport("ok", counts, tuple(reasons), allowlisted, stale)
+    finally:
+        # Blocked or failed: nothing is published. Published temp files are already gone.
+        for output in staged:
+            output.tmp.unlink(missing_ok=True)
+        drop_scored_table(conn)
