@@ -156,7 +156,6 @@ sources:
     licence: The Unlicense
     licence_url: https://github.com/blocklistproject/Lists/blob/master/LICENSE
     refresh_minutes: 1440
-    default_enabled: true
 
   - id: blocklistproject-phishing
     name: The Block List Project — phishing
