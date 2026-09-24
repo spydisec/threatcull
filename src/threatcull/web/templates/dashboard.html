@@ -51,7 +51,7 @@
   {% if last_compile %}
   <dl class="stats">
     <dt>Status</dt>
-    <dd>{{ last_compile.status }}</dd>
+    <dd id="last-compile-status">{{ last_compile.status }}</dd>
     <dt>Finished</dt>
     <dd>{{ last_compile.finished_at or "still running" }}</dd>
     <dt>Counts</dt>

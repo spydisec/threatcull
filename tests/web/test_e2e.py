@@ -6,7 +6,7 @@ socket guard, but exercises the web UI instead of the CLI: create an admin,
 log in, add and enable Custom Sources, "Run now" and wait for the runner
 (bounded, never a real sleep), rotate a Feed Token, fetch the published
 Output, look the value up, allowlist it, and confirm the next Compile drops
-it (forcing past the Shrink Guard if it blocks).
+it (the Shrink Guard blocks the 100% drop; a forced Compile publishes it).
 """
 
 from __future__ import annotations
@@ -28,6 +28,14 @@ from threatcull.web.jobs import PipelineRunner
 WAIT = 10.0
 _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 _TOKEN_URL = re.compile(r"/o/ip-high\?token=([A-Za-z0-9_-]+)")
+_LAST_COMPILE_STATUS = re.compile(r'<dd id="last-compile-status">([^<]*)</dd>')
+
+
+def _last_compile_status(client: TestClient) -> str:
+    """The Status value in the dashboard's "Last Compile" card."""
+    match = _LAST_COMPILE_STATUS.search(client.get("/").text)
+    assert match is not None, "no Last Compile status on the dashboard"
+    return match.group(1).strip()
 
 
 @pytest.fixture
@@ -105,8 +113,7 @@ def test_end_to_end_browser_flow(
     first_result = runner.last_result
     assert first_result is not None
     assert first_result.status == "ok"
-    dashboard = client.get("/").text
-    assert "ok" in dashboard  # the "Last Compile" card
+    assert _last_compile_status(client) == "ok"
 
     # -- Rotate the Feed Token on ip-high through the UI.
     csrf = csrf_from(client.get("/outputs").text)
@@ -128,8 +135,8 @@ def test_end_to_end_browser_flow(
     assert "ip-high" in lookup_page
     assert "custom-a" in lookup_page
 
-    # -- Allowlist the IP, then run again: the Shrink Guard likely blocks a 100% drop
-    # in ip-high, so force a Compile past it.
+    # -- Allowlist the IP, then run again: dropping the only entry of ip-high is a
+    # 100% shrink, so the Shrink Guard must block; then force a Compile past it.
     csrf = csrf_from(client.get("/allowlist").text)
     added_entry = client.post(
         "/allowlist",
@@ -144,18 +151,24 @@ def test_end_to_end_browser_flow(
     assert runner.wait(WAIT)
     second_result = runner.last_result
     assert second_result is not None
-    if second_result.status == "blocked":
-        csrf = csrf_from(client.get("/runs").text)
-        forced = client.post(
-            "/runs/compile-force",
-            data={"csrf": csrf, "confirm": "true"},
-            follow_redirects=False,
-        )
-        assert forced.status_code == 303
-        assert runner.wait(WAIT)
-        forced_result = runner.last_result
-        assert forced_result is not None
-        assert forced_result.status == "ok"
+    assert second_result.status == "blocked"
+    assert _last_compile_status(client) == "blocked"
+    # Blocked means the previous Output is kept: the IP is still served.
+    kept = client.get("/o/ip-high", params={"token": token})
+    assert target_ip in kept.text.splitlines()
+
+    csrf = csrf_from(client.get("/runs").text)
+    forced = client.post(
+        "/runs/compile-force",
+        data={"csrf": csrf, "confirm": "true"},
+        follow_redirects=False,
+    )
+    assert forced.status_code == 303
+    assert runner.wait(WAIT)
+    forced_result = runner.last_result
+    assert forced_result is not None
+    assert forced_result.status == "ok"
+    assert _last_compile_status(client) == "ok"
 
     # -- The Output no longer contains the now-allowlisted IP.
     fed_again = client.get("/o/ip-high", params={"token": token})
