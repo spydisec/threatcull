@@ -1,19 +1,24 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Read-only JSON API: Sources, Outputs, Runs, Settings, and ``/api/v1/me``."""
+"""Read-only JSON API: Sources, Outputs, Runs, Settings, and ``/api/v1/me``.
+
+Each resource has its own small dict-building function below: an explicit
+allow-list of fields, not a generic dataclass dump. A new field added to
+``Source``, ``OutputSpec``, ``Run`` or ``Settings`` is therefore invisible to
+this API until someone deliberately adds it here — most importantly, nothing
+ever exposes ``outputs.feed_token_hash`` by accident.
+"""
 
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import asdict
-from enum import Enum
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 
-from threatcull.store.outputs import list_outputs
-from threatcull.store.runs import recent_runs
-from threatcull.store.settings import load_settings
-from threatcull.store.sources import list_sources
+from threatcull.store.outputs import OutputSpec, list_outputs
+from threatcull.store.runs import Run, recent_runs
+from threatcull.store.settings import Settings, load_settings
+from threatcull.store.sources import Source, list_sources
 from threatcull.web.deps import get_conn, require_api_user
 
 router = APIRouter(prefix="/api/v1")
@@ -23,20 +28,67 @@ MIN_RUNS_LIMIT = 1
 MAX_RUNS_LIMIT = 200
 
 
-def _json_safe(value: Any) -> Any:
-    """Make one dataclass-field value JSON-serialisable: enums and sets/tuples."""
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, frozenset | set):
-        return sorted(value)
-    if isinstance(value, tuple):
-        return list(value)
-    return value
+def _source_json(source: Source) -> dict[str, Any]:
+    return {
+        "id": source.id,
+        "name": source.name,
+        "family": source.family,
+        "url": source.url,
+        "format": source.format,
+        "kind": source.kind,
+        "role": source.role,
+        "category": source.category,
+        "licence_class": source.licence_class.value,
+        "business_use": source.business_use.value,
+        "licence": source.licence,
+        "licence_url": source.licence_url,
+        "refresh_minutes": source.refresh_minutes,
+        "custom": source.custom,
+        "enabled": source.enabled,
+        "disabled_reason": source.disabled_reason,
+        "last_success_at": source.last_success_at,
+        "last_attempt_at": source.last_attempt_at,
+        "last_error": source.last_error,
+    }
 
 
-def _row(obj: Any) -> dict[str, Any]:
-    """A flat dataclass instance as a JSON-safe dict (fields only, never a DB row)."""
-    return {key: _json_safe(value) for key, value in asdict(obj).items()}
+def _output_json(output: OutputSpec) -> dict[str, Any]:
+    return {
+        "name": output.name,
+        "kind": output.kind,
+        "categories": sorted(output.categories),
+        "min_tier": output.min_tier,
+        "max_entries": output.max_entries,
+        "format": output.format,
+        "last_count": output.last_count,
+        "last_published_at": output.last_published_at,
+    }
+
+
+def _run_json(run: Run) -> dict[str, Any]:
+    return {
+        "id": run.id,
+        "type": run.type,
+        "source_id": run.source_id,
+        "started_at": run.started_at,
+        "finished_at": run.finished_at,
+        "status": run.status,
+        "counts": run.counts,
+        "error": run.error,
+    }
+
+
+def _settings_json(settings: Settings) -> dict[str, Any]:
+    return {
+        "business_mode": settings.business_mode,
+        "active_window_days": settings.active_window_days,
+        "retention_days": settings.retention_days,
+        "stale_after_hours": settings.stale_after_hours,
+        "tier_high": settings.tier_high,
+        "tier_medium": settings.tier_medium,
+        "max_shrink": settings.max_shrink,
+        "max_stale_ratio": settings.max_stale_ratio,
+    }
 
 
 @router.get("/me")
@@ -49,7 +101,7 @@ def api_sources(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_api_user)],
 ) -> list[dict[str, Any]]:
-    return [_row(source) for source in list_sources(conn)]
+    return [_source_json(source) for source in list_sources(conn)]
 
 
 @router.get("/outputs")
@@ -57,9 +109,7 @@ def api_outputs(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_api_user)],
 ) -> list[dict[str, Any]]:
-    # OutputSpec never carries feed_token_hash: only the Feed Token routes
-    # (web/routes/feeds.py) touch the hashed token, via verify_token/rotate_token.
-    return [_row(output) for output in list_outputs(conn)]
+    return [_output_json(output) for output in list_outputs(conn)]
 
 
 @router.get("/runs")
@@ -68,7 +118,7 @@ def api_runs(
     user: Annotated[str, Depends(require_api_user)],
     limit: Annotated[int, Query(ge=MIN_RUNS_LIMIT, le=MAX_RUNS_LIMIT)] = DEFAULT_RUNS_LIMIT,
 ) -> list[dict[str, Any]]:
-    return [_row(run) for run in recent_runs(conn, limit)]
+    return [_run_json(run) for run in recent_runs(conn, limit)]
 
 
 @router.get("/settings")
@@ -76,4 +126,4 @@ def api_settings(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_api_user)],
 ) -> dict[str, Any]:
-    return _row(load_settings(conn))
+    return _settings_json(load_settings(conn))

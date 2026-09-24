@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -52,6 +53,37 @@ def test_dashboard_shows_business_mode_and_an_output(
     assert response.status_code == 200
     assert "Business Mode" in response.text
     assert OUTPUT_SPEC.name in response.text
+
+
+def test_dashboard_says_no_compile_yet_on_a_fresh_install(
+    client: TestClient, logged_in: str
+) -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "No Compile has run yet." in response.text
+
+
+def test_dashboard_still_shows_the_last_compile_behind_many_later_fetches(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    # Reproduces the scheduler's own Fetch cadence (Task 8): a Compile Run
+    # followed by well over 100 Fetch Runs must still surface on the
+    # dashboard, not fall out of a capped scan.
+    conn = open_db(tmp_path)
+    try:
+        now = utcnow()
+        compile_id = start_run(conn, "compile", now=now)
+        finish_run(conn, compile_id, "ok", now=now, counts={"ip-high": 3})
+        for i in range(150):
+            later = now + timedelta(minutes=i + 1)
+            fetch_id = start_run(conn, "fetch", now=later, source_id=f"s{i}")
+            finish_run(conn, fetch_id, "ok", now=later)
+    finally:
+        conn.close()
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "No Compile has run yet." not in response.text
+    assert "ok" in response.text
 
 
 def test_sources_page_lists_a_source(client: TestClient, logged_in: str, tmp_path: Path) -> None:
