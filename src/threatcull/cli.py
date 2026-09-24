@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import get_args
 
+import uvicorn
 import yaml
 
 from threatcull.catalog import BusinessUse, Category, load_catalog
@@ -32,6 +33,7 @@ from threatcull.store.sources import (
     set_enabled,
     sync_catalog,
 )
+from threatcull.web.app import create_app
 
 DB_NAME = "threatcull.db"
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED = 0, 1, 2
@@ -96,6 +98,10 @@ def build_parser() -> argparse.ArgumentParser:
     out_sub = outputs.add_subparsers(dest="action", required=True)
     out_sub.add_parser("list")
     out_sub.add_parser("rotate-token").add_argument("name")
+
+    serve = sub.add_parser("serve", help="Run the web UI")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=6969)
     return parser
 
 
@@ -273,6 +279,11 @@ def _outputs_rotate(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _serve(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    uvicorn.run(create_app(args.data_dir), host=args.host, port=args.port, log_level="info")
+    return EXIT_OK
+
+
 _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("init", None): _init,
     ("sources", "list"): _sources_list,
@@ -289,4 +300,5 @@ _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("lookup", None): _lookup,
     ("outputs", "list"): _outputs_list,
     ("outputs", "rotate-token"): _outputs_rotate,
+    ("serve", None): _serve,
 }
