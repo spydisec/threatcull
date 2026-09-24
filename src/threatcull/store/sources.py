@@ -25,8 +25,11 @@ from threatcull.store.settings import load_settings, save_settings
 
 BUSINESS_MODE_REASON = "Disabled by Business Mode: not cleared for business use"
 REMOVED_FROM_CATALOG_REASON = "Removed from the Catalog"
+RESTRICTED_TERMS_REASON = "Terms changed to restricted; acknowledge to re-enable"
 _CUSTOM_ID = re.compile(r"^custom-[a-z0-9][a-z0-9-]{0,54}$")
 _CUSTOM_SCHEMES = ("https://", "http://", "file://")
+# Source names end up in Output comment headers: a newline there could inject lines.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +91,10 @@ def sync_catalog(conn: sqlite3.Connection, entries: Sequence[CatalogEntry]) -> N
     """Insert new Catalog Sources and refresh metadata, never overriding operator choices."""
     business_mode = load_settings(conn).business_mode
     with transaction(conn):
+        previous_class = {
+            row["id"]: row["licence_class"]
+            for row in conn.execute("SELECT id, licence_class FROM sources WHERE custom = 0")
+        }
         for entry in entries:
             enabled = entry.default_enabled and (
                 not business_mode or business_use_permitted(entry.role, entry.business_use)
@@ -122,6 +129,16 @@ def sync_catalog(conn: sqlite3.Connection, entries: Sequence[CatalogEntry]) -> N
         conn.executemany(
             "UPDATE sources SET enabled = 0, disabled_reason = ? WHERE id = ?",
             [(REMOVED_FROM_CATALOG_REASON, source_id) for source_id in stale_ids],
+        )
+        newly_restricted = [
+            entry.id
+            for entry in entries
+            if entry.licence_class is LicenceClass.RESTRICTED
+            and previous_class.get(entry.id, LicenceClass.RESTRICTED) != LicenceClass.RESTRICTED
+        ]
+        conn.executemany(
+            "UPDATE sources SET enabled = 0, disabled_reason = ? WHERE id = ? AND enabled = 1",
+            [(RESTRICTED_TERMS_REASON, source_id) for source_id in newly_restricted],
         )
         if business_mode:
             _disable_non_business(conn)
@@ -190,6 +207,8 @@ def add_custom_source(
 ) -> Source:
     if not _CUSTOM_ID.fullmatch(source_id):
         raise ValueError("custom Source ids look like custom-<name> (lowercase, digits, dashes)")
+    if _CONTROL_CHARS.search(name):
+        raise ValueError("custom Source names cannot contain control characters")
     if not url.startswith(_CUSTOM_SCHEMES):
         raise ValueError("custom Source URLs must use https://, http:// or file://")
     conn.execute(

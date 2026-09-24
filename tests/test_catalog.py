@@ -49,6 +49,11 @@ def test_default_enabled_allowlist_source_is_exempt() -> None:
     assert entry.default_enabled
 
 
+def test_restricted_sources_are_never_enabled_by_default() -> None:
+    with pytest.raises(ValidationError, match="restricted"):
+        make_entry(licence_class="restricted", default_enabled=True)
+
+
 def test_json_sources_need_keys() -> None:
     with pytest.raises(ValidationError, match="json_keys"):
         make_entry(format="json")

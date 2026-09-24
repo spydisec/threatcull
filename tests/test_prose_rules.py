@@ -10,7 +10,13 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
-pytestmark = pytest.mark.skipif(shutil.which("uvx") is None, reason="needs uvx to run Vale")
+pytestmark = [
+    pytest.mark.skipif(shutil.which("uvx") is None, reason="needs uvx to run Vale"),
+    pytest.mark.skipif(
+        not (ROOT / ".vale" / "styles" / "write-good").is_dir(),
+        reason="Vale packages not synced; run `uvx vale sync` (CI does)",
+    ),
+]
 
 
 def _alerts(tmp_path: Path, text: str) -> set[str]:

@@ -38,6 +38,13 @@ def test_transaction_rolls_back_on_error(conn: sqlite3.Connection) -> None:
     assert conn.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 0
 
 
+def test_original_error_survives_an_sqlite_auto_rollback(conn: sqlite3.Connection) -> None:
+    with pytest.raises(RuntimeError, match="original"), transaction(conn):  # noqa: PT012
+        conn.execute("ROLLBACK")  # what SQLite does itself on e.g. SQLITE_FULL
+        raise RuntimeError("original")
+    assert not conn.in_transaction
+
+
 def test_nested_transaction_joins_outer(conn: sqlite3.Connection) -> None:
     with transaction(conn):
         conn.execute("INSERT INTO settings (key, value) VALUES ('a', '1')")

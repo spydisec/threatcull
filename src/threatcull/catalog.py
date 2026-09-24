@@ -78,6 +78,8 @@ class CatalogEntry(BaseModel):
             raise ValueError("json Sources need json_keys")
         if self.default_enabled and not business_use_permitted(self.role, self.business_use):
             raise ValueError("only Sources cleared for business use may be enabled by default")
+        if self.default_enabled and self.licence_class is LicenceClass.RESTRICTED:
+            raise ValueError("restricted Sources need acknowledgement, so no default enablement")
         return self
 
 

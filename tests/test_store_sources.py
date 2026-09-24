@@ -10,6 +10,7 @@ from threatcull.store.settings import load_settings
 from threatcull.store.sources import (
     BUSINESS_MODE_REASON,
     REMOVED_FROM_CATALOG_REASON,
+    RESTRICTED_TERMS_REASON,
     add_custom_source,
     get_source,
     list_sources,
@@ -97,6 +98,37 @@ def test_catalog_reclassification_is_enforced_on_sync(conn: sqlite3.Connection) 
     sync_catalog(conn, [ALLOWED])
     sync_catalog(conn, [make_entry(id="allowed-list", business_use="forbidden")])
     assert get_source(conn, "allowed-list").enabled is False
+
+
+def test_catalog_reclassification_to_restricted_disables_the_source(
+    conn: sqlite3.Connection,
+) -> None:
+    sync_catalog(conn, [ALLOWED])
+    sync_catalog(conn, [make_entry(id="allowed-list", licence_class="restricted")])
+    source = get_source(conn, "allowed-list")
+    assert (source.enabled, source.disabled_reason) == (False, RESTRICTED_TERMS_REASON)
+    assert RESTRICTED_TERMS_REASON == "Terms changed to restricted; acknowledge to re-enable"
+
+
+def test_acknowledged_restricted_source_stays_enabled_on_resync(conn: sqlite3.Connection) -> None:
+    sync_catalog(conn, [RESTRICTED])
+    set_enabled(conn, "restricted-list", True, acknowledge_restricted=True)
+    sync_catalog(conn, [RESTRICTED])
+    assert get_source(conn, "restricted-list").enabled
+
+
+@pytest.mark.parametrize("name", ["Evil\n# injected", "Tab\tname", "CR\rname", "Nul\x00", "\x1f"])
+def test_custom_source_names_reject_control_characters(conn: sqlite3.Connection, name: str) -> None:
+    with pytest.raises(ValueError, match="control characters"):
+        add_custom_source(
+            conn,
+            source_id="custom-bad",
+            name=name,
+            url="https://example.com/x",
+            fmt="plain",
+            kind="ip",
+            category="malicious",
+        )
 
 
 def test_custom_sources(conn: sqlite3.Connection) -> None:
