@@ -16,7 +16,7 @@ from threatcull import __version__
 
 USER_AGENT = f"ThreatCull/{__version__} (+https://github.com/spydisec/threatcull)"
 DEFAULT_TIMEOUT = 30.0
-DEFAULT_MAX_BYTES = 50 * 1024 * 1024
+DEFAULT_MAX_BYTES = 128 * 1024 * 1024
 RETRY_DELAYS = (1.0, 2.0, 4.0)
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 
