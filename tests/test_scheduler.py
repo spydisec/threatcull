@@ -6,19 +6,22 @@ starting it and call the job functions directly; the one started scheduler
 fires a job "now" and every wait on it is bounded.
 """
 
+import threading
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
+from apscheduler.job import Job
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from tests.factories import make_entry
-from threatcull.clock import utcnow
+from threatcull.clock import ts, utcnow
 from threatcull.fetcher import Fetcher, FetchResult
 from threatcull.store.outputs import ensure_default_outputs
-from threatcull.store.runs import recent_runs
+from threatcull.store.runs import finish_run, recent_runs, start_run
 from threatcull.store.sources import set_enabled, sync_catalog
 from threatcull.web.deps import open_db
 from threatcull.web.jobs import PipelineRunner
@@ -27,6 +30,7 @@ from threatcull.web.scheduler import (
     DEBOUNCED_COMPILE_JOB_ID,
     Scheduler,
     fetch_job_id,
+    fetch_retry_job_id,
 )
 
 WAIT = 10.0  # seconds; every wait in these tests is bounded
@@ -188,20 +192,228 @@ def test_a_failed_fetch_schedules_no_compile_and_records_a_failed_run(tmp_path: 
     assert {job.id for job in scheduler.scheduler.get_jobs()} == jobs_before
 
 
-def test_fetch_job_skips_quietly_while_the_runner_is_busy(tmp_path: Path) -> None:
+class BlockingFetcher:
+    """Holds the runner's lock (via start_background) until ``release`` is set."""
+
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def __call__(self, url: str, *, etag: str | None, last_modified: str | None) -> FetchResult:
+        self.entered.set()
+        self.release.wait(WAIT)
+        return FetchResult("ok", "45.9.20.1\n")
+
+
+def _busy_scheduler(data_dir: Path) -> tuple[Scheduler, BlockingFetcher]:
+    fake = BlockingFetcher()
+    scheduler = _scheduler(data_dir, lambda: fake)
+    assert scheduler.runner.start_background() is True  # a "Run now" is in progress
+    assert fake.entered.wait(WAIT)
+    return scheduler, fake
+
+
+def _retry_jobs(scheduler: Scheduler) -> list[Job]:
+    return [job for job in scheduler.scheduler.get_jobs() if job.id.startswith("fetch-retry:")]
+
+
+def test_a_busy_fetch_tick_arms_one_retry_in_about_three_minutes(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    scheduler, fake = _busy_scheduler(tmp_path)
+    try:
+        # Fetched just now: the regular tick is an hour out, so the retry is sooner.
+        _set_last_attempt(tmp_path, "a", utcnow())
+        scheduler.rescan()
+        started = time.monotonic()
+        before = utcnow()
+        scheduler.fetch_job("a")
+        scheduler.fetch_job("a")
+        after = utcnow()
+        assert time.monotonic() - started < 1.0  # never blocks
+        retries = _retry_jobs(scheduler)
+        assert [job.id for job in retries] == [fetch_retry_job_id("a")]
+        run_at = retries[0].next_run_time
+        assert before + timedelta(minutes=3) <= run_at
+        assert run_at <= after + timedelta(minutes=3, seconds=30)
+    finally:
+        fake.release.set()
+        assert scheduler.runner.wait(WAIT)
+    runs_before = len(_runs(tmp_path))
+    # The retry reuses fetch_job: now idle, it fetches and debounces a Compile.
+    scheduler.fetch_job("a")
+    runs = _runs(tmp_path)
+    assert len(runs) == runs_before + 1
+    assert runs[0] == ("fetch", "a", "ok")
+    assert scheduler.scheduler.get_job(DEBOUNCED_COMPILE_JOB_ID) is not None
+
+
+def test_no_retry_when_the_regular_tick_comes_sooner(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    scheduler, fake = _busy_scheduler(tmp_path)
+    try:
+        scheduler.rescan()
+        scheduler.scheduler.modify_job(
+            fetch_job_id("a"), next_run_time=utcnow() + timedelta(minutes=1)
+        )
+        scheduler.fetch_job("a")
+        assert _retry_jobs(scheduler) == []
+    finally:
+        fake.release.set()
+        assert scheduler.runner.wait(WAIT)
+
+
+def test_a_busy_compile_rearms_the_debounced_compile(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    scheduler, fake = _busy_scheduler(tmp_path)
+    try:
+        before = utcnow()
+        scheduler.compile_job()
+        job = scheduler.scheduler.get_job(DEBOUNCED_COMPILE_JOB_ID)
+        assert job is not None
+        assert job.next_run_time >= before + timedelta(minutes=2)
+    finally:
+        fake.release.set()
+        assert scheduler.runner.wait(WAIT)
+
+
+def test_rescan_drops_retries_for_disabled_sources(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    scheduler, fake = _busy_scheduler(tmp_path)
+    try:
+        _set_last_attempt(tmp_path, "a", utcnow())
+        scheduler.rescan()
+        scheduler.fetch_job("a")
+        assert len(_retry_jobs(scheduler)) == 1
+    finally:
+        fake.release.set()
+        assert scheduler.runner.wait(WAIT)
+    _set_enabled(tmp_path, "a", False)
+    scheduler.rescan()
+    assert _retry_jobs(scheduler) == []
+
+
+def _set_last_attempt(data_dir: Path, source_id: str, when: datetime) -> None:
+    conn = open_db(data_dir)
+    try:
+        conn.execute("UPDATE sources SET last_attempt_at = ? WHERE id = ?", (ts(when), source_id))
+    finally:
+        conn.close()
+
+
+def _next_runs(scheduler: Scheduler) -> dict[str, datetime]:
+    return {
+        job.id: job.next_run_time
+        for job in scheduler.scheduler.get_jobs()
+        if job.id.startswith("fetch:")
+    }
+
+
+def test_never_fetched_sources_are_due_within_minutes_and_staggered(tmp_path: Path) -> None:
     _seed(tmp_path)
     scheduler = _scheduler(tmp_path)
+    before = utcnow()
     scheduler.rescan()
-    runner = scheduler.runner
-    assert runner._lock.acquire(blocking=False)  # a "Run now" holds the lock
+    runs = _next_runs(scheduler)
+    assert set(runs) == {fetch_job_id("a"), fetch_job_id("b")}
+    for run_at in runs.values():
+        assert before + timedelta(seconds=30) <= run_at <= utcnow() + timedelta(minutes=5)
+    assert runs[fetch_job_id("a")] != runs[fetch_job_id("b")]
+    # A second rescan leaves them where they are.
+    scheduler.rescan()
+    assert _next_runs(scheduler) == runs
+
+
+def test_a_recently_fetched_source_waits_for_its_interval(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    attempted = utcnow().replace(microsecond=0) - timedelta(minutes=10)
+    _set_last_attempt(tmp_path, "a", attempted)
+    scheduler = _scheduler(tmp_path)
+    scheduler.rescan()
+    run_at = _next_runs(scheduler)[fetch_job_id("a")]
+    due = attempted + timedelta(minutes=60)
+    assert due <= run_at <= due + timedelta(seconds=60 * 60 // 10)
+
+
+def test_overdue_sources_are_staggered_in_due_order(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    now = utcnow()
+    _set_last_attempt(tmp_path, "a", now - timedelta(hours=3))  # due 2 h ago
+    _set_last_attempt(tmp_path, "b", now - timedelta(hours=10))  # due 6 h ago: first
+    scheduler = _scheduler(tmp_path)
+    scheduler.rescan()
+    runs = _next_runs(scheduler)
+    assert runs[fetch_job_id("b")] < runs[fetch_job_id("a")]
+    assert runs[fetch_job_id("a")] - runs[fetch_job_id("b")] == timedelta(seconds=45)
+    assert runs[fetch_job_id("b")] <= utcnow() + timedelta(seconds=31)
+
+
+def _compile_next_run(scheduler: Scheduler) -> datetime:
+    job = scheduler.scheduler.get_job(COMPILE_JOB_ID)
+    assert job is not None
+    run_at: datetime = job.next_run_time
+    return run_at
+
+
+def test_first_compile_comes_soon_without_a_recent_compile(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    scheduler = _scheduler(tmp_path)
+    before = utcnow()
+    scheduler.start()
     try:
-        started = time.monotonic()
-        scheduler.fetch_job("a")
-        scheduler.compile_job()
-        assert time.monotonic() - started < 1.0
+        run_at = _compile_next_run(scheduler)
+        assert before + timedelta(minutes=5) <= run_at <= utcnow() + timedelta(minutes=5)
     finally:
-        runner._lock.release()
-    assert _runs(tmp_path) == []
+        scheduler.shutdown()
+
+
+def test_first_compile_follows_a_recent_compile(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    conn = open_db(tmp_path)
+    compiled = utcnow().replace(microsecond=0) - timedelta(minutes=20)
+    try:
+        run_id = start_run(conn, "compile", now=compiled)
+        finish_run(conn, run_id, "ok", now=compiled)
+    finally:
+        conn.close()
+    scheduler = _scheduler(tmp_path)
+    scheduler.start()
+    try:
+        assert _compile_next_run(scheduler) == compiled + timedelta(minutes=60)
+    finally:
+        scheduler.shutdown()
+
+
+def test_started_scheduler_survives_run_source_raising(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    scheduler = _scheduler(tmp_path)
+    called = threading.Event()
+
+    def exploding_run_source(source_id: str) -> NoReturn:
+        called.set()
+        raise RuntimeError("run_source blew up")
+
+    scheduler.runner.run_source = exploding_run_source  # type: ignore[method-assign]
+    scheduler.start()
+    try:
+        scheduler.scheduler.modify_job(fetch_job_id("a"), next_run_time=utcnow())
+        assert called.wait(WAIT)
+        deadline = time.monotonic() + WAIT
+        while time.monotonic() < deadline:
+            job = scheduler.scheduler.get_job(fetch_job_id("a"))
+            if job is not None and job.next_run_time > utcnow() + timedelta(minutes=30):
+                break
+            time.sleep(0.05)
+        assert scheduler.scheduler.running
+        job = scheduler.scheduler.get_job(fetch_job_id("a"))
+        assert job is not None
+        assert job.next_run_time > utcnow() + timedelta(minutes=30)
+        assert {j.id for j in scheduler.scheduler.get_jobs()} >= {
+            COMPILE_JOB_ID,
+            fetch_job_id("a"),
+            fetch_job_id("b"),
+        }
+    finally:
+        scheduler.shutdown()
 
 
 def test_started_scheduler_survives_a_failing_job(tmp_path: Path) -> None:

@@ -3,7 +3,7 @@
    so the polling stops by itself. #}
 {% if running %}
 <div id="run-status" class="run-status" hx-get="/partials/status" hx-trigger="every 3s" hx-swap="outerHTML">
-  <p><strong>Running…</strong> Fetch and Compile are in progress.</p>
+  <p><strong>Running…</strong> A run is in progress.</p>
 </div>
 {% else %}
 <div id="run-status" class="run-status">

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -21,6 +22,8 @@ from threatcull.web.security import (
     csrf_token_matches,
 )
 
+log = logging.getLogger(__name__)
+
 DB_NAME = "threatcull.db"
 SESSION_USER_KEY = "user"
 SESSION_FINGERPRINT_KEY = "pwfp"
@@ -34,6 +37,21 @@ def open_db(data_dir: Path) -> sqlite3.Connection:
     ``serve``) does that once at start-up, not on every request.
     """
     return connect(data_dir / DB_NAME)
+
+
+def notify_sources_changed(request: Request) -> None:
+    """Call the app's ``on_sources_changed`` hook (the scheduler's rescan).
+
+    The Source change is already committed when this runs, so a failing
+    rescan is logged, never turned into an error response.
+    """
+    on_changed = getattr(request.app.state, "on_sources_changed", None)
+    if on_changed is None:
+        return
+    try:
+        on_changed()
+    except Exception:
+        log.exception("rescan after a Source change failed")
 
 
 def get_conn(request: Request) -> Iterator[sqlite3.Connection]:

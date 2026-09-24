@@ -21,7 +21,7 @@ from threatcull.store.runs import last_run, recent_runs
 from threatcull.store.settings import load_settings
 from threatcull.store.sources import add_custom_source, list_sources, set_business_mode
 from threatcull.store.sources import set_enabled as store_set_enabled
-from threatcull.web.deps import check_csrf, get_conn, require_user
+from threatcull.web.deps import check_csrf, get_conn, notify_sources_changed, require_user
 from threatcull.web.jobs import PipelineRunner
 from threatcull.web.scheduler import Scheduler
 from threatcull.web.schemas import AllowlistEntryIn, CustomSourceIn, OutputCreateIn
@@ -46,10 +46,8 @@ def _run_status(request: Request) -> dict[str, Any]:
 
 
 def _notify_sources_changed(request: Request) -> None:
-    """Task 8's hook, if wired up; a no-op default lives on the app state."""
-    on_changed = getattr(request.app.state, "on_sources_changed", None)
-    if on_changed is not None:
-        on_changed()
+    """Tell the scheduler (if running) that Sources changed; see ``notify_sources_changed``."""
+    notify_sources_changed(request)
 
 
 def _validation_message(exc: ValidationError) -> str:

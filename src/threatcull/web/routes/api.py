@@ -26,7 +26,7 @@ from threatcull.store.runs import Run, recent_runs
 from threatcull.store.settings import Settings, load_settings
 from threatcull.store.sources import Source, list_sources
 from threatcull.store.sources import set_enabled as store_set_enabled
-from threatcull.web.deps import check_csrf, get_conn, require_api_user
+from threatcull.web.deps import check_csrf, get_conn, notify_sources_changed, require_api_user
 from threatcull.web.schemas import AllowlistEntryIn, SourceEnableIn
 
 router = APIRouter(prefix="/api/v1")
@@ -163,9 +163,7 @@ def api_set_source_enabled(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PolicyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    on_changed = getattr(request.app.state, "on_sources_changed", None)
-    if on_changed is not None:
-        on_changed()
+    notify_sources_changed(request)
     return _source_json(source)
 
 

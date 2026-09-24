@@ -90,3 +90,21 @@ def test_dashboard_without_scheduler_says_so(client: TestClient, logged_in: str)
     page = client.get("/").text
     assert "Next compile at" not in page
     assert "Scheduler is off" in page
+
+
+def _broken_rescan() -> None:
+    raise RuntimeError("rescan failed")
+
+
+def test_a_failing_rescan_does_not_turn_a_saved_change_into_an_error(
+    client: TestClient, logged_in: str, seeded: None
+) -> None:
+    client.app.state.on_sources_changed = _broken_rescan  # type: ignore[attr-defined]
+    response = client.post("/sources/c/enable", data={"csrf": logged_in}, follow_redirects=False)
+    assert response.status_code == 303
+    api = client.post(
+        "/api/v1/sources/a", json={"enabled": False}, headers={"X-CSRF-Token": logged_in}
+    )
+    assert api.status_code == 200, api.text
+    enabled = {source["id"]: source["enabled"] for source in client.get("/api/v1/sources").json()}
+    assert enabled == {"a": False, "c": True}

@@ -9,9 +9,10 @@ from typing import NoReturn
 import pytest
 
 from tests.factories import make_entry
+from threatcull.clock import utcnow
 from threatcull.fetcher import Fetcher, FetchResult
 from threatcull.store.outputs import ensure_default_outputs
-from threatcull.store.runs import recent_runs
+from threatcull.store.runs import recent_runs, start_run
 from threatcull.store.sources import sync_catalog
 from threatcull.web import jobs
 from threatcull.web.deps import open_db
@@ -283,3 +284,26 @@ def test_run_source_records_a_failed_run_when_it_crashes(tmp_path: Path) -> None
         assert "no fetcher today" in runs[0].error
     finally:
         conn.close()
+
+
+def test_run_source_crash_after_start_run_leaves_one_failed_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed(tmp_path)
+
+    def half_fetch(conn: object, source: object, fetcher: object, *, now: object) -> NoReturn:
+        start_run(conn, "fetch", now=utcnow(), source_id="a")  # type: ignore[arg-type]
+        raise RuntimeError("died mid-Fetch")
+
+    monkeypatch.setattr(jobs, "fetch_source", half_fetch)
+    runner = PipelineRunner(tmp_path, fetcher_factory=ExplodingFetcher)
+    assert runner.run_source("a").status == "failed"
+    conn = open_db(tmp_path)
+    try:
+        runs = recent_runs(conn, 10)
+    finally:
+        conn.close()
+    assert [(r.type, r.source_id, r.status) for r in runs] == [("fetch", "a", "failed")]
+    assert runs[0].finished_at is not None
+    assert runs[0].error is not None
+    assert "died mid-Fetch" in runs[0].error

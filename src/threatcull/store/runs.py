@@ -83,3 +83,23 @@ def last_run(conn: sqlite3.Connection, run_type: RunType) -> Run | None:
         (run_type,),
     ).fetchone()
     return _to_run(row) if row is not None else None
+
+
+def fail_unfinished_runs(
+    conn: sqlite3.Connection,
+    run_type: RunType,
+    *,
+    source_id: str | None,
+    now: datetime,
+    error: str,
+) -> int:
+    """Mark still-``running`` Runs of this type (and Source) failed; returns how many.
+
+    For a crash after ``start_run`` but before ``finish_run``: the Run that
+    was started is closed as failed instead of staying "running" for ever.
+    """
+    return conn.execute(
+        "UPDATE runs SET finished_at = ?, status = 'failed', error = ? "
+        "WHERE type = ? AND source_id IS ? AND status = 'running'",
+        (ts(now), error, run_type, source_id),
+    ).rowcount

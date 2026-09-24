@@ -24,7 +24,7 @@ from threatcull.compiling import compile_outputs
 from threatcull.fetcher import Fetcher, HttpFetcher
 from threatcull.fetching import fetch_all, fetch_source
 from threatcull.store.errors import NotFoundError
-from threatcull.store.runs import finish_run, start_run
+from threatcull.store.runs import fail_unfinished_runs, finish_run, start_run
 from threatcull.store.sightings import record_fetch_failure
 from threatcull.store.sources import get_source
 from threatcull.web.deps import open_db
@@ -179,8 +179,14 @@ class PipelineRunner:
             conn = open_db(self._data_dir)
             try:
                 now = utcnow()
-                run_id = start_run(conn, "fetch", now=now, source_id=source_id)
-                finish_run(conn, run_id, "failed", now=now, error=error)
+                # The lock is held, so a "running" Fetch Run of this Source is
+                # the one fetch_source started before it crashed: close it.
+                closed = fail_unfinished_runs(
+                    conn, "fetch", source_id=source_id, now=now, error=error
+                )
+                if not closed:
+                    run_id = start_run(conn, "fetch", now=now, source_id=source_id)
+                    finish_run(conn, run_id, "failed", now=now, error=error)
                 record_fetch_failure(conn, source_id, error, now=now)
             finally:
                 conn.close()
