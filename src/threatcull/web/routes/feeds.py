@@ -8,12 +8,17 @@ read or written here, so these responses never carry ``Set-Cookie``.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import sqlite3
-from typing import Annotated
+import stat
+from collections.abc import Iterator
+from email.utils import formatdate
+from pathlib import Path
+from typing import Annotated, BinaryIO
 
 from fastapi import APIRouter, Depends, Request
-from starlette.responses import FileResponse, PlainTextResponse, Response
+from starlette.responses import PlainTextResponse, Response, StreamingResponse
 
 from threatcull.outputs.files import output_path
 from threatcull.store.errors import NotFoundError
@@ -33,6 +38,8 @@ router = APIRouter()
 # name still runs one verify_token() lookup, the same as a valid-but-unknown
 # name or a valid name with the wrong token — see _verify().
 _DUMMY_NAME = "x" * 200
+
+_CHUNK_SIZE = 64 * 1024
 
 _CONTENT_TYPES: dict[OutputFormat, str] = {
     "plain": "text/plain; charset=utf-8",
@@ -119,27 +126,66 @@ def _conditional(request: Request, response: Response) -> Response:
     return response
 
 
+def _open_output(path: Path) -> BinaryIO:
+    """Open a published Output for reading (a seam for tests)."""
+    return path.open("rb")
+
+
+def _read_chunks(handle: BinaryIO) -> Iterator[bytes]:
+    """Stream the already-open file, closing it at the end (or on disconnect)."""
+    with handle:
+        while chunk := handle.read(_CHUNK_SIZE):
+            yield chunk
+
+
+def _file_headers(stat_result: os.stat_result, media_type: str) -> dict[str, str]:
+    """Validators and length from the open file's own ``fstat``."""
+    return {
+        "content-type": media_type,
+        "content-length": str(stat_result.st_size),
+        "etag": f'"{stat_result.st_mtime_ns:x}-{stat_result.st_size:x}"',
+        "last-modified": formatdate(stat_result.st_mtime, usegmt=True),
+        "cache-control": "no-cache",
+    }
+
+
 def _serve(request: Request, conn: sqlite3.Connection, name: str, token: str) -> Response:
+    """Serve (or, for ``HEAD``, describe) a published Output.
+
+    The file is opened first and everything else comes from that open file:
+    size, ETag and Last-Modified from ``os.fstat`` on its descriptor, the body
+    streamed from it. A Compile that atomically replaces the file meanwhile
+    can't make the length disagree with the body; this request just gets the
+    version it opened.
+    """
     spec = _lookup_spec(conn, name)
     token_ok = _verify(conn, name, token)
     if spec is None or not token_ok:
         return _not_found()
 
     path = output_path(request.app.state.data_dir / "outputs", spec)
-    if not path.is_file():
-        return _not_found()
     try:
-        stat_result = path.stat()
-    except FileNotFoundError:
-        # Republished/rotated between is_file() and stat(): same 404 as never published.
-        return _not_found()
+        handle = _open_output(path)
+    except (FileNotFoundError, IsADirectoryError, NotADirectoryError):
+        return _not_found()  # never published (or just vanished): same 404 as the rest
+    try:
+        stat_result = os.fstat(handle.fileno())
+        if not stat.S_ISREG(stat_result.st_mode):
+            handle.close()
+            return _not_found()
+    except BaseException:
+        handle.close()
+        raise
+    headers = _file_headers(stat_result, _CONTENT_TYPES[spec.format])
+    probe = Response(status_code=200, headers=headers)
+    conditional = _conditional(request, probe)
+    if conditional is not probe or request.method == "HEAD":
+        handle.close()
+        return conditional  # a 304, or HEAD's headers with no body
+    return StreamingResponse(_read_chunks(handle), headers=headers)
 
-    response = FileResponse(path, media_type=_CONTENT_TYPES[spec.format], stat_result=stat_result)
-    response.headers["cache-control"] = "no-cache"
-    return _conditional(request, response)
 
-
-@router.get("/o/{name}")
+@router.api_route("/o/{name}", methods=["GET", "HEAD"])
 def serve_by_query_token(
     request: Request,
     name: str,
@@ -149,7 +195,7 @@ def serve_by_query_token(
     return _serve(request, conn, name, token)
 
 
-@router.get("/o/{name}/{token}")
+@router.api_route("/o/{name}/{token}", methods=["GET", "HEAD"])
 def serve_by_path_token(
     request: Request,
     name: str,

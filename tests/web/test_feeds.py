@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from pathlib import Path
+from typing import BinaryIO
 
 import pytest
 from fastapi.testclient import TestClient
@@ -284,24 +285,85 @@ def test_if_none_match_takes_precedence_over_if_modified_since(
     assert second.status_code == 200
 
 
-class _FlakyPath:
-    """A path-like stand-in whose file existed a moment ago, but is gone now."""
-
-    def is_file(self) -> bool:
-        return True
-
-    def stat(self) -> None:
-        raise FileNotFoundError
-
-
-def test_file_removed_between_is_file_and_stat_is_404(
+def test_file_gone_when_opened_is_404(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     token = _seed(tmp_path, PLAIN_SPEC, "45.9.20.1\n")
-    monkeypatch.setattr(feeds, "output_path", lambda *_a, **_kw: _FlakyPath())
+
+    def vanished(path: Path) -> BinaryIO:
+        raise FileNotFoundError(path)
+
+    monkeypatch.setattr(feeds, "_open_output", vanished)
     response = client.get(f"/o/{PLAIN_SPEC.name}", params={"token": token})
     assert response.status_code == 404
     assert response.text == "not found"
+
+
+def test_a_directory_where_the_file_should_be_is_404(client: TestClient, tmp_path: Path) -> None:
+    token = _create_unpublished(tmp_path, PLAIN_SPEC)
+    output_path(tmp_path / "outputs", PLAIN_SPEC).mkdir(parents=True)
+    response = client.get(f"/o/{PLAIN_SPEC.name}", params={"token": token})
+    assert response.status_code == 404
+    assert response.text == "not found"
+
+
+def test_a_republish_after_open_still_serves_the_opened_file_whole(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Compile's atomic replace between open and send can't break Content-Length."""
+    old = "45.9.20.1\n"
+    new = "45.9.20.1\n45.9.20.2\n45.9.20.3\n"
+    token = _seed(tmp_path, PLAIN_SPEC, old)
+    real_open = feeds._open_output
+
+    def open_then_republish(path: Path) -> BinaryIO:
+        handle = real_open(path)
+        staged = path.with_name(path.name + ".new")
+        staged.write_text(new, encoding="utf-8")
+        staged.replace(path)
+        return handle
+
+    monkeypatch.setattr(feeds, "_open_output", open_then_republish)
+    response = client.get(f"/o/{PLAIN_SPEC.name}", params={"token": token})
+    assert response.status_code == 200
+    assert response.text == old
+    assert response.headers["content-length"] == str(len(old))
+
+    monkeypatch.setattr(feeds, "_open_output", real_open)
+    again = client.get(
+        f"/o/{PLAIN_SPEC.name}",
+        params={"token": token},
+        headers={"If-None-Match": response.headers["etag"]},
+    )
+    assert again.status_code == 200  # the new file has a new ETag
+    assert again.text == new
+
+
+def test_head_returns_the_headers_without_a_body(client: TestClient, tmp_path: Path) -> None:
+    body = "45.9.20.1\n45.9.20.2\n"
+    token = _seed(tmp_path, PLAIN_SPEC, body)
+    get = client.get(f"/o/{PLAIN_SPEC.name}", params={"token": token})
+    head = client.head(f"/o/{PLAIN_SPEC.name}", params={"token": token})
+    assert head.status_code == 200
+    assert head.content == b""
+    for name in ("content-length", "content-type", "etag", "last-modified", "cache-control"):
+        assert head.headers[name] == get.headers[name]
+    assert head.headers["content-length"] == str(len(body))
+
+
+def test_head_by_path_token_and_conditional(client: TestClient, tmp_path: Path) -> None:
+    token = _seed(tmp_path, PLAIN_SPEC, "45.9.20.1\n")
+    head = client.head(f"/o/{PLAIN_SPEC.name}/{token}")
+    assert head.status_code == 200
+    again = client.head(
+        f"/o/{PLAIN_SPEC.name}/{token}", headers={"If-None-Match": head.headers["etag"]}
+    )
+    assert again.status_code == 304
+
+
+def test_head_with_a_wrong_token_is_404(client: TestClient, tmp_path: Path) -> None:
+    _seed(tmp_path, PLAIN_SPEC, "45.9.20.1\n")
+    assert client.head(f"/o/{PLAIN_SPEC.name}", params={"token": "nope"}).status_code == 404
 
 
 def _access_record(path: str) -> logging.LogRecord:
