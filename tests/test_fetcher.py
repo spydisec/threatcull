@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
+import os
 from pathlib import Path
 
 import httpx
@@ -81,3 +82,46 @@ def test_missing_or_oversized_local_files(tmp_path: Path) -> None:
     big.write_bytes(b"x" * 2048)
     with pytest.raises(FetchError, match="exceeds"):
         _fetcher(max_bytes=1024)(big.as_uri(), etag=None, last_modified=None)
+
+
+def test_local_file_url_with_a_host_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(FetchError, match="host"):
+        _fetcher()("file://feeds/x.txt", etag=None, last_modified=None)
+
+
+def test_local_file_url_with_localhost_host_is_read(tmp_path: Path) -> None:
+    path = tmp_path / "list.txt"
+    path.write_text("5.6.7.8\n", encoding="utf-8")
+    result = _fetcher()(f"file://localhost{path}", etag=None, last_modified=None)
+    assert result.text == "5.6.7.8\n"
+
+
+def test_local_directory_is_a_fetch_error(tmp_path: Path) -> None:
+    with pytest.raises(FetchError, match="cannot read"):
+        _fetcher()(tmp_path.as_uri(), etag=None, last_modified=None)
+
+
+def test_unreadable_local_file_is_a_fetch_error(tmp_path: Path) -> None:
+    path = tmp_path / "secret.txt"
+    path.write_text("5.6.7.8\n", encoding="utf-8")
+    path.chmod(0)
+    try:
+        if os.access(path, os.R_OK):
+            pytest.skip("running with privileges that ignore file modes")
+        with pytest.raises(FetchError, match="cannot read"):
+            _fetcher()(path.as_uri(), etag=None, last_modified=None)
+    finally:
+        path.chmod(0o600)
+
+
+def test_endless_local_file_is_capped() -> None:
+    with pytest.raises(FetchError, match="exceeds"):
+        _fetcher(max_bytes=1024)("file:///dev/zero", etag=None, last_modified=None)
+
+
+def test_content_type_is_passed_through(fixture_server: FixtureServer) -> None:
+    fixture_server.add(
+        "/page", (200, b"<html></html>", {"Content-Type": "text/html; charset=utf-8"})
+    )
+    result = _fetcher()(fixture_server.url("/page"), etag=None, last_modified=None)
+    assert result.content_type == "text/html; charset=utf-8"

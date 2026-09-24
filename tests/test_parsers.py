@@ -63,3 +63,15 @@ def test_json_rejects_malformed_content(text: str) -> None:
 def test_every_splitlines_boundary_separates_lines() -> None:
     text = "1.1.1.1\r\n2.2.2.2\r3.3.3.3\x0c4.4.4.4\u20285.5.5.5\x856.6.6.6\n\n# c\n"
     assert list(parse("plain", text)) == [f"{n}.{n}.{n}.{n}" for n in range(1, 7)]
+
+
+def test_csv_errors_are_parse_errors() -> None:
+    # An HTML page served to a CSV Source can hold a field longer than csv's limit.
+    text = '"' + "x" * (200 * 1024) + '"\n'
+    with pytest.raises(ParseError, match="CSV"):
+        list(parse("csv", text))
+
+
+def test_deeply_nested_json_is_a_parse_error() -> None:
+    with pytest.raises(ParseError):
+        list(parse("json", "[" * 100_000, json_keys=("a",)))

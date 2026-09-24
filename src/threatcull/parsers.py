@@ -87,7 +87,14 @@ def _adblock(text: str) -> Iterator[str]:
 
 
 def _csv(text: str, column: int) -> Iterator[str]:
-    for row in csv.reader(io.StringIO(text)):
+    rows = csv.reader(io.StringIO(text))
+    while True:
+        try:
+            row = next(rows)
+        except StopIteration:
+            return
+        except csv.Error as exc:
+            raise ParseError(f"invalid CSV: {exc}") from exc
         if not row or row[0].lstrip().startswith("#"):
             continue
         if column < len(row):
@@ -99,6 +106,8 @@ def _json(text: str, keys: tuple[str, ...]) -> Iterator[str]:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ParseError(f"invalid JSON: {exc}") from exc
+    except RecursionError as exc:
+        raise ParseError("invalid JSON: nested too deeply") from exc
     if not isinstance(data, dict):
         raise ParseError("expected a JSON object at the top level")
     for key in keys:

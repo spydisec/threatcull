@@ -18,6 +18,7 @@ USER_AGENT = f"ThreatCull/{__version__} (+https://github.com/spydisec/threatcull
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_MAX_BYTES = 128 * 1024 * 1024
 RETRY_DELAYS = (1.0, 2.0, 4.0)
+_FILE_CHUNK = 1024 * 1024
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
@@ -35,6 +36,7 @@ class FetchResult:
     text: str = ""
     etag: str | None = None
     last_modified: str | None = None
+    content_type: str | None = None
 
 
 class Fetcher(Protocol):
@@ -101,15 +103,23 @@ class HttpFetcher:
             if len(body) > self._max_bytes:
                 raise FetchError(f"{url} exceeds {self._max_bytes} bytes")
         text = body.decode("utf-8", errors="replace")
-        return FetchResult("ok", text, etag, last_modified)
+        return FetchResult("ok", text, etag, last_modified, response.headers.get("Content-Type"))
 
 
 def _read_file(url: str, max_bytes: int) -> FetchResult:
-    path = Path(unquote(urlparse(url).path))
+    parsed = urlparse(url)
+    if parsed.netloc not in ("", "localhost"):
+        raise FetchError(f"file:// URLs cannot name a host ({parsed.netloc!r}): {url}")
+    path = Path(unquote(parsed.path))
+    data = bytearray()
     try:
-        size = path.stat().st_size
+        # Read in bounded chunks rather than stat-then-read: no race with the file
+        # changing in between, and /dev/zero-style paths stop at the cap.
+        with path.open("rb") as handle:
+            while chunk := handle.read(_FILE_CHUNK):
+                data.extend(chunk)
+                if len(data) > max_bytes:
+                    raise FetchError(f"{path} exceeds {max_bytes} bytes")
     except OSError as exc:
         raise FetchError(f"cannot read {path}: {exc}") from exc
-    if size > max_bytes:
-        raise FetchError(f"{path} exceeds {max_bytes} bytes")
-    return FetchResult("ok", path.read_text(encoding="utf-8", errors="replace"))
+    return FetchResult("ok", data.decode("utf-8", errors="replace"))
