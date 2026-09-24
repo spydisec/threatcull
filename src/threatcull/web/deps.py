@@ -6,10 +6,13 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
+from secrets import compare_digest
+from typing import Annotated
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 
 from threatcull.store.db import connect
+from threatcull.store.users import password_fingerprint
 from threatcull.web.security import (
     CSRF_FORM_FIELD,
     CSRF_HEADER,
@@ -19,6 +22,7 @@ from threatcull.web.security import (
 
 DB_NAME = "threatcull.db"
 SESSION_USER_KEY = "user"
+SESSION_FINGERPRINT_KEY = "pwfp"
 _FORM_TYPES = ("application/x-www-form-urlencoded", "multipart/form-data")
 
 
@@ -41,21 +45,41 @@ def get_conn(request: Request) -> Iterator[sqlite3.Connection]:
 
 
 def session_user(request: Request) -> str | None:
+    """The username the session claims (not re-checked; for display only)."""
     user = request.session.get(SESSION_USER_KEY)
     return user if isinstance(user, str) else None
 
 
-def require_user(request: Request) -> str:
-    """HTML pages: the logged-in username, or a ``303`` to ``/login``."""
+def _current_user(request: Request, conn: sqlite3.Connection) -> str | None:
+    """The session's user, if it still exists with the password it logged in with.
+
+    A session whose user was deleted, or whose password changed since login,
+    is cleared.
+    """
     user = session_user(request)
+    if user is None:
+        return None
+    expected = password_fingerprint(conn, user)
+    held = request.session.get(SESSION_FINGERPRINT_KEY)
+    if expected is None or not isinstance(held, str) or not compare_digest(expected, held):
+        request.session.clear()
+        return None
+    return user
+
+
+def require_user(request: Request, conn: Annotated[sqlite3.Connection, Depends(get_conn)]) -> str:
+    """HTML pages: the logged-in username, or a ``303`` to ``/login``."""
+    user = _current_user(request, conn)
     if user is None:
         raise LoginRequiredError
     return user
 
 
-def require_api_user(request: Request) -> str:
+def require_api_user(
+    request: Request, conn: Annotated[sqlite3.Connection, Depends(get_conn)]
+) -> str:
     """``/api/`` routes: the logged-in username, or ``401`` JSON."""
-    user = session_user(request)
+    user = _current_user(request, conn)
     if user is None:
         raise HTTPException(status_code=401, detail="authentication required")
     return user

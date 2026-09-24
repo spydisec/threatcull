@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+from threatcull.store.users import warm_up as warm_up_password_checks
 from threatcull.web.deps import DB_NAME, open_db
 from threatcull.web.routes import auth, health
 from threatcull.web.security import (
@@ -38,6 +39,8 @@ def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     app.state.start_scheduler = start_scheduler
     app.state.secret_key = load_or_create_secret(data_dir)
     app.state.login_limiter = LoginRateLimiter()
+    app.state.login_verify_slots = auth.new_verify_slots()
+    warm_up_password_checks()  # no first-login timing tell for unknown usernames
     # Covers the one response SecurityHeadersMiddleware can't reach: Starlette's
     # own fallback 500 for a truly unhandled exception (see security.py).
     app.add_exception_handler(Exception, unhandled_exception_response)

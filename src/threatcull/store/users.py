@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 import re
 import sqlite3
 from datetime import datetime
@@ -23,6 +24,25 @@ _HASHER = PasswordHasher()  # argon2-cffi's default type is Argon2id
 def _dummy_hash() -> str:
     """A real hash of a throwaway password, verified when the username is unknown."""
     return _HASHER.hash("threatcull-timing-equaliser")
+
+
+def warm_up() -> None:
+    """Compute the dummy hash now (app start-up), not on the first unknown-user login."""
+    _dummy_hash()
+
+
+def _fingerprint(password_hash: str) -> str:
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
+
+
+def password_fingerprint(conn: sqlite3.Connection, username: str) -> str | None:
+    """A short digest of the user's current password hash; ``None`` if no such user.
+
+    Sessions store it at login, so they stop working once the password
+    changes or the user is deleted.
+    """
+    row = conn.execute("SELECT password_hash FROM users WHERE username = ?", (username,)).fetchone()
+    return _fingerprint(row["password_hash"]) if row is not None else None
 
 
 def _check_username(username: str) -> None:

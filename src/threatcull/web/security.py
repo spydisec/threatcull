@@ -7,7 +7,7 @@ import os
 import secrets
 import threading
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from collections.abc import Callable, MutableMapping
 from pathlib import Path
 from typing import Any
@@ -181,57 +181,84 @@ def client_ip(request: Request) -> str:
 
 
 class LoginRateLimiter:
-    """In-memory, per-IP sliding window of failed logins; thread-safe.
+    """In-memory, per-IP sliding window of login attempts; thread-safe.
 
-    An IP is blocked once it has ``max_failures`` failures inside the last
-    ``window_seconds``; blocked attempts are not counted, so the block lifts
-    when the oldest failure leaves the window.
+    :meth:`try_begin` reserves an attempt atomically *before* the password is
+    checked, so parallel requests can't slip past the limit: at most
+    ``max_failures`` attempts per IP start within ``window_seconds``. A
+    successful login clears the IP (:meth:`succeeded`); a failed one keeps its
+    reservation. Refused attempts are not recorded, so a block lifts once the
+    oldest attempt leaves the window.
+
+    Memory is bounded: at most ``max_tracked`` IPs (least recently seen are
+    evicted first), and expired IPs are swept at most once per
+    ``sweep_interval`` seconds.
     """
-
-    _PRUNE_ABOVE = 1024  # tracked IPs before stale ones are swept
 
     def __init__(
         self,
         *,
         max_failures: int = 5,
         window_seconds: float = 300.0,
+        max_tracked: int = 10_000,
+        sweep_interval: float = 60.0,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.max_failures = max_failures
         self.window_seconds = window_seconds
+        self.max_tracked = max_tracked
+        self.sweep_interval = sweep_interval
         self._clock = clock
         self._lock = threading.Lock()
-        self._failures: dict[str, deque[float]] = {}
+        self._attempts: OrderedDict[str, deque[float]] = OrderedDict()
+        self._last_sweep = clock()
 
-    def _recent(self, ip: str, now: float) -> deque[float]:
-        """Failures for ``ip`` still inside the window (caller holds the lock)."""
-        stamps = self._failures.get(ip)
+    def _expire(self, ip: str, now: float) -> int:
+        """Drop ``ip``'s attempts outside the window; returns what is left.
+
+        Caller holds the lock.
+        """
+        stamps = self._attempts.get(ip)
         if stamps is None:
-            return deque()
+            return 0
         while stamps and stamps[0] <= now - self.window_seconds:
             stamps.popleft()
         if not stamps:
-            del self._failures[ip]
-        return stamps
+            del self._attempts[ip]
+        return len(stamps)
 
-    def failures(self, ip: str) -> int:
-        with self._lock:
-            return len(self._recent(ip, self._clock()))
+    def _maybe_sweep(self, now: float) -> None:
+        if now - self._last_sweep < self.sweep_interval:
+            return
+        self._last_sweep = now
+        for ip in list(self._attempts):
+            self._expire(ip, now)
 
-    def is_blocked(self, ip: str) -> bool:
-        return self.failures(ip) >= self.max_failures
-
-    def record_failure(self, ip: str) -> None:
+    def try_begin(self, ip: str) -> bool:
+        """Reserve one login attempt for ``ip``; ``False`` if it is blocked."""
         with self._lock:
             now = self._clock()
-            if len(self._failures) > self._PRUNE_ABOVE:
-                for other in list(self._failures):
-                    self._recent(other, now)
-            self._failures.setdefault(ip, deque()).append(now)
+            self._maybe_sweep(now)
+            if self._expire(ip, now) >= self.max_failures:
+                return False
+            self._attempts.setdefault(ip, deque()).append(now)
+            self._attempts.move_to_end(ip)
+            while len(self._attempts) > self.max_tracked:
+                self._attempts.popitem(last=False)
+            return True
 
-    def reset(self, ip: str) -> None:
+    def succeeded(self, ip: str) -> None:
+        """A login from ``ip`` worked: forget its attempts."""
         with self._lock:
-            self._failures.pop(ip, None)
+            self._attempts.pop(ip, None)
+
+    def attempts(self, ip: str) -> int:
+        with self._lock:
+            return self._expire(ip, self._clock())
+
+    def tracked(self) -> int:
+        with self._lock:
+            return len(self._attempts)
 
 
 # --- Login redirect for HTML pages ----------------------------------------------

@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 import threading
+import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -7,8 +10,11 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from tests.web.conftest import ADMIN_PASSWORD, ADMIN_USER, csrf_from, login
+from threatcull.store import users
+from threatcull.store.users import set_password
 from threatcull.web.app import create_app
-from threatcull.web.deps import check_csrf
+from threatcull.web.deps import check_csrf, open_db
+from threatcull.web.routes import auth
 from threatcull.web.security import LoginRateLimiter
 
 GENERIC_FAILURE = "Wrong username or password"
@@ -266,37 +272,191 @@ def test_limiter_window_slides() -> None:
     clock = FakeClock()
     limiter = LoginRateLimiter(max_failures=5, window_seconds=300, clock=clock)
     for _ in range(5):
-        assert not limiter.is_blocked("10.0.0.1")
-        limiter.record_failure("10.0.0.1")
+        assert limiter.try_begin("10.0.0.1")
         clock.now += 50
-    assert limiter.is_blocked("10.0.0.1")
-    assert not limiter.is_blocked("10.0.0.2")
-    clock.now += 51  # the first failure (t=1000) is now older than 300s
-    assert not limiter.is_blocked("10.0.0.1")
+    assert not limiter.try_begin("10.0.0.1")
+    assert limiter.try_begin("10.0.0.2")
+    clock.now += 51  # the first attempt (t=1000) is now older than 300s
+    assert limiter.try_begin("10.0.0.1")
 
 
-def test_limiter_is_thread_safe() -> None:
-    limiter = LoginRateLimiter(max_failures=1000, window_seconds=300)
-
-    def hammer() -> None:
-        for _ in range(100):
-            limiter.record_failure("10.0.0.1")
-
-    threads = [threading.Thread(target=hammer) for _ in range(8)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    assert limiter.failures("10.0.0.1") == 800
-    limiter.reset("10.0.0.1")
-    assert limiter.failures("10.0.0.1") == 0
+def test_limiter_success_clears_the_ip() -> None:
+    limiter = LoginRateLimiter(max_failures=2)
+    assert limiter.try_begin("10.0.0.1")
+    assert limiter.try_begin("10.0.0.1")
+    assert not limiter.try_begin("10.0.0.1")
+    limiter.succeeded("10.0.0.1")
+    assert limiter.attempts("10.0.0.1") == 0
+    assert limiter.try_begin("10.0.0.1")
 
 
-def test_limiter_sweeps_stale_ips_once_it_tracks_many() -> None:
-    clock = FakeClock()
-    limiter = LoginRateLimiter(window_seconds=300, clock=clock)
-    for i in range(LoginRateLimiter._PRUNE_ABOVE + 1):
-        limiter.record_failure(f"10.0.{i // 256}.{i % 256}")
-    clock.now += 301
-    limiter.record_failure("192.0.2.1")
-    assert len(limiter._failures) == 1
+def test_limiter_admits_at_most_max_attempts_under_concurrency() -> None:
+    limiter = LoginRateLimiter(max_failures=5, window_seconds=300)
+    barrier = threading.Barrier(32)
+
+    def attempt(_: int) -> bool:
+        barrier.wait()
+        return limiter.try_begin("10.0.0.1")
+
+    with ThreadPoolExecutor(max_workers=32) as pool:
+        admitted = sum(pool.map(attempt, range(32)))
+    assert admitted == 5
+    assert limiter.attempts("10.0.0.1") == 5
+
+
+def test_limiter_caps_tracked_ips_evicting_the_oldest() -> None:
+    limiter = LoginRateLimiter(max_tracked=3)
+    for ip in ("10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"):
+        assert limiter.try_begin(ip)
+    assert limiter.tracked() == 3
+    assert limiter.attempts("10.0.0.1") == 0  # evicted
+    assert limiter.attempts("10.0.0.4") == 1
+
+
+def test_limiter_sweeps_expired_ips_at_most_once_per_interval() -> None:
+    clock = FakeClock()  # t=1000
+    limiter = LoginRateLimiter(window_seconds=300, sweep_interval=600, clock=clock)
+    for i in range(100):
+        assert limiter.try_begin(f"10.0.0.{i}")
+    clock.now += 301  # all 100 expired, but no sweep is due yet
+    assert limiter.try_begin("192.0.2.1")
+    assert limiter.tracked() == 101
+    clock.now += 300  # 601s since the last sweep: this call sweeps
+    assert limiter.try_begin("192.0.2.2")
+    assert limiter.tracked() == 1
+
+
+# --- concurrency through the app ------------------------------------------------
+
+
+def _parallel(count: int, work: Callable[[int], int]) -> list[int]:
+    barrier = threading.Barrier(count)
+
+    def run(i: int) -> int:
+        barrier.wait()
+        return work(i)
+
+    with ThreadPoolExecutor(max_workers=count) as pool:
+        return list(pool.map(run, range(count)))
+
+
+def test_parallel_wrong_passwords_from_one_ip_get_at_most_five_verifies(
+    tmp_path: Path, admin: str
+) -> None:
+    app = create_app(tmp_path, start_scheduler=False)
+    clients = [TestClient(app) for _ in range(20)]
+    tokens = [csrf_from(c.get("/login").text) for c in clients]
+
+    def attempt(i: int) -> int:
+        response = clients[i].post(
+            "/login",
+            data={"username": admin, "password": "wrong password!!", "csrf": tokens[i]},
+            follow_redirects=False,
+        )
+        status: int = response.status_code
+        return status
+
+    statuses = _parallel(20, attempt)
+    assert statuses.count(401) == 5
+    assert statuses.count(429) == 15
+
+
+def test_password_verifications_never_exceed_the_concurrency_bound(
+    tmp_path: Path, admin: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock = threading.Lock()
+    active = 0
+    peak = 0
+
+    def slow_verify(conn: object, username: str, password: str) -> bool:
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+        return False
+
+    monkeypatch.setattr(auth, "verify_user", slow_verify)
+    app = create_app(tmp_path, start_scheduler=False)
+    app.state.login_limiter = LoginRateLimiter(max_failures=1000)
+    clients = [TestClient(app) for _ in range(16)]
+    tokens = [csrf_from(c.get("/login").text) for c in clients]
+
+    def attempt(i: int) -> int:
+        response = clients[i].post(
+            "/login",
+            data={"username": admin, "password": "wrong password!!", "csrf": tokens[i]},
+        )
+        status: int = response.status_code
+        return status
+
+    statuses = _parallel(16, attempt)
+    assert statuses == [401] * 16
+    assert 1 <= peak <= auth.MAX_CONCURRENT_VERIFIES
+
+
+def test_login_is_429_when_no_verification_slot_frees_up(
+    client: TestClient, admin: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(auth, "VERIFY_WAIT_SECONDS", 0.01)
+    app = client.app
+    assert isinstance(app, FastAPI)
+    app.state.login_verify_slots = threading.BoundedSemaphore(1)
+    app.state.login_verify_slots.acquire()
+    token = csrf_from(client.get("/login").text)
+    response = client.post(
+        "/login", data={"username": admin, "password": ADMIN_PASSWORD, "csrf": token}
+    )
+    assert response.status_code == 429
+    assert "Too many login attempts, try again shortly" in response.text
+    assert client.get("/", follow_redirects=False).status_code == 303
+
+
+# --- sessions die with the user or their password -------------------------------
+
+
+def test_session_ends_when_the_password_changes(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    assert client.get("/api/v1/me").status_code == 200
+    conn = open_db(tmp_path)
+    try:
+        set_password(conn, ADMIN_USER, "a brand new password")
+    finally:
+        conn.close()
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+    assert client.get("/api/v1/me").status_code == 401
+
+
+def test_session_ends_when_the_user_is_deleted(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    conn = open_db(tmp_path)
+    try:
+        conn.execute("DELETE FROM users WHERE username = ?", (ADMIN_USER,))
+    finally:
+        conn.close()
+    assert client.get("/api/v1/me").status_code == 401
+    assert client.get("/", follow_redirects=False).status_code == 303
+
+
+def test_a_rejected_session_is_cleared(client: TestClient, logged_in: str, tmp_path: Path) -> None:
+    conn = open_db(tmp_path)
+    try:
+        set_password(conn, ADMIN_USER, "a brand new password")
+        client.get("/api/v1/me")
+        set_password(conn, ADMIN_USER, ADMIN_PASSWORD)  # even the old password back...
+    finally:
+        conn.close()
+    # ...doesn't revive the session: it was cleared when first rejected.
+    assert client.get("/api/v1/me").status_code == 401
+
+
+def test_app_start_up_precomputes_the_dummy_hash(tmp_path: Path) -> None:
+    users._dummy_hash.cache_clear()
+    create_app(tmp_path, start_scheduler=False)
+    assert users._dummy_hash.cache_info().currsize == 1
