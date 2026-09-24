@@ -111,21 +111,41 @@ def last_run(
     return _to_run(row) if row is not None else None
 
 
+INTERRUPTED_ERROR = "interrupted by restart"
+
+
+def latest_run_id(conn: sqlite3.Connection) -> int:
+    """The highest Run id so far (``0`` if none): a mark for :func:`fail_unfinished_runs`."""
+    row = conn.execute("SELECT COALESCE(MAX(id), 0) FROM runs").fetchone()
+    return int(row[0])
+
+
 def fail_unfinished_runs(
     conn: sqlite3.Connection,
     run_type: RunType,
     *,
     source_id: str | None,
+    started_after: int,
     now: datetime,
     error: str,
 ) -> int:
-    """Mark still-``running`` Runs of this type (and Source) failed; returns how many.
+    """Mark ``running`` Runs of this type (and Source) with id > ``started_after`` failed.
 
-    For a crash after ``start_run`` but before ``finish_run``: the Run that
-    was started is closed as failed instead of staying "running" for ever.
+    For a crash after ``start_run`` but before ``finish_run``: the caller takes
+    a mark with :func:`latest_run_id` first, so only the Run its own call
+    started is closed, never an older row some other process left behind
+    (those are :func:`fail_interrupted_runs`'s job). Returns how many.
     """
     return conn.execute(
         "UPDATE runs SET finished_at = ?, status = 'failed', error = ? "
-        "WHERE type = ? AND source_id IS ? AND status = 'running'",
-        (ts(now), error, run_type, source_id),
+        "WHERE type = ? AND source_id IS ? AND status = 'running' AND id > ?",
+        (ts(now), error, run_type, source_id, started_after),
+    ).rowcount
+
+
+def fail_interrupted_runs(conn: sqlite3.Connection, *, now: datetime) -> int:
+    """At start-up: every Run still ``running`` was cut short by a restart; mark it failed."""
+    return conn.execute(
+        "UPDATE runs SET finished_at = ?, status = 'failed', error = ? WHERE status = 'running'",
+        (ts(now), INTERRUPTED_ERROR),
     ).rowcount

@@ -9,7 +9,9 @@ from fastapi.testclient import TestClient
 
 from tests.web.conftest import login
 from threatcull import cli
+from threatcull.clock import utcnow
 from threatcull.store.db import connect
+from threatcull.store.runs import recent_runs, start_run
 from threatcull.store.users import count_users, verify_user
 from threatcull.web.app import create_app
 
@@ -236,3 +238,22 @@ def test_serve_rejects_a_weak_env_password(
     assert cli.main(["--data-dir", str(tmp_path), "serve"]) == cli.EXIT_ERROR
     assert run_calls == []
     assert "12 characters" in capsys.readouterr().err
+
+
+def test_serve_marks_runs_left_running_as_interrupted(
+    tmp_path: Path, run_calls: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _create(tmp_path, monkeypatch, "alice")
+    conn = connect(tmp_path / cli.DB_NAME)
+    try:
+        start_run(conn, "compile", now=utcnow())
+    finally:
+        conn.close()
+    assert cli.main(["--data-dir", str(tmp_path), "serve"]) == cli.EXIT_OK
+    conn = connect(tmp_path / cli.DB_NAME)
+    try:
+        (run,) = recent_runs(conn, 5)
+    finally:
+        conn.close()
+    assert (run.status, run.error) == ("failed", "interrupted by restart")
+    assert run.finished_at is not None

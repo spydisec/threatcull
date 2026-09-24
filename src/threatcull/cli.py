@@ -30,6 +30,7 @@ from threatcull.store.db import connect
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.home import add_home, home_allow_entries, home_entries, remove_home
 from threatcull.store.outputs import ensure_default_outputs, list_outputs, rotate_token
+from threatcull.store.runs import fail_interrupted_runs
 from threatcull.store.sources import (
     add_custom_source,
     list_sources,
@@ -451,6 +452,8 @@ def _serve(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
             return EXIT_ERROR
         create_user(conn, "admin", password, now=utcnow())
         print(f"created user admin from {ADMIN_ENV_VAR}")
+    # No run survives a restart: close any the last process left "running".
+    fail_interrupted_runs(conn, now=utcnow())
     install_feed_token_redaction()  # Feed Tokens must never land in the access log
     app = create_app(
         args.data_dir, secure_cookies=args.secure_cookies, trusted_proxies=args.trusted_proxies

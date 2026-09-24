@@ -475,3 +475,33 @@ def test_a_future_last_attempt_is_capped_at_one_interval(
     run_at = _next_runs(scheduler)[fetch_job_id("a")]
     assert run_at <= utcnow() + timedelta(minutes=60, seconds=60 * 60 // 10)
     assert any("in the future" in record.getMessage() for record in caplog.records)
+
+
+def test_the_hourly_compile_job_rescans_for_sources_enabled_elsewhere(tmp_path: Path) -> None:
+    """A Source enabled with the CLI while ``serve`` runs gets its Fetch job within the hour."""
+    _seed(tmp_path)
+    scheduler = _scheduler(tmp_path)
+    scheduler.rescan()
+    assert fetch_job_id("c") not in _fetch_jobs(scheduler)
+    _set_enabled(tmp_path, "c", True)  # e.g. `threatcull sources enable c`
+    hourly = scheduler.scheduler.get_job(COMPILE_JOB_ID)
+    assert hourly is not None
+    hourly.func()
+    assert fetch_job_id("c") in _fetch_jobs(scheduler)
+    assert any(run_type == "compile" for run_type, _, _ in _runs(tmp_path))
+
+
+def test_a_failing_rescan_does_not_stop_the_hourly_compile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed(tmp_path)
+    scheduler = _scheduler(tmp_path)
+
+    def broken_rescan() -> NoReturn:
+        raise RuntimeError("rescan broke")
+
+    monkeypatch.setattr(scheduler, "rescan", broken_rescan)
+    hourly = scheduler.scheduler.get_job(COMPILE_JOB_ID)
+    assert hourly is not None
+    hourly.func()
+    assert any(run_type == "compile" for run_type, _, _ in _runs(tmp_path))

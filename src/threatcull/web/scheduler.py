@@ -3,9 +3,9 @@
 
 One APScheduler interval job per enabled Source (its ``refresh_minutes``, with
 up to 10% jitter so Sources don't all hit the network together), an hourly
-Compile, and a debounced Compile two minutes after any successful (or
-not-modified) Fetch; a later Fetch pushes it back, so a burst of Fetches ends
-in one Compile.
+Compile (which first rescans the Sources, catching changes made by the CLI),
+and a debounced Compile two minutes after any successful (or not-modified)
+Fetch; a later Fetch pushes it back, so a burst of Fetches ends in one Compile.
 
 Timers survive restarts: a Source's first Fetch is due ``refresh_minutes``
 after its last attempt, and Sources never fetched (or overdue) are fetched
@@ -225,6 +225,18 @@ class Scheduler:
         except Exception:
             log.exception("scheduled Compile job failed")
 
+    def hourly_job(self) -> None:
+        """Rescan the Sources, then Compile.
+
+        The rescan picks up Sources enabled or disabled outside the web UI
+        (e.g. ``threatcull sources enable`` while ``serve`` runs) within the hour.
+        """
+        try:
+            self.rescan()
+        except Exception:
+            log.exception("hourly rescan of the Sources failed")
+        self.compile_job()
+
     def schedule_debounced_compile(self) -> None:
         """Compile in two minutes, replacing any debounced Compile still pending."""
         run_at = utcnow() + COMPILE_DEBOUNCE
@@ -276,7 +288,7 @@ class Scheduler:
 
     def _add_compile_job(self, **kwargs: Any) -> None:
         self.scheduler.add_job(
-            self.compile_job,
+            self.hourly_job,
             IntervalTrigger(seconds=COMPILE_INTERVAL.total_seconds(), timezone=UTC),
             id=COMPILE_JOB_ID,
             name="Compile (hourly)",

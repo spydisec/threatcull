@@ -307,3 +307,31 @@ def test_run_source_crash_after_start_run_leaves_one_failed_run(
     assert runs[0].finished_at is not None
     assert runs[0].error is not None
     assert "died mid-Fetch" in runs[0].error
+
+
+def test_run_source_crash_never_closes_another_process_s_running_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the Run this call started is closed; an older "running" row is left for
+    the start-up sweep (``fail_interrupted_runs``), not blamed on this crash."""
+    _seed(tmp_path)
+    conn = open_db(tmp_path)
+    try:
+        leftover = start_run(conn, "fetch", now=utcnow(), source_id="a")
+    finally:
+        conn.close()
+
+    def half_fetch(conn: object, source: object, fetcher: object, *, now: object) -> NoReturn:
+        start_run(conn, "fetch", now=utcnow(), source_id="a")  # type: ignore[arg-type]
+        raise RuntimeError("died mid-Fetch")
+
+    monkeypatch.setattr(jobs, "fetch_source", half_fetch)
+    runner = PipelineRunner(tmp_path, fetcher_factory=ExplodingFetcher)
+    assert runner.run_source("a").status == "failed"
+    conn = open_db(tmp_path)
+    try:
+        runs = {run.id: run for run in recent_runs(conn, 10)}
+    finally:
+        conn.close()
+    assert runs[leftover].status == "running"
+    assert [run.status for run_id, run in runs.items() if run_id != leftover] == ["failed"]

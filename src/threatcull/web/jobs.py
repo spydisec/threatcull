@@ -24,7 +24,7 @@ from threatcull.compiling import compile_outputs
 from threatcull.fetcher import Fetcher, HttpFetcher
 from threatcull.fetching import fetch_all, fetch_source
 from threatcull.store.errors import NotFoundError
-from threatcull.store.runs import fail_unfinished_runs, finish_run, start_run
+from threatcull.store.runs import fail_unfinished_runs, finish_run, latest_run_id, start_run
 from threatcull.store.sightings import record_fetch_failure
 from threatcull.store.sources import get_source
 from threatcull.web.deps import open_db
@@ -144,9 +144,11 @@ class PipelineRunner:
 
     def _fetch_one_locked(self, source_id: str) -> RunResult:
         """One Source's Fetch; the caller holds the lock. Never raises."""
+        mark: int | None = None  # Runs above this id were started by this call
         try:
             conn = open_db(self._data_dir)
             try:
+                mark = latest_run_id(conn)
                 try:
                     source = get_source(conn, source_id)
                 except NotFoundError:
@@ -159,7 +161,7 @@ class PipelineRunner:
         except Exception as exc:
             log.exception("scheduled Fetch of %s failed", source_id)
             error = f"{type(exc).__name__}: {exc}"
-            self._record_failed_fetch(source_id, error)
+            self._record_failed_fetch(source_id, error, mark)
             return RunResult(
                 "failed", failed_sources=(source_id,), error=error, finished_at=ts(utcnow())
             )
@@ -173,17 +175,23 @@ class PipelineRunner:
             )
         return RunResult(outcome.status, fetched=1, finished_at=ts(utcnow()))
 
-    def _record_failed_fetch(self, source_id: str, error: str) -> None:
-        """Best effort: a crash outside ``fetch_source`` still shows up in the Runs."""
+    def _record_failed_fetch(self, source_id: str, error: str, mark: int | None) -> None:
+        """Best effort: a crash outside ``fetch_source`` still shows up in the Runs.
+
+        ``mark`` is the highest Run id before this Fetch began (``None`` if it
+        crashed before reading it): a "running" Fetch Run of this Source above
+        it is the one fetch_source started, so that row is closed. Anything
+        older is left to the start-up sweep.
+        """
         try:
             conn = open_db(self._data_dir)
             try:
                 now = utcnow()
-                # The lock is held, so a "running" Fetch Run of this Source is
-                # the one fetch_source started before it crashed: close it.
-                closed = fail_unfinished_runs(
-                    conn, "fetch", source_id=source_id, now=now, error=error
-                )
+                closed = 0
+                if mark is not None:
+                    closed = fail_unfinished_runs(
+                        conn, "fetch", source_id=source_id, started_after=mark, now=now, error=error
+                    )
                 if not closed:
                     run_id = start_run(conn, "fetch", now=now, source_id=source_id)
                     finish_run(conn, run_id, "failed", now=now, error=error)
