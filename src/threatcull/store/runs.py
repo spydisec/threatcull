@@ -83,17 +83,31 @@ def recent_runs(conn: sqlite3.Connection, limit: int = 20) -> list[Run]:
     return [_to_run(row) for row in rows]
 
 
-def last_run(conn: sqlite3.Connection, run_type: RunType) -> Run | None:
+def last_run(
+    conn: sqlite3.Connection, run_type: RunType, *, statuses: Sequence[RunStatus] | None = None
+) -> Run | None:
     """The most recent Run of ``run_type``, however many other-typed Runs came after it.
 
     Unlike filtering :func:`recent_runs` in Python, this never misses an old
     Compile behind a long run of Fetches (e.g. the scheduler's own Fetch
     cadence): the ``WHERE type = ?`` runs in SQL, not over a capped window.
+
+    ``statuses``, when given, restricts the match to Runs that finished with one of
+    those statuses (e.g. the dashboard's Home Network banner must skip a failed
+    Compile and fall back to the last one that actually finished).
     """
-    row = conn.execute(
-        "SELECT * FROM runs WHERE type = ? ORDER BY started_at DESC, id DESC LIMIT 1",
-        (run_type,),
-    ).fetchone()
+    if statuses is None:
+        row = conn.execute(
+            "SELECT * FROM runs WHERE type = ? ORDER BY started_at DESC, id DESC LIMIT 1",
+            (run_type,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM runs WHERE type = :type "
+            "AND status IN (SELECT value FROM json_each(:statuses)) "
+            "ORDER BY started_at DESC, id DESC LIMIT 1",
+            {"type": run_type, "statuses": json.dumps(list(statuses))},
+        ).fetchone()
     return _to_run(row) if row is not None else None
 
 

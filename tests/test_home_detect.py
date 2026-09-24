@@ -3,14 +3,17 @@
 
 from pathlib import Path
 
+import httpx
 import pytest
 
-from threatcull.fetcher import FetchError, FetchResult, HttpFetcher
+from threatcull import home_detect
+from threatcull.fetcher import FetchError, FetchResult
 from threatcull.home_detect import (
     IPIFY_URL,
     PUBLIC_IP_TIMEOUT,
     Candidate,
     DetectPaths,
+    _public_ip_client,
     default_gateways,
     detect_candidates,
     detect_public_ip,
@@ -159,11 +162,39 @@ def test_malformed_proc_lines_are_skipped(tmp_path: Path) -> None:
     assert local_addresses(paths) == []
 
 
-def test_public_ip_fetcher_is_short_and_does_not_retry() -> None:
-    fetcher = public_ip_fetcher()  # building it sends nothing
-    assert isinstance(fetcher, HttpFetcher)
-    assert fetcher._retry_delays == ()
-    assert fetcher._client.timeout.read == PUBLIC_IP_TIMEOUT
+def test_public_ip_client_is_short_and_does_not_follow_redirects() -> None:
+    client = _public_ip_client()  # building it sends nothing
+    try:
+        assert client.timeout.read == PUBLIC_IP_TIMEOUT
+        assert client.follow_redirects is False
+    finally:
+        client.close()
+
+
+def test_public_ip_fetcher_closes_its_client_after_the_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="45.9.20.99")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(home_detect, "_public_ip_client", lambda: client)
+    fetcher = public_ip_fetcher()
+    assert detect_public_ip(fetcher) == "45.9.20.99"
+    assert client.is_closed
+
+
+def test_public_ip_fetcher_closes_its_client_even_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(home_detect, "_public_ip_client", lambda: client)
+    fetcher = public_ip_fetcher()
+    assert detect_public_ip(fetcher) is None
+    assert client.is_closed
 
 
 def test_public_ip_candidate_skips_known_and_covered_addresses() -> None:

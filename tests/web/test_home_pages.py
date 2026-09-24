@@ -18,6 +18,7 @@ from threatcull.indicators import Indicator
 from threatcull.store.allowlist import AllowlistEntry
 from threatcull.store.home import HomeEntry, add_home, home_entries
 from threatcull.store.outputs import OutputSpec, create_output
+from threatcull.store.runs import finish_run, start_run
 from threatcull.store.sightings import record_fetch_success
 from threatcull.store.sources import sync_catalog
 from threatcull.web.deps import open_db
@@ -320,3 +321,26 @@ def test_dashboard_banner_only_when_the_last_compile_had_hits(
     assert BANNER in page
     assert "45.9.20.1" in page
     assert "Feed A" in page
+
+
+def test_dashboard_banner_survives_a_later_failed_compile(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    """A failed Compile records no hits; the banner must not go dark behind it."""
+    _compile_with_home(tmp_path, listed=False)
+    _compile_with_home(tmp_path, listed=True)
+    page = client.get("/").text
+    assert BANNER in page
+    assert "45.9.20.1" in page
+
+    conn = open_db(tmp_path)
+    try:
+        later = utcnow()
+        run_id = start_run(conn, "compile", now=later)
+        finish_run(conn, run_id, "failed", now=later, error="boom")
+    finally:
+        conn.close()
+
+    page = client.get("/").text
+    assert BANNER in page
+    assert "45.9.20.1" in page

@@ -112,12 +112,15 @@ def _compile(
     create_scored_table(conn, now=now, settings=settings)
     staged: list[StagedOutput] = []
     try:
-        allowlisted = mark_allowlisted(
+        excluded = mark_allowlisted(
             conn,
             Allowlist([*operator_entries(conn), *builtin_entries(conn)]),
             home=Allowlist(home_allow_entries(conn)),
         )
         hit_count, hits = home_hits(conn, HOME_HITS_CAP)
+        # `excluded` counts every excluded row, Home Network included; the Allowlist
+        # count operators see (CLI, dashboard) must name only Allowlist exclusions.
+        allowlisted = excluded - hit_count
         sources = {source.id: source for source in list_sources(conn)}
         specs = list_outputs(conn)
         out_dir.mkdir(parents=True, exist_ok=True)

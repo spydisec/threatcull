@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from threatcull.store import db
 from threatcull.store.db import SCHEMA_VERSION, connect, migrate, transaction
 
 
@@ -51,3 +52,27 @@ def test_nested_transaction_joins_outer(conn: sqlite3.Connection) -> None:
         with transaction(conn):
             conn.execute("INSERT INTO settings (key, value) VALUES ('b', '2')")
     assert conn.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 2
+
+
+def test_migration_4_adds_home_network_to_a_version_3_database(tmp_path: Path) -> None:
+    path = tmp_path / "v3.db"
+    raw = sqlite3.connect(path, isolation_level=None)
+    raw.executescript("BEGIN;\n" + "\n".join(db._MIGRATIONS[:3]) + "\nCOMMIT;")
+    # A Run recorded before the upgrade: the new `home_hits` column must default in cleanly.
+    raw.execute(
+        "INSERT INTO runs (type, started_at, finished_at, status, counts) "
+        "VALUES ('compile', '2026-01-01T00:00:00+00:00', '2026-01-01T00:01:00+00:00', "
+        "'ok', '{}')"
+    )
+    assert raw.execute("PRAGMA user_version").fetchone()[0] == 3
+    raw.close()
+
+    upgraded = db.connect(path)
+    try:
+        assert upgraded.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION >= 4
+        columns = [r["name"] for r in upgraded.execute("PRAGMA table_info(home_network)")]
+        assert columns == ["id", "value", "kind", "note", "origin", "created_at"]
+        run = upgraded.execute("SELECT status, home_hits FROM runs").fetchone()
+        assert (run["status"], run["home_hits"]) == ("ok", "[]")
+    finally:
+        upgraded.close()

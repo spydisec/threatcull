@@ -79,10 +79,13 @@ def dashboard(
     next_run = scheduler.next_compile_at() if scheduler is not None else None
     next_compile = ts(next_run) if next_run is not None else None
     last_compile = last_run(conn, "compile")
+    # A failed Compile records no Home Network hits; the banner must show the last
+    # Compile that actually finished (ok or blocked), not go dark behind a failure.
+    home_compile = last_run(conn, "compile", statuses=("ok", "blocked"))
     source_names = {source.id: source.name for source in list_sources(conn)}
     home_alerts = [
         (value, ", ".join(source_names.get(sid, sid) for sid in sources.split(",")))
-        for value, sources in (last_compile.home_hits if last_compile else ())
+        for value, sources in (home_compile.home_hits if home_compile else ())
     ]
     return render(
         request,
@@ -94,7 +97,7 @@ def dashboard(
             "allowlist_count": len(allowlist_sources),
             "last_compile": last_compile,
             "home_alerts": home_alerts,
-            "home_hit_count": last_compile.counts.get("home_hits", 0) if last_compile else 0,
+            "home_hit_count": home_compile.counts.get("home_hits", 0) if home_compile else 0,
             "outputs": list_outputs(conn),
             "scheduler_on": scheduler is not None,
             "next_compile_at": next_compile,

@@ -17,7 +17,7 @@ from typing import Protocol
 
 import httpx
 
-from threatcull.fetcher import USER_AGENT, Fetcher, FetchError, HttpFetcher
+from threatcull.fetcher import USER_AGENT, Fetcher, FetchError, FetchResult, HttpFetcher
 from threatcull.indicators import normalize
 from threatcull.policy.allowlist import Allowlist
 from threatcull.store.allowlist import AllowlistEntry, normalize_allow_value
@@ -150,12 +150,27 @@ def detect_candidates(
     return candidates
 
 
+def _public_ip_client() -> httpx.Client:
+    """The httpx.Client :func:`public_ip_fetcher` uses: short timeout, no redirects followed."""
+    return httpx.Client(timeout=PUBLIC_IP_TIMEOUT, headers={"User-Agent": USER_AGENT})
+
+
 def public_ip_fetcher() -> Fetcher:
-    """A Fetcher for :func:`detect_public_ip`: short timeout, no retries, tiny body cap."""
-    client = httpx.Client(
-        timeout=PUBLIC_IP_TIMEOUT, follow_redirects=True, headers={"User-Agent": USER_AGENT}
-    )
-    return HttpFetcher(client, max_bytes=_PUBLIC_IP_MAX_BYTES, retry_delays=())
+    """A Fetcher for :func:`detect_public_ip`: short timeout, no retries, tiny body cap.
+
+    Built fresh for the single call :func:`detect_public_ip` makes; that call closes
+    the underlying httpx.Client afterwards, so nothing is left open.
+    """
+    client = _public_ip_client()
+    fetch = HttpFetcher(client, max_bytes=_PUBLIC_IP_MAX_BYTES, retry_delays=())
+
+    def fetcher(url: str, *, etag: str | None, last_modified: str | None) -> FetchResult:
+        try:
+            return fetch(url, etag=etag, last_modified=last_modified)
+        finally:
+            client.close()
+
+    return fetcher
 
 
 def detect_public_ip(fetcher: Fetcher) -> str | None:
