@@ -28,7 +28,7 @@ pushing rules directly to firewalls, per-Source weights, alerting integrations, 
 3. The Run completes and the UI shows per-Source counts and status.
 4. `curl http://<lan-ip>:6969/o/<output>?token=<feed-token>` returns a valid list in the chosen Format.
 5. Looking up an Indicator shows which Sources listed it and when, or the allowlist reason.
-6. Business Mode disables every `noncommercial`, `restricted` and `unknown` Source and says why.
+6. Business Mode disables every blocklist Source whose Business Use is not `allowed` and says why.
 7. The full pipeline test passes with no internet access.
 
 ## Licence
