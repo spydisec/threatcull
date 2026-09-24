@@ -462,3 +462,16 @@ def test_debounce_keeps_the_hourly_compile(tmp_path: Path, pending: bool) -> Non
     finally:
         if not pending:
             scheduler.shutdown()
+
+
+def test_a_future_last_attempt_is_capped_at_one_interval(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    _seed(tmp_path)
+    _set_last_attempt(tmp_path, "a", utcnow() + timedelta(days=3650))  # clock stepped back
+    scheduler = _scheduler(tmp_path)
+    with caplog.at_level("WARNING", logger="threatcull.web.scheduler"):
+        scheduler.rescan()
+    run_at = _next_runs(scheduler)[fetch_job_id("a")]
+    assert run_at <= utcnow() + timedelta(minutes=60, seconds=60 * 60 // 10)
+    assert any("in the future" in record.getMessage() for record in caplog.records)

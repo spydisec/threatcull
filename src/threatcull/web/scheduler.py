@@ -77,11 +77,24 @@ def _fetch_trigger(refresh_minutes: int) -> IntervalTrigger:
 
 
 def _due(source: Source, now: datetime) -> datetime:
-    """When ``source`` is next due: ``refresh_minutes`` after its last attempt."""
+    """When ``source`` is next due: ``refresh_minutes`` after its last attempt.
+
+    Capped at one interval from ``now``: a last attempt in the future (the
+    clock stepped back, e.g. a VM restore or an NTP correction) must not push
+    the next Fetch out arbitrarily far.
+    """
     if source.last_attempt_at is None:
         return now
     last = datetime.fromisoformat(source.last_attempt_at)
-    return last + timedelta(minutes=source.refresh_minutes)
+    if last > now:
+        log.warning(
+            "Source %s last attempt %s is in the future (clock skew?); "
+            "scheduling its next Fetch one interval from now",
+            source.id,
+            source.last_attempt_at,
+        )
+    interval = timedelta(minutes=source.refresh_minutes)
+    return min(last + interval, now + interval)
 
 
 def _next_run_time(job: Any) -> datetime | None:
@@ -167,8 +180,9 @@ class Scheduler:
                 )
             ]
             overdue = 0
-            for job_id, source in sorted(to_add, key=lambda item: _due(item[1], now)):
-                due = _due(source, now)
+            dues = {job_id: _due(source, now) for job_id, source in to_add}
+            for job_id, source in sorted(to_add, key=lambda item: dues[item[0]]):
+                due = dues[job_id]
                 if due <= now:
                     first = now + OVERDUE_FIRST_DELAY + overdue * OVERDUE_STAGGER
                     overdue += 1
