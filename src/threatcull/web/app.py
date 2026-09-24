@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 
+from threatcull.datadir import ensure_data_dir
 from threatcull.home_detect import detect_candidates, public_ip_fetcher
 from threatcull.store.users import warm_up as warm_up_password_checks
 from threatcull.web.deps import DB_NAME, IMPORTS_DIR, open_db
@@ -82,6 +83,7 @@ def create_app(
     app = FastAPI(
         title="ThreatCull", docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan
     )
+    ensure_data_dir(data_dir)
     app.state.data_dir = data_dir
     # Where web-added file:// Sources read from (air-gap: drop feed files here).
     (data_dir / IMPORTS_DIR).mkdir(parents=True, exist_ok=True)

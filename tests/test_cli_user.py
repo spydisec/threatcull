@@ -257,3 +257,39 @@ def test_serve_marks_runs_left_running_as_interrupted(
         conn.close()
     assert (run.status, run.error) == ("failed", "interrupted by restart")
     assert run.finished_at is not None
+
+
+def test_serve_never_prints_feed_tokens(
+    tmp_path: Path,
+    run_calls: list[Any],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``serve`` output lands in journald / container logs: no Feed Token there."""
+    monkeypatch.setenv("THREATCULL_ADMIN_PASSWORD", PASSWORD)
+    assert cli.main(["--data-dir", str(tmp_path), "serve"]) == cli.EXIT_OK
+    captured = capsys.readouterr()
+    assert "Feed Token" not in captured.out + captured.err
+    assert "Default Outputs created; rotate their tokens on the Outputs page" in captured.out
+    assert "threatcull outputs rotate-token" in captured.out
+
+
+def test_serve_on_an_initialised_dir_says_nothing_about_outputs(
+    tmp_path: Path,
+    run_calls: list[Any],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "init"]) == cli.EXIT_OK
+    monkeypatch.setenv("THREATCULL_ADMIN_PASSWORD", PASSWORD)
+    capsys.readouterr()
+    assert cli.main(["--data-dir", str(tmp_path), "serve"]) == cli.EXIT_OK
+    assert "Default Outputs" not in capsys.readouterr().out
+
+
+def test_init_still_prints_the_feed_tokens(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "init"]) == cli.EXIT_OK
+    out = capsys.readouterr().out
+    assert out.count("Feed Token for Output") == 5

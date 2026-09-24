@@ -121,6 +121,11 @@ def _current_user(request: Request, conn: sqlite3.Connection) -> str | None:
     return user
 
 
+def current_user(request: Request, conn: sqlite3.Connection) -> str | None:
+    """The logged-in username, or ``None`` (for routes that answer logged-out requests)."""
+    return _current_user(request, conn)
+
+
 def require_user(request: Request, conn: Annotated[sqlite3.Connection, Depends(get_conn)]) -> str:
     """HTML pages: the logged-in username, or a ``303`` to ``/login``."""
     user = _current_user(request, conn)

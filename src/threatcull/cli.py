@@ -18,6 +18,7 @@ import yaml
 from threatcull.catalog import BusinessUse, Category, load_catalog
 from threatcull.clock import utcnow
 from threatcull.compiling import compile_outputs
+from threatcull.datadir import ensure_data_dir
 from threatcull.fetcher import HttpFetcher
 from threatcull.fetching import fetch_all
 from threatcull.home_detect import detect_candidates, public_ip_candidate, public_ip_fetcher
@@ -196,12 +197,21 @@ def _trusted_proxy(value: str) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    args.data_dir.mkdir(parents=True, exist_ok=True)
+    ensure_data_dir(args.data_dir)
     conn = connect(args.data_dir / DB_NAME)
     try:
         sync_catalog(conn, load_catalog(args.catalog))
-        for name, token in ensure_default_outputs(conn).items():
-            _print_token(name, token)
+        created = ensure_default_outputs(conn)
+        if args.command == "serve":
+            # serve's output ends up in journald / container logs: no tokens there.
+            if created:
+                print(
+                    "Default Outputs created; rotate their tokens on the Outputs page "
+                    "or with `threatcull outputs rotate-token`"
+                )
+        else:
+            for name, token in created.items():
+                _print_token(name, token)
         handler = _HANDLERS[(args.command, getattr(args, "action", None))]
         return handler(conn, args)
     except (PolicyError, NotFoundError, ValueError, OSError, yaml.YAMLError) as exc:

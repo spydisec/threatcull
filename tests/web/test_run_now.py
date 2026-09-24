@@ -12,6 +12,7 @@ from tests.factories import make_entry
 from threatcull.fetcher import FetchResult
 from threatcull.store.outputs import ensure_default_outputs
 from threatcull.store.sources import sync_catalog
+from threatcull.store.users import set_password
 from threatcull.web.deps import open_db
 from threatcull.web.jobs import PipelineRunner
 
@@ -102,9 +103,28 @@ def test_run_now_needs_login(client: TestClient, fake: BlockingFetcher) -> None:
     assert not _runner(client).is_running()
 
 
-def test_status_fragment_needs_login(client: TestClient) -> None:
+def test_status_fragment_logged_out_is_a_small_expired_notice(client: TestClient) -> None:
+    """Never the login page swapped into the dashboard; 286 tells htmx to stop polling."""
     response = client.get("/partials/status", follow_redirects=False)
-    assert response.status_code == 303
+    assert response.status_code == 286
+    assert "Session expired" in response.text
+    assert "reload" in response.text.lower()
+    assert "<html" not in response.text
+    assert "password" not in response.text.lower()
+    assert "hx-get" not in response.text
+
+
+def test_status_fragment_after_a_password_change_is_the_expired_notice(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    conn = open_db(tmp_path)
+    try:
+        set_password(conn, "admin", "another long passphrase")
+    finally:
+        conn.close()
+    response = client.get("/partials/status", follow_redirects=False)
+    assert response.status_code == 286
+    assert "Session expired" in response.text
 
 
 def test_force_compile_requires_the_confirm_checkbox(

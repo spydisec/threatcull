@@ -30,6 +30,7 @@ from threatcull.store.sources import (
 from threatcull.store.sources import set_enabled as store_set_enabled
 from threatcull.web.deps import (
     check_csrf,
+    current_user,
     get_conn,
     home_detector,
     notify_sources_changed,
@@ -112,12 +113,22 @@ def dashboard(
     )
 
 
+# htmx stops polling when a response has this status (and still swaps the body).
+HTMX_STOP_POLLING = 286
+
+
 @router.get("/partials/status")
 def status_fragment(
     request: Request,
-    user: Annotated[str, Depends(require_user)],
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
 ) -> Response:
-    """Run status for the dashboard; while a run is going it re-polls itself every 3 s."""
+    """Run status for the dashboard; while a run is going it re-polls itself every 3 s.
+
+    An expired session gets a one-line notice (status 286, so htmx stops
+    polling) instead of the login page being swapped into the dashboard.
+    """
+    if current_user(request, conn) is None:
+        return render_fragment(request, "_session_expired.html", status_code=HTMX_STOP_POLLING)
     return render_fragment(request, "_status.html", _run_status(request))
 
 
