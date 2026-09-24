@@ -65,6 +65,32 @@ def test_does_not_match_unrelated(value: str, kind: str) -> None:
     assert ALLOW.match(value, kind) is None  # type: ignore[arg-type]
 
 
+SUBDOMAIN_ALLOW = Allowlist(
+    [_entry("login.example.com", "domain"), _entry("a.b.example.org", "domain")]
+)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("example.com", "login.example.com"),
+        ("login.example.com", "login.example.com"),
+        ("x.login.example.com", "login.example.com"),
+        ("b.example.org", "a.b.example.org"),
+        ("example.org", "a.b.example.org"),
+    ],
+)
+def test_parent_of_an_allowlisted_domain_is_excluded(value: str, expected: str) -> None:
+    hit = SUBDOMAIN_ALLOW.match(value, "domain")
+    assert hit is not None
+    assert hit.value == expected
+
+
+@pytest.mark.parametrize("value", ["other.example.com", "gin.example.com", "c.example.org"])
+def test_siblings_of_an_allowlisted_domain_are_not_excluded(value: str) -> None:
+    assert SUBDOMAIN_ALLOW.match(value, "domain") is None
+
+
 def test_operator_entries_are_normalised(conn: sqlite3.Connection, now: datetime) -> None:
     entry = add_entry(conn, " Pay.Example.COM. ", "payment provider", now=now)
     assert (entry.value, entry.kind, entry.origin) == ("pay.example.com", "domain", "operator")

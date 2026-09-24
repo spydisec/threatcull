@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Fast Allowlist matching for IPs, CIDRs (containment and overlap) and domain suffixes."""
+"""Fast Allowlist matching for IPs, CIDRs (containment and overlap) and domains.
+
+A domain matches when it or one of its parents is allowlisted, or when it is a parent
+of an allowlisted domain.
+"""
 
 from __future__ import annotations
 
@@ -15,12 +19,18 @@ _Network = ipaddress.IPv4Network | ipaddress.IPv6Network
 class Allowlist:
     def __init__(self, entries: Iterable[AllowlistEntry]) -> None:
         self._domains: dict[str, AllowlistEntry] = {}
+        # Every parent of an allowlisted domain: publishing a parent would block the
+        # allowlisted name too (AdGuard ``||parent^``, RPZ ``*.parent``).
+        self._parents: dict[str, AllowlistEntry] = {}
         # version -> prefix length -> network address as int -> entry
         self._prefixes: dict[int, dict[int, dict[int, AllowlistEntry]]] = {4: {}, 6: {}}
         self._networks: list[tuple[_Network, AllowlistEntry]] = []
         for entry in entries:
             if entry.kind == "domain":
                 self._domains.setdefault(entry.value, entry)
+                labels = entry.value.split(".")
+                for start in range(1, len(labels)):
+                    self._parents.setdefault(".".join(labels[start:]), entry)
                 continue
             network = ipaddress.ip_network(entry.value)
             by_prefix = self._prefixes[network.version].setdefault(network.prefixlen, {})
@@ -35,7 +45,7 @@ class Allowlist:
                 hit = self._domains.get(".".join(labels[start:]))
                 if hit is not None:
                     return hit
-            return None
+            return self._parents.get(value)
         network = ipaddress.ip_network(value)
         covering = self._covering(network)
         if covering is not None or kind == "ip":

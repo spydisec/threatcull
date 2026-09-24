@@ -56,3 +56,16 @@ def test_unseen_indicator_has_no_score(conn: sqlite3.Connection, now: datetime) 
 def test_invalid_or_private_values_return_none(conn: sqlite3.Connection, now: datetime) -> None:
     assert lookup(conn, "192.168.1.10", now=now) is None
     assert lookup(conn, "not a thing", now=now) is None
+
+
+def test_lookup_reports_an_allowlisted_subdomain(conn: sqlite3.Connection, now: datetime) -> None:
+    _setup(conn, now)
+    record_fetch_success(
+        conn, "a", {Indicator("example.com", "domain")}, now=now, etag=None, last_modified=None
+    )
+    add_entry(conn, "login.example.com", "staff sign-in", now=now)
+    result = lookup(conn, "example.com", now=now)
+    assert result is not None
+    assert result.allowlisted_by is not None
+    assert result.allowlisted_by.value == "login.example.com"
+    assert result.eligible_outputs == ()

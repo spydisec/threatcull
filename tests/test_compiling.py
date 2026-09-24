@@ -74,6 +74,38 @@ def test_allowlisted_indicators_are_excluded(
     assert report.counts["ips"] == 3
 
 
+def test_parent_of_an_allowlisted_domain_is_in_no_output(
+    conn: sqlite3.Connection, now: datetime, tmp_path: Path
+) -> None:
+    sync_catalog(
+        conn,
+        [
+            make_entry(
+                id="d",
+                url="https://d.example/1",
+                licence_url="https://d.example/licence",
+                kind="domain",
+                default_enabled=True,
+            )
+        ],
+    )
+    domains = {Indicator(v, "domain") for v in ("example.com", "other.example.com")}
+    record_fetch_success(conn, "d", domains, now=now, etag=None, last_modified=None)
+    formats: tuple[OutputFormat, ...] = ("plain", "hosts", "adguard", "rpz", "csv", "json")
+    for fmt in formats:
+        create_output(
+            conn, OutputSpec(f"dom-{fmt}", "domain", frozenset({"malicious"}), "low", None, fmt)
+        )
+    add_entry(conn, "login.example.com", "staff sign-in", now=now)
+    report = compile_outputs(conn, tmp_path, now=now)
+    assert report.allowlisted == 1
+    for fmt in formats:
+        assert report.counts[f"dom-{fmt}"] == 1
+        text = next(tmp_path.glob(f"dom-{fmt}.*")).read_text()
+        assert "other.example.com" in text
+        assert text.replace("other.example.com", "").count("example.com") == 0
+
+
 def test_shrink_guard_blocks_and_keeps_previous_files(
     conn: sqlite3.Connection, now: datetime, tmp_path: Path
 ) -> None:
