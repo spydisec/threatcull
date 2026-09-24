@@ -47,6 +47,10 @@ def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     app.state.secret_key = load_or_create_secret(data_dir)
     app.state.login_limiter = LoginRateLimiter()
     app.state.login_verify_slots = auth.new_verify_slots()
+    # Hook for Task 8 (the scheduler): called after any Source enable/disable
+    # or custom-Source add, so a running scheduler can rescan. No-op until
+    # something more interesting replaces it.
+    app.state.on_sources_changed = lambda: None
     warm_up_password_checks()  # no first-login timing tell for unknown usernames
     # Covers the one response SecurityHeadersMiddleware can't reach: Starlette's
     # own fallback 500 for a truly unhandled exception (see security.py).

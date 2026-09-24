@@ -9,7 +9,7 @@ from typing import Any
 import jinja2
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
-from starlette.responses import Response
+from starlette.responses import HTMLResponse, Response
 
 from threatcull.web.deps import session_user
 from threatcull.web.security import ensure_csrf_token
@@ -40,3 +40,20 @@ def render(
     }
     page.update(context or {})
     return templates.TemplateResponse(request, name, page, status_code=status_code, headers=headers)
+
+
+def render_fragment(
+    request: Request,
+    name: str,
+    context: dict[str, Any] | None = None,
+    *,
+    status_code: int = 200,
+) -> Response:
+    """Render an htmx-swap fragment: just the piece, no ``base.html`` layout.
+
+    Still carries the session ``csrf`` token, since a fragment usually
+    contains its own form.
+    """
+    page: dict[str, Any] = {"csrf": ensure_csrf_token(request.session)}
+    page.update(context or {})
+    return HTMLResponse(_env.get_template(name).render(**page), status_code=status_code)

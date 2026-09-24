@@ -119,3 +119,15 @@ section.card h2 { margin-top: 0; }
 }
 
 code { word-break: break-all; }
+
+/* htmx request indicator (we disable htmx's own injected <style> via
+   includeIndicatorStyles: false in the htmx-config meta tag, since an
+   inline <style> would be blocked by our CSP). Mirrors htmx's defaults. */
+.htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
+.htmx-request .htmx-indicator { opacity: 1; }
+.htmx-request.htmx-indicator { opacity: 1; }
+
+.actions form { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0; }
+.actions label { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85em; }
+form.inline-form { display: grid; gap: 0.5rem; max-width: 28rem; }
+form.inline-form label { display: grid; gap: 0.2rem; font-size: 0.9em; color: var(--muted); }

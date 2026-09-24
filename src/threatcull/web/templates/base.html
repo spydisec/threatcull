@@ -3,8 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% if user %}
+  <meta name="csrf-token" content="{{ csrf }}">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+  {% endif %}
   <title>{% block title %}ThreatCull{% endblock %}</title>
   <link rel="stylesheet" href="/static/app.css">
+  {% if user %}
+  <script src="/static/htmx.min.js"></script>
+  <script src="/static/app.js"></script>
+  {% endif %}
 </head>
 <body>
   <header class="topbar">
@@ -15,6 +23,7 @@
       <a href="/sources">Sources</a>
       <a href="/outputs">Outputs</a>
       <a href="/runs">Runs</a>
+      <a href="/settings">Settings</a>
     </nav>
     <form class="logout" method="post" action="/logout">
       <input type="hidden" name="csrf" value="{{ csrf }}">
