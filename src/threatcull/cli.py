@@ -24,6 +24,7 @@ from threatcull.indicators import SourceKind
 from threatcull.lookup import lookup, output_labels
 from threatcull.parsers import SourceFormat
 from threatcull.store.allowlist import add_entry, operator_entries, remove_entry
+from threatcull.store.api_tokens import create_api_token, list_api_tokens, revoke_api_token
 from threatcull.store.db import connect
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.outputs import ensure_default_outputs, list_outputs, rotate_token
@@ -37,6 +38,7 @@ from threatcull.store.sources import (
 from threatcull.store.users import count_users, create_user
 from threatcull.web.app import create_app
 from threatcull.web.routes.feeds import install_feed_token_redaction
+from threatcull.web.security import parse_trusted_proxies
 
 DB_NAME = "threatcull.db"
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED = 0, 1, 2
@@ -111,10 +113,47 @@ def build_parser() -> argparse.ArgumentParser:
         "--password-stdin", action="store_true", help="Read the password from one line of stdin"
     )
 
+    _add_serve_parser(sub)
+    _add_api_token_parser(sub)
+    return parser
+
+
+def _add_serve_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     serve = sub.add_parser("serve", help="Run the web UI")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=6969)
-    return parser
+    serve.add_argument(
+        "--secure-cookies",
+        action="store_true",
+        help="Set the session cookie's Secure flag (only when served over HTTPS)",
+    )
+    serve.add_argument(
+        "--trusted-proxy",
+        dest="trusted_proxies",
+        action="append",
+        default=[],
+        type=_trusted_proxy,
+        metavar="IP_OR_CIDR",
+        help="Reverse proxy whose X-Forwarded-For is believed (repeatable; default: none)",
+    )
+
+
+def _add_api_token_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    api_token = sub.add_parser("api-token", help="Manage API tokens for scripts")
+    token_sub = api_token.add_subparsers(dest="action", required=True)
+    token_create = token_sub.add_parser("create", help="Create an API token (shown once)")
+    token_create.add_argument("name")
+    token_create.add_argument("--user", required=True, help="Web UI user the token acts as")
+    token_sub.add_parser("list", help="List API tokens (never the tokens themselves)")
+    token_sub.add_parser("revoke", help="Revoke an API token").add_argument("name")
+
+
+def _trusted_proxy(value: str) -> str:
+    try:
+        parse_trusted_proxies([value])
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return value
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -314,7 +353,34 @@ def _serve(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
         create_user(conn, "admin", password, now=utcnow())
         print(f"created user admin from {ADMIN_ENV_VAR}")
     install_feed_token_redaction()  # Feed Tokens must never land in the access log
-    uvicorn.run(create_app(args.data_dir), host=args.host, port=args.port, log_level="info")
+    app = create_app(
+        args.data_dir, secure_cookies=args.secure_cookies, trusted_proxies=args.trusted_proxies
+    )
+    # proxy_headers=False: uvicorn would otherwise rewrite the client address
+    # from X-Forwarded-For for peers it trusts (loopback by default), bypassing
+    # client_ip() and the explicit --trusted-proxy opt-in.
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info", proxy_headers=False)
+    return EXIT_OK
+
+
+def _api_token_create(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    token = create_api_token(conn, args.name, args.user, now=utcnow())
+    print(f"API token '{args.name}' for user {args.user} (shown once, store it safely): {token}")
+    return EXIT_OK
+
+
+def _api_token_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    for info in list_api_tokens(conn):
+        print(
+            f"{info.name:<24} user={info.username:<16} created={info.created_at}  "
+            f"last used={info.last_used_at or 'never'}"
+        )
+    return EXIT_OK
+
+
+def _api_token_revoke(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    revoke_api_token(conn, args.name)
+    print(f"revoked API token {args.name}")
     return EXIT_OK
 
 
@@ -336,4 +402,7 @@ _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("outputs", "rotate-token"): _outputs_rotate,
     ("user", "create"): _user_create,
     ("serve", None): _serve,
+    ("api-token", "create"): _api_token_create,
+    ("api-token", "list"): _api_token_list,
+    ("api-token", "revoke"): _api_token_revoke,
 }

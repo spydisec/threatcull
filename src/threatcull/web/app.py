@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -24,6 +24,7 @@ from threatcull.web.security import (
     SecurityHeadersMiddleware,
     load_or_create_secret,
     login_required_response,
+    parse_trusted_proxies,
     unhandled_exception_response,
 )
 from threatcull.web.templating import STATIC_DIR, render
@@ -61,11 +62,20 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             scheduler.shutdown()
 
 
-def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
+def create_app(
+    data_dir: Path,
+    *,
+    start_scheduler: bool = True,
+    secure_cookies: bool = False,
+    trusted_proxies: Iterable[str] = (),
+) -> FastAPI:
     """Build the ThreatCull web application rooted at ``data_dir``.
 
     With ``start_scheduler`` the app's lifespan runs the built-in scheduler
     (periodic Fetches and Compiles); tests pass ``False`` to keep it off.
+    ``secure_cookies`` sets the session cookie's ``Secure`` flag (HTTPS via a
+    reverse proxy). ``trusted_proxies`` (IPs or CIDRs) are the peers whose
+    ``X-Forwarded-For`` the login rate limiter believes; by default, none.
     """
     app = FastAPI(
         title="ThreatCull", docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan
@@ -74,6 +84,7 @@ def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     app.state.start_scheduler = start_scheduler
     app.state.scheduler = None
     app.state.secret_key = load_or_create_secret(data_dir)
+    app.state.trusted_proxies = parse_trusted_proxies(trusted_proxies)
     app.state.login_limiter = LoginRateLimiter()
     app.state.login_verify_slots = auth.new_verify_slots()
     # Called after any Source enable/disable, custom-Source add or Business
@@ -88,14 +99,15 @@ def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     app.add_exception_handler(Exception, unhandled_exception_response)
     app.add_exception_handler(LoginRequiredError, login_required_response)
     app.add_exception_handler(CsrfError, _csrf_expired_response)
-    # Homelab first: plain HTTP on a bare IP works, so no Secure flag by default.
+    # Homelab first: plain HTTP on a bare IP works, so no Secure flag unless
+    # `serve --secure-cookies` asks for it.
     app.add_middleware(
         SessionMiddleware,
         secret_key=app.state.secret_key.hex(),
         session_cookie=SESSION_COOKIE,
         max_age=SESSION_MAX_AGE,
         same_site="strict",
-        https_only=False,
+        https_only=secure_cookies,
     )
     app.add_middleware(SecurityHeadersMiddleware)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

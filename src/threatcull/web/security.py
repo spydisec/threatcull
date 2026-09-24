@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import secrets
 import threading
 import time
 from collections import OrderedDict, deque
-from collections.abc import Callable, MutableMapping
+from collections.abc import Callable, Iterable, MutableMapping
 from pathlib import Path
 from typing import Any
 
@@ -171,13 +172,63 @@ def csrf_token_matches(session: MutableMapping[str, Any], submitted: str | None)
 # --- Login rate limiting --------------------------------------------------------
 
 
+TrustedProxies = tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]
+
+
+def parse_trusted_proxies(values: Iterable[str]) -> TrustedProxies:
+    """Parse ``--trusted-proxy`` values (IP addresses or CIDRs); ``ValueError`` if bad."""
+    networks = []
+    for value in values:
+        try:
+            networks.append(ipaddress.ip_network(value.strip(), strict=False))
+        except ValueError as exc:
+            raise ValueError(f"not a valid trusted proxy IP or CIDR: {value!r}") from exc
+    return tuple(networks)
+
+
+def _parse_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    try:
+        return ipaddress.ip_address(value.strip())
+    except ValueError:
+        return None
+
+
+def _is_trusted(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address, trusted: TrustedProxies
+) -> bool:
+    return any(address in network for network in trusted)
+
+
 def client_ip(request: Request) -> str:
     """The address login attempts are counted against.
 
-    The direct peer only; ``X-Forwarded-For`` is never trusted here (opt-in
-    trusted-proxy handling belongs in this one function).
+    By default the direct peer, with ``X-Forwarded-For`` ignored. Only when the
+    peer is one of the app's trusted proxies (``serve --trusted-proxy``) is the
+    header used: walking it from the right, skipping trusted hops, the first
+    untrusted address is the client. The left-most entries are whatever the
+    client sent, so they are never taken on trust. A hop that isn't an IP
+    address means the chain can't be read; the peer is used then.
     """
-    return request.client.host if request.client is not None else "unknown"
+    if request.client is None:
+        return "unknown"
+    peer = request.client.host
+    trusted: TrustedProxies = getattr(request.app.state, "trusted_proxies", ())
+    peer_ip = _parse_ip(peer)
+    if not trusted or peer_ip is None or not _is_trusted(peer_ip, trusted):
+        return peer
+    hops = [
+        hop for header in request.headers.getlist("x-forwarded-for") for hop in header.split(",")
+    ]
+    if not hops:
+        return peer
+    parsed: ipaddress.IPv4Address | ipaddress.IPv6Address | None = None
+    for hop in reversed(hops):
+        parsed = _parse_ip(hop)
+        if parsed is None:
+            return peer
+        if not _is_trusted(parsed, trusted):
+            return str(parsed)
+    return str(parsed)  # every hop is a trusted proxy: the left-most one
 
 
 class LoginRateLimiter:

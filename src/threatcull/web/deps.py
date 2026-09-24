@@ -6,12 +6,15 @@ from __future__ import annotations
 import logging
 import sqlite3
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from secrets import compare_digest
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 
+from threatcull.clock import utcnow
+from threatcull.store.api_tokens import verify_api_token
 from threatcull.store.db import connect
 from threatcull.store.users import password_fingerprint
 from threatcull.web.security import (
@@ -94,25 +97,91 @@ def require_user(request: Request, conn: Annotated[sqlite3.Connection, Depends(g
     return user
 
 
+_BEARER_STATE = "bearer_auth"
+
+
+@dataclass(frozen=True)
+class _BearerAuth:
+    """What an ``/api/`` request's ``Authorization: Bearer`` header says."""
+
+    sent: bool  # a bearer token was sent: it alone decides, never the session
+    user: str | None  # the token's user; ``None`` if absent or invalid
+
+
+def _bearer_credential(request: Request) -> str | None:
+    """The token from ``Authorization: Bearer <token>`` (``""`` if malformed), else ``None``.
+
+    Any other ``Authorization`` scheme is ignored.
+    """
+    header = request.headers.get("authorization")
+    if header is None:
+        return None
+    scheme, _, credential = header.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    credential = credential.strip()
+    return credential if credential and " " not in credential else ""
+
+
+def _bearer_auth(request: Request, conn: sqlite3.Connection) -> _BearerAuth:
+    """Check an ``/api/`` request's bearer token, once per request.
+
+    HTML pages never accept a bearer token: for them this always reports
+    none sent. The result is cached on the request, so ``check_csrf`` and
+    ``require_api_user`` share one verification (and one ``last_used_at``).
+    """
+    if not request.url.path.startswith("/api/"):
+        return _BearerAuth(sent=False, user=None)
+    cached = getattr(request.state, _BEARER_STATE, None)
+    if isinstance(cached, _BearerAuth):
+        return cached
+    credential = _bearer_credential(request)
+    if credential is None:
+        result = _BearerAuth(sent=False, user=None)
+    else:
+        user = verify_api_token(conn, credential, now=utcnow()) if credential else None
+        result = _BearerAuth(sent=True, user=user)
+    setattr(request.state, _BEARER_STATE, result)
+    return result
+
+
 def require_api_user(
     request: Request, conn: Annotated[sqlite3.Connection, Depends(get_conn)]
 ) -> str:
-    """``/api/`` routes: the logged-in username, or ``401`` JSON."""
-    user = _current_user(request, conn)
+    """``/api/`` routes: the API token's or session's username, or ``401`` JSON.
+
+    A bearer token, when sent, decides alone: an invalid one is ``401`` even
+    if the request also carries a valid session cookie.
+    """
+    bearer = _bearer_auth(request, conn)
+    user = bearer.user if bearer.sent else _current_user(request, conn)
     if user is None:
         raise HTTPException(status_code=401, detail="authentication required")
     return user
 
 
-async def check_csrf(request: Request) -> None:
+async def check_csrf(
+    request: Request, conn: Annotated[sqlite3.Connection, Depends(get_conn)]
+) -> None:
     """Every state-changing POST: ``403`` unless the session's CSRF token is sent.
 
     Accepted from the ``X-CSRF-Token`` header (API calls) or the ``csrf`` form
     field (HTML forms). Origin/Referer are deliberately never consulted. An
-    ``/api/`` request that fails gets JSON (``HTTPException``); any other
+    ``/api/`` request authenticated by a valid ``Authorization: Bearer`` API
+    token is exempt (CSRF only protects cookie sessions); an invalid one is
+    ``401``. An ``/api/`` request that fails gets JSON (``HTTPException``); any other
     request gets a rendered HTML page (``CsrfError``, handled in ``app.py``) —
     a form opened in another session shouldn't show the raw API error body.
     """
+    bearer = _bearer_auth(request, conn)
+    if bearer.user is not None:
+        # Authenticated by a valid API token: no ambient credential (cookie)
+        # is involved, so there is nothing for CSRF to protect.
+        return
+    if bearer.sent:
+        # An invalid bearer token decides the request: never fall back to the
+        # session (nor let the session's CSRF token rescue it).
+        raise HTTPException(status_code=401, detail="authentication required")
     submitted = request.headers.get(CSRF_HEADER)
     content_type = request.headers.get("content-type", "")
     if submitted is None and content_type.startswith(_FORM_TYPES):

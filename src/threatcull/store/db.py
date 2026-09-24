@@ -90,6 +90,17 @@ _MIGRATIONS: tuple[str, ...] = (
     );
     PRAGMA user_version = 2;
     """,
+    """
+    CREATE TABLE api_tokens (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        token_hash TEXT NOT NULL,
+        username TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_used_at TEXT
+    );
+    PRAGMA user_version = 3;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
