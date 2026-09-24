@@ -265,7 +265,7 @@ sources:
   - id: hagezi-tif-domains
     name: HaGeZi Threat Intelligence Feeds (domains)
     family: hagezi
-    url: https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/tif.txt
+    url: https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/tif-onlydomains.txt
     format: plain
     kind: domain
     category: malicious
