@@ -44,19 +44,51 @@ class StagedOutput:
     count: int
 
 
-def mark_allowlisted(conn: sqlite3.Connection, allowlist: Allowlist) -> int:
-    """Flag every ``scored`` row the Allowlist excludes; returns how many were flagged."""
+ALLOWLISTED = 1
+HOME_NETWORK = 2  # ``scored.allowlisted`` value of a row a Home Network entry excludes
 
-    def excluded(value: str, kind: str) -> bool:
-        return allowlist.match(value, cast(IndicatorKind, kind)) is not None
+
+def mark_allowlisted(
+    conn: sqlite3.Connection, allowlist: Allowlist, home: Allowlist | None = None
+) -> int:
+    """Flag every ``scored`` row the Allowlist or Home Network excludes; returns how many.
+
+    Rows a Home Network entry matches get ``allowlisted = HOME_NETWORK`` (even when
+    the Allowlist matches them too), the rest ``ALLOWLISTED``, in one SQL pass.
+    """
+
+    def excluded(value: str, kind: str) -> int:
+        indicator_kind = cast(IndicatorKind, kind)
+        if home is not None and home.match(value, indicator_kind) is not None:
+            return HOME_NETWORK
+        return ALLOWLISTED if allowlist.match(value, indicator_kind) is not None else 0
 
     conn.create_function("threatcull_allowlisted", 2, excluded, deterministic=True)
     try:
         return conn.execute(
-            "UPDATE scored SET allowlisted = 1 WHERE threatcull_allowlisted(value, kind)"
+            "UPDATE scored SET allowlisted = threatcull_allowlisted(value, kind) "
+            "WHERE threatcull_allowlisted(value, kind) > 0"
         ).rowcount
     finally:
         conn.create_function("threatcull_allowlisted", 2, None)
+
+
+def home_hits(conn: sqlite3.Connection, limit: int) -> tuple[int, tuple[tuple[str, str], ...]]:
+    """How many ``scored`` rows the Home Network excluded, and the first ``limit`` of them.
+
+    Each hit is ``(value, comma-joined sorted Source ids)``, ordered by value.
+    """
+    count: int = conn.execute(
+        "SELECT COUNT(*) FROM scored WHERE allowlisted = ?", (HOME_NETWORK,)
+    ).fetchone()[0]
+    rows = conn.execute(
+        "SELECT value, source_ids FROM scored WHERE allowlisted = ? ORDER BY value LIMIT ?",
+        (HOME_NETWORK, limit),
+    )
+    hits = tuple(
+        (row["value"], ",".join(sorted(set(row["source_ids"].split(","))))) for row in rows
+    )
+    return count, hits
 
 
 def stage_output(

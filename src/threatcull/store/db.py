@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Literal
 
 _MIGRATIONS: tuple[str, ...] = (
     """
@@ -80,6 +81,38 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     PRAGMA user_version = 1;
     """,
+    """
+    CREATE TABLE users (
+        id INTEGER PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+    PRAGMA user_version = 2;
+    """,
+    """
+    CREATE TABLE api_tokens (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        token_hash TEXT NOT NULL,
+        username TEXT NOT NULL REFERENCES users (username) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        last_used_at TEXT
+    );
+    PRAGMA user_version = 3;
+    """,
+    """
+    CREATE TABLE home_network (
+        id INTEGER PRIMARY KEY,
+        value TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL CHECK (kind IN ('ip', 'cidr', 'domain')),
+        note TEXT NOT NULL DEFAULT '',
+        origin TEXT NOT NULL CHECK (origin IN ('manual', 'auto')),
+        created_at TEXT NOT NULL
+    );
+    ALTER TABLE runs ADD COLUMN home_hits TEXT NOT NULL DEFAULT '[]';
+    PRAGMA user_version = 4;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
@@ -104,12 +137,20 @@ def migrate(conn: sqlite3.Connection) -> None:
 
 
 @contextmanager
-def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-    """Run a block atomically; nested use joins the enclosing transaction."""
+def transaction(
+    conn: sqlite3.Connection, *, begin: Literal["IMMEDIATE", "DEFERRED"] = "IMMEDIATE"
+) -> Iterator[sqlite3.Connection]:
+    """Run a block atomically; nested use joins the enclosing transaction.
+
+    ``IMMEDIATE`` (the default) takes the write lock up front, so a
+    read-then-write block never fails half-way on a lock upgrade. ``DEFERRED``
+    takes locks only as each database is touched: a block that writes only
+    TEMP tables then never locks the main database against other writers.
+    """
     if conn.in_transaction:
         yield conn
         return
-    conn.execute("BEGIN IMMEDIATE")
+    conn.execute("BEGIN DEFERRED" if begin == "DEFERRED" else "BEGIN IMMEDIATE")
     try:
         yield conn
     except BaseException:

@@ -16,3 +16,4 @@ mypy
 AGPL
 configs?
 hostnames?
+[Hh]omelab

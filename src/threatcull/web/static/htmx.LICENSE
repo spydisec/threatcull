@@ -1,0 +1,27 @@
+# htmx.min.js — vendored third-party asset
+#
+# Version:       2.0.11
+# Source:        https://cdn.jsdelivr.net/npm/htmx.org@2.0.11/dist/htmx.min.js
+# Upstream SHA-256 (as downloaded):
+#                d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717
+# Committed SHA-256 (upstream bytes + one trailing newline, added by this
+# repo's end-of-file-fixer pre-commit hook; content is otherwise identical):
+#                7f14135fe8ee3ed5f1a85fea21ba4dfba8236d697c4f95ab575d1c9091bb06ca
+# Fetched:  2026-09-24, for ThreatCull (served locally from /static/, never
+#           loaded from a CDN at runtime).
+#
+# Licence text follows, as published in the htmx.org npm package.
+
+Zero-Clause BSD
+=============
+
+Permission to use, copy, modify, and/or distribute this software for
+any purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED “AS IS” AND THE AUTHOR DISCLAIMS ALL
+WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE
+FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY
+DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
+AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.

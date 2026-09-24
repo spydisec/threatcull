@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Settings · ThreatCull{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<section class="card">
+  <h2>Business Mode</h2>
+  <p>{{ "On" if settings.business_mode else "Off" }}</p>
+  {% if disabled_sources %}
+  <p class="error">
+    Business Mode disabled these Sources (not cleared for business use):
+    {{ disabled_sources | join(", ") }}
+  </p>
+  {% endif %}
+  <form method="post" action="/settings/business-mode">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="on" value="{{ 'false' if settings.business_mode else 'true' }}">
+    <button type="submit">{{ "Turn off" if settings.business_mode else "Turn on" }} Business Mode</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Other settings</h2>
+  <p>Read-only for now.</p>
+  <dl class="stats">
+    <dt>Active window (days)</dt><dd>{{ settings.active_window_days }}</dd>
+    <dt>Retention (days)</dt><dd>{{ settings.retention_days }}</dd>
+    <dt>Stale after (hours)</dt><dd>{{ settings.stale_after_hours }}</dd>
+    <dt>Tier high</dt><dd>{{ settings.tier_high }}</dd>
+    <dt>Tier medium</dt><dd>{{ settings.tier_medium }}</dd>
+    <dt>Max shrink</dt><dd>{{ settings.max_shrink }}</dd>
+    <dt>Max stale ratio</dt><dd>{{ settings.max_stale_ratio }}</dd>
+  </dl>
+</section>
+{% endblock %}

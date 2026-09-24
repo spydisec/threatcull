@@ -1,0 +1,46 @@
+<tr id="source-row-{{ source.id }}">
+  <td>{{ source.id }}</td>
+  <td>{{ source.name }}</td>
+  <td>{{ source.role }}</td>
+  <td>{{ source.category }}</td>
+  <td>{{ "yes" if source.enabled else "no" }}</td>
+  <td>
+    <span class="badge">{{ source.licence_class.value }}</span>
+    {% if source.licence_url %}
+    <a href="{{ source.licence_url }}" rel="noopener noreferrer">{{ source.licence }}</a>
+    {% else %}
+    {{ source.licence }}
+    {% endif %}
+  </td>
+  <td><span class="badge">{{ source.business_use.value }}</span></td>
+  <td>{{ source.last_success_at or "never" }}</td>
+  <td>{{ source.last_attempt_at or "never" }}</td>
+  <td>{{ source.last_error or "none" }}</td>
+  <td>{{ source.disabled_reason or "-" }}</td>
+  <td class="actions">
+    {% if row_error is defined and row_error %}
+    <p class="error" role="alert">{{ row_error }}</p>
+    {% endif %}
+    {% if source.enabled %}
+    <form method="post" action="/sources/{{ source.id }}/disable"
+          hx-post="/sources/{{ source.id }}/disable"
+          hx-target="#source-row-{{ source.id }}" hx-swap="outerHTML">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit">Disable</button>
+    </form>
+    {% else %}
+    <form method="post" action="/sources/{{ source.id }}/enable"
+          hx-post="/sources/{{ source.id }}/enable"
+          hx-target="#source-row-{{ source.id }}" hx-swap="outerHTML">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if source.licence_class.value == "restricted" %}
+      <label>
+        <input type="checkbox" name="acknowledge_restricted" value="true">
+        I have read the licence and acknowledge its restricted terms
+      </label>
+      {% endif %}
+      <button type="submit">Enable</button>
+    </form>
+    {% endif %}
+  </td>
+</tr>

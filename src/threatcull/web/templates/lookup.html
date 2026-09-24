@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Lookup · ThreatCull{% endblock %}
+{% block content %}
+<h1>Lookup</h1>
+<p>Why is an IP, CIDR or domain listed?</p>
+
+<section class="card">
+  <form method="get" action="/lookup">
+    <label for="lookup-q">IP, CIDR or domain</label>
+    <input id="lookup-q" type="text" name="q" value="{{ q }}" maxlength="512" required>
+    <button type="submit">Look up</button>
+  </form>
+</section>
+
+{% if invalid %}
+<p class="error">{{ invalid }}</p>
+{% endif %}
+
+{% if result %}
+<section class="card">
+  <h2>{{ result.value }} ({{ result.kind }})</h2>
+  <dl class="stats">
+    <dt>Score</dt>
+    <dd>score {{ result.score }} ({{ result.tier or "not listed" }})</dd>
+    <dt>Allowlist</dt>
+    <dd>
+      {% if result.allowlisted_by %}
+      allowlisted by {{ result.allowlisted_by.value }}: {{ result.allowlisted_by.note }}
+      {% else %}not allowlisted{% endif %}
+    </dd>
+    <dt>Outputs</dt>
+    <dd>{{ labels|join(", ") if labels else "none" }}</dd>
+  </dl>
+  {% if labels %}
+  <p class="muted">An Output with a cap may still leave this Indicator out during Compile.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Sightings</h2>
+  {% if result.sightings %}
+  <table class="table">
+    <thead>
+      <tr><th>Source</th><th>State</th><th>First seen</th><th>Last seen</th><th>Source status</th></tr>
+    </thead>
+    <tbody>
+      {% for s in result.sightings %}
+      <tr>
+        <td>{{ s.source_name }}</td>
+        <td>{{ "current" if s.current else "no longer listed" }}</td>
+        <td>{{ s.first_seen }}</td>
+        <td>{{ s.last_seen }}</td>
+        <td>{{ "enabled" if s.enabled else "Source disabled" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No Source lists this value.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

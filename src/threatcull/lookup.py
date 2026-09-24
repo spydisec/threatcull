@@ -12,6 +12,7 @@ from threatcull.outputs.select import select
 from threatcull.policy.allowlist import Allowlist
 from threatcull.policy.scoring import Tier, scored_indicators
 from threatcull.store.allowlist import AllowlistEntry, builtin_entries, operator_entries
+from threatcull.store.home import home_allow_entries
 from threatcull.store.outputs import list_outputs
 from threatcull.store.settings import load_settings
 
@@ -69,7 +70,10 @@ def lookup(conn: sqlite3.Connection, raw: str, *, now: datetime) -> LookupResult
     )
     matches = scored_indicators(conn, now=now, settings=load_settings(conn), value=indicator.value)
     scored = matches[0] if matches else None
-    allowlisted_by = Allowlist([*operator_entries(conn), *builtin_entries(conn)]).match(
+    # The Home Network first, so the reason reads "Home Network: <note>" when both match.
+    allowlisted_by = Allowlist(home_allow_entries(conn)).match(
+        indicator.value, indicator.kind
+    ) or Allowlist([*operator_entries(conn), *builtin_entries(conn)]).match(
         indicator.value, indicator.kind
     )
     eligible: tuple[str, ...] = ()
@@ -84,3 +88,13 @@ def lookup(conn: sqlite3.Connection, raw: str, *, now: datetime) -> LookupResult
         allowlisted_by=allowlisted_by,
         eligible_outputs=eligible,
     )
+
+
+def output_labels(conn: sqlite3.Connection, names: tuple[str, ...]) -> tuple[str, ...]:
+    """Eligible Output names, each with its ``max_entries`` cap when it has one.
+
+    Qualifying by kind/Tier/category doesn't guarantee publication: an Output
+    with a cap may still cut the Indicator during Compile, so show the cap.
+    """
+    caps = {spec.name: spec.max_entries for spec in list_outputs(conn)}
+    return tuple(f"{name} (cap {caps[name]})" if caps.get(name) else name for name in names)

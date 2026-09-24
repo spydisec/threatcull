@@ -6,9 +6,16 @@ readme = "README.md"
 license = "AGPL-3.0-only"
 requires-python = ">=3.12"
 dependencies = [
+    "apscheduler>=3.10,<4",
+    "argon2-cffi>=25.1.0",
+    "fastapi>=0.141.1",
     "httpx>=0.28",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.6",
     "pydantic>=2.9",
+    "python-multipart>=0.0.32",
     "pyyaml>=6.0.2",
+    "uvicorn>=0.53.0",
 ]
 
 [project.scripts]
@@ -52,10 +59,21 @@ mypy_path = "src"
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 
+[[tool.mypy.overrides]]
+# APScheduler 3.x ships no type information (no stubs, no py.typed).
+module = ["apscheduler.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers -m 'not network'"
 testpaths = ["tests"]
 markers = ["network: reaches real upstream URLs (run explicitly with -m network)"]
+filterwarnings = [
+    # Our pinned fastapi/starlette still supports httpx for TestClient; httpx2 is
+    # not on the Plan 2 approved dependency list. Narrowly targeted: exact
+    # message and category, so any other deprecation still surfaces normally.
+    'ignore:Using `httpx` with `starlette\.testclient` is deprecated; install `httpx2` instead\.:starlette.exceptions.StarletteDeprecationWarning',
+]
 
 [tool.coverage.run]
 source = ["threatcull"]
