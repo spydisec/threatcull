@@ -16,6 +16,7 @@ from threatcull.store.users import password_fingerprint
 from threatcull.web.security import (
     CSRF_FORM_FIELD,
     CSRF_HEADER,
+    CsrfError,
     LoginRequiredError,
     csrf_token_matches,
 )
@@ -89,12 +90,18 @@ async def check_csrf(request: Request) -> None:
     """Every state-changing POST: ``403`` unless the session's CSRF token is sent.
 
     Accepted from the ``X-CSRF-Token`` header (API calls) or the ``csrf`` form
-    field (HTML forms). Origin/Referer are deliberately never consulted.
+    field (HTML forms). Origin/Referer are deliberately never consulted. An
+    ``/api/`` request that fails gets JSON (``HTTPException``); any other
+    request gets a rendered HTML page (``CsrfError``, handled in ``app.py``) —
+    a form opened in another session shouldn't show the raw API error body.
     """
     submitted = request.headers.get(CSRF_HEADER)
     content_type = request.headers.get("content-type", "")
     if submitted is None and content_type.startswith(_FORM_TYPES):
         value = (await request.form()).get(CSRF_FORM_FIELD)
         submitted = value if isinstance(value, str) else None
-    if not csrf_token_matches(request.session, submitted):
+    if csrf_token_matches(request.session, submitted):
+        return
+    if request.url.path.startswith("/api/"):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
+    raise CsrfError

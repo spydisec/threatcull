@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Sources · ThreatCull{% endblock %}
+{% block content %}
+<h1>Sources</h1>
+<section class="card">
+  {% if sources %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Id</th><th>Name</th><th>Role</th><th>Category</th><th>Enabled</th>
+        <th>Licence</th><th>Business use</th><th>Last success</th><th>Last attempt</th>
+        <th>Last error</th><th>Disabled reason</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for source in sources %}
+      <tr>
+        <td>{{ source.id }}</td>
+        <td>{{ source.name }}</td>
+        <td>{{ source.role }}</td>
+        <td>{{ source.category }}</td>
+        <td>{{ "yes" if source.enabled else "no" }}</td>
+        <td>
+          <span class="badge">{{ source.licence_class.value }}</span>
+          {% if source.licence_url %}
+          <a href="{{ source.licence_url }}" rel="noopener noreferrer">{{ source.licence }}</a>
+          {% else %}
+          {{ source.licence }}
+          {% endif %}
+        </td>
+        <td><span class="badge">{{ source.business_use.value }}</span></td>
+        <td>{{ source.last_success_at or "never" }}</td>
+        <td>{{ source.last_attempt_at or "never" }}</td>
+        <td>{{ source.last_error or "none" }}</td>
+        <td>{{ source.disabled_reason or "-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No Sources yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

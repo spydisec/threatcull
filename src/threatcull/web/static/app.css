@@ -91,3 +91,31 @@ button {
   background: var(--error-bg);
   border-radius: 6px;
 }
+
+section.card { margin-bottom: 1.5rem; }
+section.card h2 { margin-top: 0; }
+
+.stats { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0; }
+.stats dt { color: var(--muted); }
+.stats dd { margin: 0; }
+
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  margin-right: 0.35rem;
+  font-size: 0.85em;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+code { word-break: break-all; }

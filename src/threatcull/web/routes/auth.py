@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Login, logout, and the first protected page and API route."""
+"""Login and logout."""
 
 from __future__ import annotations
 
@@ -12,14 +12,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from starlette.responses import RedirectResponse, Response
 
 from threatcull.store.users import password_fingerprint, verify_user
-from threatcull.web.deps import (
-    SESSION_FINGERPRINT_KEY,
-    SESSION_USER_KEY,
-    check_csrf,
-    get_conn,
-    require_api_user,
-    require_user,
-)
+from threatcull.web.deps import SESSION_FINGERPRINT_KEY, SESSION_USER_KEY, check_csrf, get_conn
 from threatcull.web.security import LoginRateLimiter, client_ip, rotate_csrf_token
 from threatcull.web.templating import render
 
@@ -90,14 +83,3 @@ def login(
 def logout(request: Request) -> Response:
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
-
-
-@router.get("/")
-def home(request: Request, user: Annotated[str, Depends(require_user)]) -> Response:
-    # Placeholder until the dashboard (Task 4) replaces it.
-    return render(request, "base.html")
-
-
-@router.get("/api/v1/me")
-def me(user: Annotated[str, Depends(require_api_user)]) -> dict[str, str]:
-    return {"username": user}

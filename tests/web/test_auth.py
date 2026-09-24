@@ -214,6 +214,31 @@ def test_api_me_returns_the_logged_in_user(client: TestClient, logged_in: str) -
     assert response.json() == {"username": ADMIN_USER}
 
 
+def test_csrf_failure_on_an_html_form_post_renders_a_403_page(
+    client: TestClient, admin: str
+) -> None:
+    client.get("/login")
+    response = client.post(
+        "/login", data={"username": admin, "password": ADMIN_PASSWORD}, follow_redirects=False
+    )
+    assert response.status_code == 403
+    assert response.headers["content-type"].startswith("text/html")
+    assert "This form expired. Go back, reload the page and try again." in response.text
+
+
+def test_csrf_failure_on_an_api_post_stays_json(tmp_path: Path) -> None:
+    app = create_app(tmp_path, start_scheduler=False)
+
+    @app.post("/api/v1/echo", dependencies=[Depends(check_csrf)])
+    def echo() -> dict[str, bool]:
+        return {"ok": True}
+
+    with TestClient(app) as test_client:
+        response = test_client.post("/api/v1/echo")
+    assert response.status_code == 403
+    assert response.json() == {"detail": "CSRF token missing or invalid"}
+
+
 def test_check_csrf_accepts_the_x_csrf_token_header(tmp_path: Path) -> None:
     app = create_app(tmp_path, start_scheduler=False)
 

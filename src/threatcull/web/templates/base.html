@@ -11,7 +11,10 @@
     <a class="brand" href="/">ThreatCull</a>
     {% if user %}
     <nav class="nav" aria-label="Main">
-      {% block nav %}{% endblock %}
+      <a href="/">Dashboard</a>
+      <a href="/sources">Sources</a>
+      <a href="/outputs">Outputs</a>
+      <a href="/runs">Runs</a>
     </nav>
     <form class="logout" method="post" action="/logout">
       <input type="hidden" name="csrf" value="{{ csrf }}">

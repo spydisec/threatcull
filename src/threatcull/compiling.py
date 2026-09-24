@@ -8,7 +8,7 @@ so memory stays bounded however many Indicators the Sources list.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -23,7 +23,7 @@ from threatcull.store.outputs import list_outputs, record_published
 from threatcull.store.runs import finish_run, start_run
 from threatcull.store.settings import Settings, load_settings
 from threatcull.store.sightings import prune
-from threatcull.store.sources import list_sources
+from threatcull.store.sources import Source, list_sources
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +33,18 @@ class CompileReport:
     reasons: tuple[str, ...] = ()
     allowlisted: int = 0
     stale_sources: tuple[str, ...] = ()
+
+
+def stale_source_ids(
+    sources: Sequence[Source], *, now: datetime, settings: Settings
+) -> tuple[str, ...]:
+    """Ids of ``sources`` whose last success is missing or older than ``stale_after_hours``.
+
+    The Stale-Source rule Compile uses for its guard; the dashboard reuses this
+    instead of re-deriving it.
+    """
+    cutoff = ts(now - timedelta(hours=settings.stale_after_hours))
+    return tuple(s.id for s in sources if s.last_success_at is None or s.last_success_at < cutoff)
 
 
 def shrink_reasons(
@@ -85,10 +97,7 @@ def _compile(
     settings = load_settings(conn)
     prune(conn, now=now, retention_days=settings.retention_days)
     blocklists = list_sources(conn, enabled_only=True, role="blocklist")
-    cutoff = ts(now - timedelta(hours=settings.stale_after_hours))
-    stale = tuple(
-        s.id for s in blocklists if s.last_success_at is None or s.last_success_at < cutoff
-    )
+    stale = stale_source_ids(blocklists, now=now, settings=settings)
     create_scored_table(conn, now=now, settings=settings)
     staged: list[StagedOutput] = []
     try:

@@ -5,14 +5,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import Response
 
 from threatcull.store.users import warm_up as warm_up_password_checks
 from threatcull.web.deps import DB_NAME, open_db
-from threatcull.web.routes import auth, feeds, health
+from threatcull.web.routes import api, auth, feeds, health, pages
 from threatcull.web.security import (
+    CsrfError,
     LoginRateLimiter,
     LoginRequiredError,
     SecurityHeadersMiddleware,
@@ -20,12 +22,17 @@ from threatcull.web.security import (
     login_required_response,
     unhandled_exception_response,
 )
-from threatcull.web.templating import STATIC_DIR
+from threatcull.web.templating import STATIC_DIR, render
 
 __all__ = ["DB_NAME", "SESSION_COOKIE", "SESSION_MAX_AGE", "create_app", "open_db"]
 
 SESSION_COOKIE = "threatcull_session"
 SESSION_MAX_AGE = 12 * 60 * 60  # seconds
+
+
+async def _csrf_expired_response(request: Request, exc: Exception) -> Response:
+    del exc  # nothing request-specific belongs in this page
+    return render(request, "csrf_expired.html", status_code=403)
 
 
 def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
@@ -45,6 +52,7 @@ def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     # own fallback 500 for a truly unhandled exception (see security.py).
     app.add_exception_handler(Exception, unhandled_exception_response)
     app.add_exception_handler(LoginRequiredError, login_required_response)
+    app.add_exception_handler(CsrfError, _csrf_expired_response)
     # Homelab first: plain HTTP on a bare IP works, so no Secure flag by default.
     app.add_middleware(
         SessionMiddleware,
@@ -58,5 +66,7 @@ def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(pages.router)
+    app.include_router(api.router)
     app.include_router(feeds.router)
     return app

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Outputs · ThreatCull{% endblock %}
+{% block content %}
+<h1>Outputs</h1>
+<p>Rotate the token to get a new one. A Feed Token is shown only once, when it is created or rotated.</p>
+<section class="card">
+  {% if outputs %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Name</th><th>Kind</th><th>Format</th><th>Min Tier</th><th>Cap</th>
+        <th>Last count</th><th>Last published</th><th>URL</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for output in outputs %}
+      <tr>
+        <td>{{ output.name }}</td>
+        <td>{{ output.kind }}</td>
+        <td>{{ output.format }}</td>
+        <td>{{ output.min_tier }}</td>
+        <td>{{ output.max_entries or "no cap" }}</td>
+        <td>{{ output.last_count if output.last_count is not none else "never" }}</td>
+        <td>{{ output.last_published_at or "never" }}</td>
+        <td><code>{{ base_url }}o/{{ output.name }}?token=&lt;your Feed Token&gt;</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No Outputs configured.</p>
+  {% endif %}
+</section>
+{% endblock %}

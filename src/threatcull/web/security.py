@@ -271,3 +271,15 @@ class LoginRequiredError(Exception):
 async def login_required_response(request: Request, exc: Exception) -> Response:
     del request, exc
     return RedirectResponse("/login", status_code=303)
+
+
+# --- CSRF failure on an HTML form post -------------------------------------------
+
+
+class CsrfError(Exception):
+    """Raised by ``check_csrf`` for a non-``/api/`` request; turned into a 403 page.
+
+    A bearer-authenticated or other ``/api/`` request never raises this: those
+    stay a plain ``HTTPException(403)`` (JSON), since CSRF only applies to
+    cookie sessions in the first place.
+    """
