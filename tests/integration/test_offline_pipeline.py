@@ -103,3 +103,4 @@ def test_offline_pipeline_end_to_end(
     assert "FAIL ip-two: looks like an HTML page" in capsys.readouterr().err
     assert fixture_server.routes["/ip1.txt"].request_headers[-1]["If-None-Match"] == '"v1"'
     assert body("ip-medium.txt") == ["45.9.20.1", "45.9.20.2"]
+    assert body("ip-high.txt") == ["45.9.20.1"]
