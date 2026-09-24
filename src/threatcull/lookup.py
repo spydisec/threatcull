@@ -38,6 +38,11 @@ class LookupResult:
 
 
 def lookup(conn: sqlite3.Connection, raw: str, *, now: datetime) -> LookupResult | None:
+    """Explain one IP, CIDR or domain.
+
+    ``eligible_outputs`` means the Indicator qualifies by kind, Tier and category; an
+    Output with ``max_entries`` may still cut it during Compile.
+    """
     indicator = normalize(raw, "ip") or normalize(raw, "domain")
     if indicator is None:
         return None
