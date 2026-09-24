@@ -1,0 +1,15 @@
+rules:
+  - id: sql-built-with-string-formatting
+    languages: [python]
+    severity: ERROR
+    message: >-
+      SQL must be parameterised (? or :name). Never build SQL with f-strings,
+      % or + — Indicator values come from untrusted upstream Sources.
+    pattern-either:
+      - pattern: $CONN.execute(f"...", ...)
+      - pattern: $CONN.execute(f"...")
+      - pattern: $CONN.execute("..." % $X, ...)
+      - pattern: $CONN.execute("..." % $X)
+      - pattern: $CONN.execute("..." + $X, ...)
+      - pattern: $CONN.execute("..." + $X)
+      - pattern: $CONN.executemany(f"...", ...)

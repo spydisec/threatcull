@@ -1,0 +1,8 @@
+title = "ThreatCull gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Tests use dummy Feed Tokens"
+paths = ['''tests/.*\.py''']
