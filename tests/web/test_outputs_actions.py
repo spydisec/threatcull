@@ -234,3 +234,28 @@ def test_api_rotate_unknown_output_is_404(client: TestClient, logged_in: str) ->
         "/api/v1/outputs/does-not-exist/rotate", headers={"X-CSRF-Token": logged_in}
     )
     assert response.status_code == 404
+
+
+def test_rotate_page_warns_that_a_refresh_rotates_again(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    _seed(tmp_path)
+    response = client.post(f"/outputs/{SPEC.name}/rotate", data={"csrf": logged_in})
+    assert "Copy it now: refreshing this page rotates the token again." in response.text
+
+
+def test_create_page_says_copy_it_now(client: TestClient, logged_in: str) -> None:
+    response = client.post(
+        "/outputs",
+        data={
+            "csrf": logged_in,
+            "name": "my-output",
+            "kind": "ip",
+            "categories": ["malicious"],
+            "min_tier": "medium",
+            "max_entries": "",
+            "format": "plain",
+        },
+    )
+    assert response.status_code == 200
+    assert "Copy it now:" in response.text

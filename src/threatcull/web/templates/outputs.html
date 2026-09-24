@@ -15,6 +15,11 @@
     This token is shown once and will not be shown again.
     {% if revealed_rotated %}The old token for {{ revealed_name }} has stopped working.{% endif %}
   </p>
+  {% if revealed_rotated %}
+  <p><strong>Copy it now: refreshing this page rotates the token again.</strong></p>
+  {% else %}
+  <p><strong>Copy it now: refreshing this page won't show it again.</strong></p>
+  {% endif %}
   <p>Feed URL (query string):<br><code>{{ base_url }}o/{{ revealed_name }}?token={{ revealed_token }}</code></p>
   <p>Feed URL (path segment):<br><code>{{ base_url }}o/{{ revealed_name }}/{{ revealed_token }}</code></p>
 </section>
