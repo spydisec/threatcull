@@ -12,6 +12,7 @@ from secrets import compare_digest
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from threatcull.clock import utcnow
 from threatcull.fetcher import Fetcher
@@ -171,11 +172,15 @@ async def check_csrf(
     field (HTML forms). Origin/Referer are deliberately never consulted. An
     ``/api/`` request authenticated by a valid ``Authorization: Bearer`` API
     token is exempt (CSRF only protects cookie sessions); an invalid one is
-    ``401``. An ``/api/`` request that fails gets JSON (``HTTPException``); any other
+    ``401``, and so is a logged-out ``/api/`` request (before any CSRF check).
+    An ``/api/`` request that fails gets JSON (``HTTPException``); any other
     request gets a rendered HTML page (``CsrfError``, handled in ``app.py``) —
     a form opened in another session shouldn't show the raw API error body.
     """
-    bearer = _bearer_auth(request, conn)
+    is_api = request.url.path.startswith("/api/")
+    # The checks below read (and may write) SQLite, which can wait up to the
+    # busy timeout: run them in the threadpool, never on the event loop.
+    bearer = await run_in_threadpool(_bearer_auth, request, conn)
     if bearer.user is not None:
         # Authenticated by a valid API token: no ambient credential (cookie)
         # is involved, so there is nothing for CSRF to protect.
@@ -184,6 +189,9 @@ async def check_csrf(
         # An invalid bearer token decides the request: never fall back to the
         # session (nor let the session's CSRF token rescue it).
         raise HTTPException(status_code=401, detail="authentication required")
+    if is_api and await run_in_threadpool(_current_user, request, conn) is None:
+        # Logged out: say so (401) rather than blaming a missing CSRF token.
+        raise HTTPException(status_code=401, detail="authentication required")
     submitted = request.headers.get(CSRF_HEADER)
     content_type = request.headers.get("content-type", "")
     if submitted is None and content_type.startswith(_FORM_TYPES):
@@ -191,7 +199,7 @@ async def check_csrf(
         submitted = value if isinstance(value, str) else None
     if csrf_token_matches(request.session, submitted):
         return
-    if request.url.path.startswith("/api/"):
+    if is_api:
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
     raise CsrfError
 

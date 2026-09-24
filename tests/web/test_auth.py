@@ -226,7 +226,21 @@ def test_csrf_failure_on_an_html_form_post_renders_a_403_page(
     assert "This form expired. Go back, reload the page and try again." in response.text
 
 
-def test_csrf_failure_on_an_api_post_stays_json(tmp_path: Path) -> None:
+def test_csrf_failure_on_an_api_post_stays_json(tmp_path: Path, admin: str) -> None:
+    app = create_app(tmp_path, start_scheduler=False)
+
+    @app.post("/api/v1/echo", dependencies=[Depends(check_csrf)])
+    def echo() -> dict[str, bool]:
+        return {"ok": True}
+
+    with TestClient(app) as test_client:
+        login(test_client)
+        response = test_client.post("/api/v1/echo")
+    assert response.status_code == 403
+    assert response.json() == {"detail": "CSRF token missing or invalid"}
+
+
+def test_logged_out_api_post_is_401_before_csrf(tmp_path: Path) -> None:
     app = create_app(tmp_path, start_scheduler=False)
 
     @app.post("/api/v1/echo", dependencies=[Depends(check_csrf)])
@@ -235,11 +249,11 @@ def test_csrf_failure_on_an_api_post_stays_json(tmp_path: Path) -> None:
 
     with TestClient(app) as test_client:
         response = test_client.post("/api/v1/echo")
-    assert response.status_code == 403
-    assert response.json() == {"detail": "CSRF token missing or invalid"}
+    assert response.status_code == 401
+    assert response.json() == {"detail": "authentication required"}
 
 
-def test_check_csrf_accepts_the_x_csrf_token_header(tmp_path: Path) -> None:
+def test_check_csrf_accepts_the_x_csrf_token_header(tmp_path: Path, admin: str) -> None:
     app = create_app(tmp_path, start_scheduler=False)
 
     @app.post("/api/v1/echo", dependencies=[Depends(check_csrf)])
@@ -247,7 +261,7 @@ def test_check_csrf_accepts_the_x_csrf_token_header(tmp_path: Path) -> None:
         return {"ok": True}
 
     with TestClient(app) as test_client:
-        token = csrf_from(test_client.get("/login").text)
+        token = login(test_client)
         assert test_client.post("/api/v1/echo").status_code == 403
         wrong = test_client.post("/api/v1/echo", headers={"X-CSRF-Token": "nope"})
         assert wrong.status_code == 403
