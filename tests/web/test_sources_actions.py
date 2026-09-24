@@ -133,6 +133,40 @@ def test_htmx_request_gets_a_row_fragment_not_a_full_page(
     assert "source-row-allowed-list" in response.text
 
 
+_HX = {"HX-Request": "true"}
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        (RESTRICTED, "restricted-list", "acknowledge"),
+        (FORBIDDEN, "nc-list", "business use"),
+    ],
+    ids=["restricted-without-ack", "business-mode-forbidden"],
+)
+def test_htmx_refusal_comes_back_as_the_row_with_an_inline_error(
+    client: TestClient, logged_in: str, tmp_path: Path, case: tuple[object, str, str]
+) -> None:
+    entry, source_id, message = case
+    _seed(tmp_path, entry)
+    response = client.post(f"/sources/{source_id}/enable", data={"csrf": logged_in}, headers=_HX)
+    # 200 so htmx swaps it in (it ignores 4xx bodies by default).
+    assert response.status_code == 200
+    assert "<html" not in response.text
+    assert response.text.lstrip().startswith(f'<tr id="source-row-{source_id}"')
+    assert 'role="alert"' in response.text
+    assert message in response.text
+    assert _enabled(tmp_path, source_id) is False
+
+
+def test_htmx_unknown_source_comes_back_as_an_error_row(client: TestClient, logged_in: str) -> None:
+    response = client.post("/sources/gone/enable", data={"csrf": logged_in}, headers=_HX)
+    assert response.status_code == 200
+    assert response.text.lstrip().startswith('<tr id="source-row-gone"')
+    assert "gone" in response.text
+    assert 'role="alert"' in response.text
+
+
 def test_custom_source_happy_path(client: TestClient, logged_in: str, tmp_path: Path) -> None:
     response = client.post(
         "/sources/custom",

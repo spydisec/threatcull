@@ -21,7 +21,12 @@ from threatcull.store.home import add_home, home_allow_entries, home_entries, re
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
 from threatcull.store.runs import last_run, recent_runs
 from threatcull.store.settings import load_settings
-from threatcull.store.sources import add_custom_source, list_sources, set_business_mode
+from threatcull.store.sources import (
+    add_custom_source,
+    get_source,
+    list_sources,
+    set_business_mode,
+)
 from threatcull.store.sources import set_enabled as store_set_enabled
 from threatcull.web.deps import (
     check_csrf,
@@ -469,15 +474,25 @@ def _apply_enabled_change(
 ) -> Response:
     """Shared body of the enable/disable handlers below.
 
-    ``PolicyError``/``NotFoundError`` re-render the full Sources page with the
-    message (400/404); on success, an htmx request gets just the updated row
-    back, everyone else gets the usual ``303`` to ``/sources``.
+    Without htmx: ``PolicyError``/``NotFoundError`` re-render the full Sources
+    page with the message (400/404), success is the usual ``303`` to
+    ``/sources``.
+
+    With htmx (``HX-Request``) the answer is always the Source's row, status
+    ``200``: htmx swaps only 2xx bodies by default, and a full page can't go
+    inside a ``<tr>``. A refusal shows as an inline alert in the row's action
+    cell (the row itself unchanged); an unknown Source gets a one-cell error row.
     """
+    htmx = request.headers.get("HX-Request") == "true"
     try:
         source = store_set_enabled(
             conn, source_id, enabled, acknowledge_restricted=acknowledge_restricted
         )
     except NotFoundError as exc:
+        if htmx:
+            return render_fragment(
+                request, "_source_row_missing.html", {"source_id": source_id, "error": str(exc)}
+            )
         return render(
             request,
             "sources.html",
@@ -485,6 +500,12 @@ def _apply_enabled_change(
             status_code=404,
         )
     except PolicyError as exc:
+        if htmx:
+            return render_fragment(
+                request,
+                "_source_row.html",
+                {"source": get_source(conn, source_id), "row_error": str(exc)},
+            )
         return render(
             request,
             "sources.html",
@@ -492,7 +513,7 @@ def _apply_enabled_change(
             status_code=400,
         )
     _notify_sources_changed(request)
-    if request.headers.get("HX-Request") == "true":
+    if htmx:
         return render_fragment(request, "_source_row.html", {"source": source})
     return RedirectResponse("/sources", status_code=303)
 

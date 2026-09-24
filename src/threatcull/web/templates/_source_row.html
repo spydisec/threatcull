@@ -18,6 +18,9 @@
   <td>{{ source.last_error or "none" }}</td>
   <td>{{ source.disabled_reason or "-" }}</td>
   <td class="actions">
+    {% if row_error is defined and row_error %}
+    <p class="error" role="alert">{{ row_error }}</p>
+    {% endif %}
     {% if source.enabled %}
     <form method="post" action="/sources/{{ source.id }}/disable"
           hx-post="/sources/{{ source.id }}/disable"
