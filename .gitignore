@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+data/
+.env
+*.db
+*.db-*
+
+# Working plans (local only)
+docs/superpowers/
+
+# Local-only agent/process docs — never pushed (owner decision 2026-09-24)
+AGENTS.md
+CLAUDE.md
+CONTEXT.md
+CONTEXT-MAP.md
+docs/adr/
+docs/agents/
