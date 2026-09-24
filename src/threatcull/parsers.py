@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from collections.abc import Iterator
 from typing import Literal
 
@@ -23,6 +24,10 @@ _HOSTS_SKIP = frozenset(
         "0.0.0.0",  # noqa: S104  # nosec B104 - hosts-file sink address, not a bind address
     }
 )
+
+
+# Runs of characters that are not line boundaries in the sense of str.splitlines().
+_LINE = re.compile("[^\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]+")
 
 
 class ParseError(ValueError):
@@ -50,8 +55,10 @@ def parse(
 
 
 def _content_lines(text: str) -> Iterator[str]:
-    for raw in text.splitlines():
-        line = raw.split("#", 1)[0].strip()
+    # Lazy equivalent of text.splitlines() (minus empty lines, which are skipped anyway):
+    # a list of every line of a 70 MB Source would cost hundreds of MB.
+    for match in _LINE.finditer(text):
+        line = match.group().split("#", 1)[0].strip()
         if line and not line.startswith(_COMMENT_PREFIXES):
             yield line
 

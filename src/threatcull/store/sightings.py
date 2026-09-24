@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Collection
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 
 from threatcull.clock import ts
@@ -12,17 +12,12 @@ from threatcull.indicators import Indicator
 from threatcull.store.db import transaction
 
 
-def record_fetch_success(
-    conn: sqlite3.Connection,
-    source_id: str,
-    indicators: Collection[Indicator],
-    *,
-    now: datetime,
-    etag: str | None,
-    last_modified: str | None,
-) -> tuple[int, int]:
-    """Make ``indicators`` the Source's current Sightings. Returns (added, removed)."""
-    stamp = ts(now)
+def stage_fetched(conn: sqlite3.Connection, indicators: Iterable[Indicator]) -> int:
+    """Stream ``indicators`` into the TEMP table ``fetched``; returns how many distinct ones.
+
+    Staging never touches Sightings: ``apply_fetched`` does that, so a Fetch that
+    stages nothing valid can be dropped without harming the Source's current list.
+    """
     with transaction(conn):
         conn.execute(
             "CREATE TEMP TABLE IF NOT EXISTS fetched (value TEXT PRIMARY KEY, kind TEXT NOT NULL)"
@@ -32,6 +27,21 @@ def record_fetch_success(
             "INSERT OR IGNORE INTO fetched (value, kind) VALUES (?, ?)",
             ((indicator.value, indicator.kind) for indicator in indicators),
         )
+        staged: int = conn.execute("SELECT COUNT(*) FROM fetched").fetchone()[0]
+    return staged
+
+
+def apply_fetched(
+    conn: sqlite3.Connection,
+    source_id: str,
+    *,
+    now: datetime,
+    etag: str | None,
+    last_modified: str | None,
+) -> tuple[int, int]:
+    """Make the staged Indicators the Source's current Sightings. Returns (added, removed)."""
+    stamp = ts(now)
+    with transaction(conn):
         conn.execute(
             "INSERT OR IGNORE INTO indicators (value, kind) SELECT value, kind FROM fetched"
         )
@@ -70,7 +80,23 @@ def record_fetch_success(
             """,
             (etag, last_modified, stamp, stamp, source_id),
         )
+        conn.execute("DELETE FROM fetched")
     return added, removed
+
+
+def record_fetch_success(
+    conn: sqlite3.Connection,
+    source_id: str,
+    indicators: Iterable[Indicator],
+    *,
+    now: datetime,
+    etag: str | None,
+    last_modified: str | None,
+) -> tuple[int, int]:
+    """Make ``indicators`` the Source's current Sightings. Returns (added, removed)."""
+    with transaction(conn):
+        stage_fetched(conn, indicators)
+        return apply_fetched(conn, source_id, now=now, etag=etag, last_modified=last_modified)
 
 
 def record_not_modified(conn: sqlite3.Connection, source_id: str, *, now: datetime) -> None:

@@ -8,10 +8,12 @@ from tests.factories import make_entry
 from threatcull.clock import ts
 from threatcull.indicators import Indicator
 from threatcull.store.sightings import (
+    apply_fetched,
     prune,
     record_fetch_failure,
     record_fetch_success,
     record_not_modified,
+    stage_fetched,
 )
 from threatcull.store.sources import get_source, sync_catalog
 
@@ -86,3 +88,21 @@ def test_prune_removes_old_sightings_and_orphan_indicators(
     record_fetch_success(conn, "src", {B}, now=now, etag=None, last_modified=None)
     assert prune(conn, now=now, retention_days=30) == 1
     assert {r[0] for r in conn.execute("SELECT value FROM indicators")} == {"5.6.7.8"}
+
+
+def test_staging_counts_distinct_and_leaves_sightings_alone(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
+    record_fetch_success(conn, "src", {A}, now=now, etag=None, last_modified=None)
+    assert stage_fetched(conn, (ind for ind in (B, B, C))) == 2
+    assert _current(conn) == {"1.2.3.4"}
+    later = now + timedelta(hours=1)
+    assert apply_fetched(conn, "src", now=later, etag=None, last_modified=None) == (2, 1)
+    assert _current(conn) == {"5.6.7.8", "9.9.9.0/24"}
+
+
+def test_record_fetch_success_accepts_any_iterable(conn: sqlite3.Connection, now: datetime) -> None:
+    result = record_fetch_success(
+        conn, "src", iter([A, A, B]), now=now, etag=None, last_modified=None
+    )
+    assert result == (2, 0)

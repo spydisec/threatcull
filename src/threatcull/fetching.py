@@ -1,23 +1,28 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""The Fetch pipeline: download → parse → normalise → record Sightings."""
+"""The Fetch pipeline: download → parse → normalise → stage → record Sightings.
+
+Parsing, normalising and staging stream one candidate at a time, so a Source listing
+millions of Indicators never needs a Python list or set of them.
+"""
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
 from threatcull.fetcher import Fetcher, FetchError
-from threatcull.indicators import Indicator, normalize
+from threatcull.indicators import Indicator, SourceKind, normalize
 from threatcull.parsers import ParseError, parse
 from threatcull.store.errors import PolicyError
 from threatcull.store.runs import finish_run, start_run
 from threatcull.store.sightings import (
+    apply_fetched,
     record_fetch_failure,
-    record_fetch_success,
     record_not_modified,
+    stage_fetched,
 )
 from threatcull.store.sources import Source, get_source, list_sources
 
@@ -34,51 +39,60 @@ class FetchOutcome:
     error: str | None = None
 
 
+class _Tally:
+    """Counts candidates while they stream from the parser to the staging table."""
+
+    def __init__(self) -> None:
+        self.parsed = 0
+        self.invalid = 0
+
+    def normalised(self, candidates: Iterable[str], kind: SourceKind) -> Iterator[Indicator]:
+        for raw in candidates:
+            self.parsed += 1
+            indicator = normalize(raw, kind)
+            if indicator is None:
+                self.invalid += 1
+            else:
+                yield indicator
+
+
 def fetch_source(
     conn: sqlite3.Connection, source: Source, fetcher: Fetcher, *, now: datetime
 ) -> FetchOutcome:
     run_id = start_run(conn, "fetch", now=now, source_id=source.id)
+    tally = _Tally()
     try:
         result = fetcher(source.url, etag=source.etag, last_modified=source.last_modified)
         if result.status == "not_modified":
             record_not_modified(conn, source.id, now=now)
             finish_run(conn, run_id, "not_modified", now=now)
             return FetchOutcome(source.id, "not_modified")
-        candidates = list(
-            parse(
-                source.format, result.text, csv_column=source.csv_column, json_keys=source.json_keys
-            )
+        candidates = parse(
+            source.format, result.text, csv_column=source.csv_column, json_keys=source.json_keys
         )
+        valid = stage_fetched(conn, tally.normalised(candidates, source.kind))
     except (FetchError, ParseError) as exc:
         return _fail(conn, run_id, source.id, str(exc), now=now)
-    indicators: set[Indicator] = set()
-    invalid = 0
-    for raw in candidates:
-        indicator = normalize(raw, source.kind)
-        if indicator is None:
-            invalid += 1
-        else:
-            indicators.add(indicator)
-    if not indicators:
+    if not valid:
         # A 200 with an HTML error page or an empty body must not wipe the Source's Sightings.
-        error = f"no valid indicators in response ({len(candidates)} lines unparseable)"
+        error = f"no valid indicators in response ({tally.parsed} lines unparseable)"
         return _fail(conn, run_id, source.id, error, now=now)
-    added, removed = record_fetch_success(
-        conn, source.id, indicators, now=now, etag=result.etag, last_modified=result.last_modified
+    added, removed = apply_fetched(
+        conn, source.id, now=now, etag=result.etag, last_modified=result.last_modified
     )
     outcome = FetchOutcome(
         source.id,
         "ok",
-        parsed=len(candidates),
-        valid=len(indicators),
-        invalid=invalid,
+        parsed=tally.parsed,
+        valid=valid,
+        invalid=tally.invalid,
         added=added,
         removed=removed,
     )
     counts = {
         "parsed": outcome.parsed,
         "valid": outcome.valid,
-        "invalid": invalid,
+        "invalid": outcome.invalid,
         "added": added,
         "removed": removed,
     }

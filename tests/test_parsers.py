@@ -58,3 +58,8 @@ def test_json_reads_lists_under_the_given_keys() -> None:
 def test_json_rejects_malformed_content(text: str) -> None:
     with pytest.raises(ParseError):
         list(parse("json", text, json_keys=("addresses",)))
+
+
+def test_every_splitlines_boundary_separates_lines() -> None:
+    text = "1.1.1.1\r\n2.2.2.2\r3.3.3.3\x0c4.4.4.4\u20285.5.5.5\x856.6.6.6\n\n# c\n"
+    assert list(parse("plain", text)) == [f"{n}.{n}.{n}.{n}" for n in range(1, 7)]
