@@ -163,3 +163,21 @@ def test_outputs_list_and_rotate(cli: list[str], capsys: pytest.CaptureFixture[s
 
 def test_lookup_rejects_private_values(cli: list[str]) -> None:
     assert main([*cli, "lookup", "10.0.0.1"]) == 1
+
+
+def test_missing_catalog_file_reports_cleanly(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["--data-dir", str(tmp_path / "data"), "--catalog", str(tmp_path / "missing.yaml")]
+    assert main([*args, "init"]) == 1
+    assert capsys.readouterr().err.startswith("error:")
+
+
+def test_invalid_catalog_yaml_reports_cleanly(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("sources: [unclosed", encoding="utf-8")
+    args = ["--data-dir", str(tmp_path / "data"), "--catalog", str(bad)]
+    assert main([*args, "init"]) == 1
+    assert capsys.readouterr().err.startswith("error:")

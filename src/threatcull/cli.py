@@ -11,6 +11,8 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import get_args
 
+import yaml
+
 from threatcull.catalog import BusinessUse, Category, load_catalog
 from threatcull.clock import utcnow
 from threatcull.compiling import compile_outputs
@@ -107,7 +109,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             _print_token(name, token)
         handler = _HANDLERS[(args.command, getattr(args, "action", None))]
         return handler(conn, args)
-    except (PolicyError, NotFoundError, ValueError) as exc:  # CatalogError, ValidationError too
+    except (PolicyError, NotFoundError, ValueError, OSError, yaml.YAMLError) as exc:
+        # ValueError covers CatalogError and pydantic's ValidationError; OSError covers a
+        # missing/unreadable --catalog file; yaml.YAMLError covers malformed Catalog YAML.
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
     finally:
