@@ -4,13 +4,13 @@
 
 Self-hosted threat-feed compiler: collects indicators from public and private sources, removes noise and
 trusted infrastructure, scores them by independent-source agreement, and publishes licence-aware blocklists
-for firewalls, DNS and SIEMs — including in air-gapped networks.
+for firewalls, DNS and SIEMs, including in air-gapped networks.
 
 > Status: pre-v1, private.
 
 ## v1 scope
 
-**For:** SMB IT admins running their own firewall and DNS — designed so OT / air-gapped sites can follow.
+**For:** SMB IT admins running their own firewall and DNS, designed so OT / air-gapped sites can follow.
 
 **In v1:** licence-tagged Catalog of Sources (plus Custom Sources), Business Mode, Fetch/Compile pipeline,
 allowlists (built-in vendor ranges + operator entries), Confidence Score and Tiers, Outputs as plain /

@@ -1,0 +1,11 @@
+# Adapted from stop-slop by Hardik Pandya (MIT) — see NOTICE.md
+extends: existence
+message: "State the point directly instead of a 'not X, but Y' contrast."
+level: error
+ignorecase: true
+nonword: true
+tokens:
+  - "\\bnot because\\b[^.]{0,80}\\bbut because\\b"
+  - "\\bnot because\\b[^.]{0,80}\\.\\s+because\\b"
+  - "\\b(?:isn't|is not|wasn't)\\b[^.]{1,60}\\.\\s+(?:it's|it is|it was)\\b"
+  - "\\bthe (?:answer|question|problem) isn't\\b"

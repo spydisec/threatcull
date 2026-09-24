@@ -1,0 +1,18 @@
+# Adapted from stop-slop by Hardik Pandya (MIT) — see NOTICE.md
+extends: existence
+message: "Drop the filler adverb '%s'."
+level: warning
+ignorecase: true
+tokens:
+  - really
+  - literally
+  - genuinely
+  - honestly
+  - simply
+  - actually
+  - truly
+  - fundamentally
+  - inherently
+  - interestingly
+  - importantly
+  - crucially

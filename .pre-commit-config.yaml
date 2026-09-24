@@ -55,3 +55,4 @@ repos:
         entry: uvx vale
         language: system
         types: [markdown]
+        files: ^(README\.md|\.github/)
