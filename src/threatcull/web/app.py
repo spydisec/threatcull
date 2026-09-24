@@ -11,7 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from threatcull.store.users import warm_up as warm_up_password_checks
 from threatcull.web.deps import DB_NAME, open_db
-from threatcull.web.routes import auth, health
+from threatcull.web.routes import auth, feeds, health
 from threatcull.web.security import (
     LoginRateLimiter,
     LoginRequiredError,
@@ -58,4 +58,5 @@ def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(feeds.router)
     return app
