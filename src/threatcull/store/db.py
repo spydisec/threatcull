@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Literal
 
 _MIGRATIONS: tuple[str, ...] = (
     """
@@ -113,12 +114,20 @@ def migrate(conn: sqlite3.Connection) -> None:
 
 
 @contextmanager
-def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-    """Run a block atomically; nested use joins the enclosing transaction."""
+def transaction(
+    conn: sqlite3.Connection, *, begin: Literal["IMMEDIATE", "DEFERRED"] = "IMMEDIATE"
+) -> Iterator[sqlite3.Connection]:
+    """Run a block atomically; nested use joins the enclosing transaction.
+
+    ``IMMEDIATE`` (the default) takes the write lock up front, so a
+    read-then-write block never fails half-way on a lock upgrade. ``DEFERRED``
+    takes locks only as each database is touched: a block that writes only
+    TEMP tables then never locks the main database against other writers.
+    """
     if conn.in_transaction:
         yield conn
         return
-    conn.execute("BEGIN IMMEDIATE")
+    conn.execute("BEGIN DEFERRED" if begin == "DEFERRED" else "BEGIN IMMEDIATE")
     try:
         yield conn
     except BaseException:

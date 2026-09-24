@@ -140,3 +140,22 @@ def test_force_compile_while_running_reports_already_running(
     )
     assert forced.status_code == 303
     assert "A run is already in progress" in client.get("/runs").text
+
+
+def test_force_compile_with_a_stale_csrf_token_changes_nothing(
+    client: TestClient, logged_in: str, fake: BlockingFetcher
+) -> None:
+    response = client.post(
+        "/runs/compile-force",
+        data={"csrf": "stale", "confirm": "true"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
+    assert _runner(client).last_result is None
+    assert not fake.entered.is_set()
+    conn = open_db(client.app.state.data_dir)  # type: ignore[attr-defined]
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM runs WHERE type = 'compile'").fetchone()[0]
+    finally:
+        conn.close()
+    assert count == 0

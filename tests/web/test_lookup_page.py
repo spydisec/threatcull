@@ -113,3 +113,12 @@ def test_api_lookup_rejects_bad_values(client: TestClient, logged_in: str) -> No
 
 def test_api_lookup_needs_login(client: TestClient) -> None:
     assert client.get("/api/v1/lookup", params={"q": "45.9.20.1"}).status_code == 401
+
+
+def test_lookup_page_caps_the_query_length_like_the_api(client: TestClient, logged_in: str) -> None:
+    long_value = "a" * 501 + ".example.com"  # 513 characters
+    page = client.get("/lookup", params={"q": long_value})
+    assert page.status_code == 200
+    assert "too long" in page.text
+    assert "512" in page.text
+    assert client.get("/api/v1/lookup", params={"q": long_value}).status_code == 422

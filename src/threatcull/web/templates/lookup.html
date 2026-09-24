@@ -7,7 +7,7 @@
 <section class="card">
   <form method="get" action="/lookup">
     <label for="lookup-q">IP, CIDR or domain</label>
-    <input id="lookup-q" type="text" name="q" value="{{ q }}" required>
+    <input id="lookup-q" type="text" name="q" value="{{ q }}" maxlength="512" required>
     <button type="submit">Look up</button>
   </form>
 </section>

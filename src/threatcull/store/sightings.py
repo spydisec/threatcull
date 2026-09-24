@@ -17,8 +17,13 @@ def stage_fetched(conn: sqlite3.Connection, indicators: Iterable[Indicator]) -> 
 
     Staging never touches Sightings: ``apply_fetched`` does that, so a Fetch that
     stages nothing valid can be dropped without harming the Source's current list.
+
+    ``indicators`` is usually a lazy parse of a download, so this can take a
+    while. The transaction is DEFERRED and writes only the TEMP database, so
+    the main database's write lock is not held meanwhile: an operator's save
+    on another connection goes through (only ``apply_fetched`` locks it).
     """
-    with transaction(conn):
+    with transaction(conn, begin="DEFERRED"):
         conn.execute(
             "CREATE TEMP TABLE IF NOT EXISTS fetched (value TEXT PRIMARY KEY, kind TEXT NOT NULL)"
         )

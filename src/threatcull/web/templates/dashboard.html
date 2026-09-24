@@ -6,6 +6,11 @@
 <section class="card">
   <h2>Pipeline</h2>
   {% include "_status.html" %}
+  {% if scheduler_on %}
+  <p>Next compile at {{ next_compile_at or "not scheduled" }}.</p>
+  {% else %}
+  <p class="muted">Scheduler is off: Fetch and Compile run only when started by hand.</p>
+  {% endif %}
   <p><a href="/runs">Run now or see the Run history</a></p>
 </section>
 

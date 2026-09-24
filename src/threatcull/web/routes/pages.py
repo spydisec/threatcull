@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from pydantic import ValidationError
 from starlette.responses import RedirectResponse, Response
 
-from threatcull.clock import utcnow
+from threatcull.clock import ts, utcnow
 from threatcull.compiling import stale_source_ids
 from threatcull.lookup import lookup, output_labels
 from threatcull.store.allowlist import add_entry, builtin_entries, operator_entries, remove_entry
@@ -23,12 +23,14 @@ from threatcull.store.sources import add_custom_source, list_sources, set_busine
 from threatcull.store.sources import set_enabled as store_set_enabled
 from threatcull.web.deps import check_csrf, get_conn, require_user
 from threatcull.web.jobs import PipelineRunner
+from threatcull.web.scheduler import Scheduler
 from threatcull.web.schemas import AllowlistEntryIn, CustomSourceIn, OutputCreateIn
 from threatcull.web.templating import flash, render, render_fragment
 
 router = APIRouter()
 
 RUNS_PAGE_LIMIT = 50
+LOOKUP_MAX_LENGTH = 512  # same cap as /api/v1/lookup
 RUN_STARTED = "Run started."
 ALREADY_RUNNING = "A run is already in progress."
 
@@ -66,6 +68,9 @@ def dashboard(
     enabled_blocklists = list_sources(conn, enabled_only=True, role="blocklist")
     stale_ids = stale_source_ids(enabled_blocklists, now=utcnow(), settings=settings)
     allowlist_sources = list_sources(conn, role="allowlist")
+    scheduler: Scheduler | None = getattr(request.app.state, "scheduler", None)
+    next_run = scheduler.next_compile_at() if scheduler is not None else None
+    next_compile = ts(next_run) if next_run is not None else None
     return render(
         request,
         "dashboard.html",
@@ -76,6 +81,8 @@ def dashboard(
             "allowlist_count": len(allowlist_sources),
             "last_compile": last_run(conn, "compile"),
             "outputs": list_outputs(conn),
+            "scheduler_on": scheduler is not None,
+            "next_compile_at": next_compile,
             **_run_status(request),
         },
     )
@@ -243,7 +250,9 @@ def lookup_page(
     q: str = "",
 ) -> Response:
     context: dict[str, Any] = {"q": q, "result": None, "labels": (), "invalid": None}
-    if q:
+    if len(q) > LOOKUP_MAX_LENGTH:
+        context["invalid"] = f"That value is too long (over {LOOKUP_MAX_LENGTH} characters)."
+    elif q:
         result = lookup(conn, q, now=utcnow())
         if result is None:
             context["invalid"] = f"{q.strip()!r} is not a public IP, CIDR or domain."

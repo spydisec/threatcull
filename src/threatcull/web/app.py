@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -14,6 +16,7 @@ from threatcull.store.users import warm_up as warm_up_password_checks
 from threatcull.web.deps import DB_NAME, open_db
 from threatcull.web.jobs import PipelineRunner
 from threatcull.web.routes import api, auth, feeds, health, pages
+from threatcull.web.scheduler import Scheduler
 from threatcull.web.security import (
     CsrfError,
     LoginRateLimiter,
@@ -36,24 +39,48 @@ async def _csrf_expired_response(request: Request, exc: Exception) -> Response:
     return render(request, "csrf_expired.html", status_code=403)
 
 
+def _no_op() -> None:
+    return None
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Start the built-in scheduler (if asked) for the app's lifetime."""
+    scheduler: Scheduler | None = None
+    if app.state.start_scheduler:
+        scheduler = Scheduler(app.state.data_dir, app.state.runner)
+        scheduler.start()
+        app.state.scheduler = scheduler
+        app.state.on_sources_changed = scheduler.rescan
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            app.state.on_sources_changed = _no_op
+            app.state.scheduler = None
+            scheduler.shutdown()
+
+
 def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     """Build the ThreatCull web application rooted at ``data_dir``.
 
-    ``start_scheduler`` is accepted for forward compatibility; scheduler
-    wiring arrives in a later task.
+    With ``start_scheduler`` the app's lifespan runs the built-in scheduler
+    (periodic Fetches and Compiles); tests pass ``False`` to keep it off.
     """
-    app = FastAPI(title="ThreatCull", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(
+        title="ThreatCull", docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan
+    )
     app.state.data_dir = data_dir
     app.state.start_scheduler = start_scheduler
+    app.state.scheduler = None
     app.state.secret_key = load_or_create_secret(data_dir)
     app.state.login_limiter = LoginRateLimiter()
     app.state.login_verify_slots = auth.new_verify_slots()
-    # Hook for Task 8 (the scheduler): called after any Source enable/disable
-    # or custom-Source add, so a running scheduler can rescan. No-op until
-    # something more interesting replaces it.
-    app.state.on_sources_changed = lambda: None
-    # One runner per app: "Run now", force Compile (and later the scheduler)
-    # share its lock, so only one pipeline run happens at a time.
+    # Called after any Source enable/disable, custom-Source add or Business
+    # Mode change; the lifespan points it at the running scheduler's rescan.
+    app.state.on_sources_changed = _no_op
+    # One runner per app: "Run now", force Compile and the scheduler share its
+    # lock, so only one pipeline run happens at a time.
     app.state.runner = PipelineRunner(data_dir)
     warm_up_password_checks()  # no first-login timing tell for unknown usernames
     # Covers the one response SecurityHeadersMiddleware can't reach: Starlette's
