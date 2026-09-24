@@ -70,6 +70,8 @@ def test_operator_entries_are_normalised(conn: sqlite3.Connection, now: datetime
     assert (entry.value, entry.kind, entry.origin) == ("pay.example.com", "domain", "operator")
     with pytest.raises(ValueError, match="not a public IP"):
         add_entry(conn, "203.0.113.0/24", now=now)  # documentation range
+    with pytest.raises(ValueError, match="not a public IP"):
+        add_entry(conn, "192.168.0.0/15", now=now)  # overlaps private space
     assert [e.value for e in operator_entries(conn)] == ["pay.example.com"]
 
 

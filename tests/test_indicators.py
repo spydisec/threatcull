@@ -14,6 +14,12 @@ from threatcull.indicators import Indicator, normalize
         ("45.9.20.7/24", Indicator("45.9.20.0/24", "cidr")),
         ("2001:4860:4860::8888", Indicator("2001:4860:4860::8888", "ip")),
         ("::ffff:1.2.3.4", Indicator("1.2.3.4", "ip")),
+        # Public networks next to special-purpose ranges stay Indicators.
+        ("172.32.0.0/16", Indicator("172.32.0.0/16", "cidr")),
+        ("172.15.0.0/16", Indicator("172.15.0.0/16", "cidr")),
+        ("100.128.0.0/9", Indicator("100.128.0.0/9", "cidr")),
+        ("45.0.0.0/8", Indicator("45.0.0.0/8", "cidr")),
+        ("2a00::/16", Indicator("2a00::/16", "cidr")),
     ],
 )
 def test_normalize_ip_accepts_public_addresses_and_networks(raw: str, expected: Indicator) -> None:
@@ -37,6 +43,30 @@ def test_normalize_ip_accepts_public_addresses_and_networks(raw: str, expected: 
         "8.0.0.0/7",
         "10.0.0.0/8",
         "::/0",
+        # CIDRs that are not inside special-purpose space but overlap it.
+        "192.168.0.0/15",
+        "172.0.0.0/8",
+        "192.0.0.0/8",
+        "169.0.0.0/8",
+        "100.0.0.0/9",
+        "64:ff9b::/96",
+        "172.16.0.0/16",
+        "198.0.0.0/8",
+        "224.0.0.0/3",
+        "2001::/16",
+        "2002::/16",
+        "fc00::/7",
+        "2a00::/15",
+        # Single addresses inside special-purpose ranges.
+        "192.0.0.9",
+        "192.88.99.1",
+        "198.18.0.1",
+        "255.255.255.255",
+        "64:ff9b::1.2.3.4",
+        "64:ff9b:1::1",
+        "100::1",
+        "2002:102:304::1",
+        "::ffff:10.0.0.1",
     ],
 )
 def test_normalize_ip_rejects_invalid_private_and_oversized(raw: str) -> None:
