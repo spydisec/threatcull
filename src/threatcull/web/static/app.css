@@ -10,6 +10,7 @@
   --accent-fg: #ffffff;
   --error-bg: #fdecec;
   --error-fg: #9b1c1c;
+  --flash-bg: #e8f0fe;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,6 +24,7 @@
     --accent-fg: #0d1117;
     --error-bg: #3a1a1a;
     --error-fg: #ffb4b4;
+    --flash-bg: #1c2a44;
   }
 }
 
@@ -50,6 +52,7 @@ a { color: var(--accent); }
 .nav { display: flex; gap: 1rem; flex: 1; }
 .logout { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
 .who { color: var(--muted); }
+.muted { color: var(--muted); }
 
 main { max-width: 64rem; margin: 0 auto; padding: 1.5rem 1rem; }
 
@@ -91,6 +94,14 @@ button {
   background: var(--error-bg);
   border-radius: 6px;
 }
+
+.flash {
+  padding: 0.5rem 0.75rem;
+  background: var(--flash-bg);
+  border-radius: 6px;
+}
+
+.inline-form { display: inline-block; margin-right: 1rem; }
 
 section.card { margin-bottom: 1.5rem; }
 section.card h2 { margin-top: 0; }

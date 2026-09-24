@@ -1,0 +1,137 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+"""PipelineRunner: Fetch + Compile on its own connection, one run at a time."""
+
+import threading
+from collections.abc import Callable
+from pathlib import Path
+from typing import NoReturn
+
+import pytest
+
+from tests.factories import make_entry
+from threatcull.fetcher import Fetcher, FetchResult
+from threatcull.store.outputs import ensure_default_outputs
+from threatcull.store.runs import recent_runs
+from threatcull.store.sources import sync_catalog
+from threatcull.web import jobs
+from threatcull.web.deps import open_db
+from threatcull.web.jobs import PipelineRunner
+
+WAIT = 10.0  # seconds; every wait in these tests is bounded
+
+
+class BlockingFetcher:
+    """A fake fetcher that signals ``entered`` and then waits for ``release``."""
+
+    def __init__(self, text: str = "45.9.20.1\n") -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.text = text
+
+    def __call__(self, url: str, *, etag: str | None, last_modified: str | None) -> FetchResult:
+        self.entered.set()
+        self.release.wait(WAIT)
+        return FetchResult("ok", self.text)
+
+    def factory(self) -> Callable[[], Fetcher]:
+        return lambda: self
+
+
+class ExplodingFetcher:
+    def __call__(self, url: str, *, etag: str | None, last_modified: str | None) -> FetchResult:
+        raise RuntimeError("boom")
+
+
+def _seed(data_dir: Path) -> None:
+    conn = open_db(data_dir)
+    try:
+        sync_catalog(
+            conn,
+            [make_entry(id="a", url="https://a.example/1", default_enabled=True, name="Source A")],
+        )
+        ensure_default_outputs(conn)
+    finally:
+        conn.close()
+
+
+def test_run_fetches_and_compiles(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    fake = BlockingFetcher()
+    fake.release.set()
+    runner = PipelineRunner(tmp_path, fetcher_factory=fake.factory())
+    result = runner.run()
+    assert result.status == "ok"
+    assert result.fetched == 1
+    assert result.failed_sources == ()
+    assert "ip-high" in result.counts
+    assert runner.last_result == result
+    assert not runner.is_running()
+    conn = open_db(tmp_path)
+    try:
+        assert {run.type for run in recent_runs(conn, 10)} == {"fetch", "compile"}
+    finally:
+        conn.close()
+
+
+def test_second_run_is_refused_while_one_is_in_progress(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    fake = BlockingFetcher()
+    runner = PipelineRunner(tmp_path, fetcher_factory=fake.factory())
+    try:
+        assert runner.start_background() is True
+        assert fake.entered.wait(WAIT)
+        assert runner.is_running()
+        assert runner.start_background() is False
+        assert runner.run().status == "already_running"
+        assert runner.compile_only(force=True).status == "already_running"
+    finally:
+        fake.release.set()
+        assert runner.wait(WAIT)
+    assert not runner.is_running()
+    assert runner.last_result is not None
+    assert runner.last_result.status == "ok"
+    # The lock is free again: a new run goes through.
+    assert runner.run().status == "ok"
+
+
+def _explode(*args: object, **kwargs: object) -> NoReturn:
+    raise RuntimeError("database gone")
+
+
+def test_a_crashing_run_releases_the_lock_and_records_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed(tmp_path)
+    runner = PipelineRunner(tmp_path, fetcher_factory=ExplodingFetcher)
+    # A fetcher error is only a failed Fetch; a crash in Compile fails the run.
+    monkeypatch.setattr(jobs, "compile_outputs", _explode)
+    result = runner.run()
+    assert result.status == "failed"
+    assert result.error is not None
+    assert "database gone" in result.error
+    assert result.failed_sources == ("a",)
+    assert not runner.is_running()
+
+
+def test_background_crash_is_caught(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed(tmp_path)
+    runner = PipelineRunner(tmp_path, fetcher_factory=ExplodingFetcher)
+    monkeypatch.setattr(jobs, "compile_outputs", _explode)
+    assert runner.start_background() is True
+    assert runner.wait(WAIT)
+    assert not runner.is_running()
+    assert runner.last_result is not None
+    assert runner.last_result.status == "failed"
+
+
+def test_compile_only_does_not_fetch(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    runner = PipelineRunner(tmp_path, fetcher_factory=ExplodingFetcher)
+    result = runner.compile_only(force=True)
+    assert result.status == "ok"
+    assert result.fetched == 0
+    conn = open_db(tmp_path)
+    try:
+        assert [run.type for run in recent_runs(conn, 10)] == ["compile"]
+    finally:
+        conn.close()

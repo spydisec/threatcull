@@ -12,6 +12,7 @@ from starlette.responses import Response
 
 from threatcull.store.users import warm_up as warm_up_password_checks
 from threatcull.web.deps import DB_NAME, open_db
+from threatcull.web.jobs import PipelineRunner
 from threatcull.web.routes import api, auth, feeds, health, pages
 from threatcull.web.security import (
     CsrfError,
@@ -51,6 +52,9 @@ def create_app(data_dir: Path, *, start_scheduler: bool = True) -> FastAPI:
     # or custom-Source add, so a running scheduler can rescan. No-op until
     # something more interesting replaces it.
     app.state.on_sources_changed = lambda: None
+    # One runner per app: "Run now", force Compile (and later the scheduler)
+    # share its lock, so only one pipeline run happens at a time.
+    app.state.runner = PipelineRunner(data_dir)
     warm_up_password_checks()  # no first-login timing tell for unknown usernames
     # Covers the one response SecurityHeadersMiddleware can't reach: Starlette's
     # own fallback 500 for a truly unhandled exception (see security.py).

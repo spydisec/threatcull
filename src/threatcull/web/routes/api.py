@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Read-only JSON API: Sources, Outputs, Runs, Settings, and ``/api/v1/me``.
+"""JSON API: Sources, Outputs, Allowlist, Runs, Settings, Lookup and ``/api/v1/me``.
 
 Each resource has its own small dict-building function below: an explicit
 allow-list of fields, not a generic dataclass dump. A new field added to
@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from threatcull.clock import utcnow
+from threatcull.lookup import LookupResult, lookup
 from threatcull.store.allowlist import AllowlistEntry, add_entry, builtin_entries, operator_entries
 from threatcull.store.allowlist import remove_entry as store_remove_entry
 from threatcull.store.errors import NotFoundError, PolicyError
@@ -91,6 +92,32 @@ def _run_json(run: Run) -> dict[str, Any]:
         "status": run.status,
         "counts": run.counts,
         "error": run.error,
+    }
+
+
+def _lookup_json(result: LookupResult, outputs: list[OutputSpec]) -> dict[str, Any]:
+    caps = {spec.name: spec.max_entries for spec in outputs}
+    allowlisted = result.allowlisted_by
+    return {
+        "value": result.value,
+        "kind": result.kind,
+        "score": result.score,
+        "tier": result.tier,
+        "sightings": [
+            {
+                "source_id": s.source_id,
+                "source_name": s.source_name,
+                "source_enabled": s.enabled,
+                "current": s.current,
+                "first_seen": s.first_seen,
+                "last_seen": s.last_seen,
+            }
+            for s in result.sightings
+        ],
+        "allowlisted_by": _allowlist_json(allowlisted) if allowlisted else None,
+        "eligible_outputs": [
+            {"name": name, "max_entries": caps.get(name)} for name in result.eligible_outputs
+        ],
     }
 
 
@@ -218,3 +245,15 @@ def api_settings(
     user: Annotated[str, Depends(require_api_user)],
 ) -> dict[str, Any]:
     return _settings_json(load_settings(conn))
+
+
+@router.get("/lookup")
+def api_lookup(
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_api_user)],
+    q: Annotated[str, Query(max_length=512)],
+) -> dict[str, Any]:
+    result = lookup(conn, q, now=utcnow())
+    if result is None:
+        raise HTTPException(status_code=400, detail="not a public IP, CIDR or domain")
+    return _lookup_json(result, list_outputs(conn))

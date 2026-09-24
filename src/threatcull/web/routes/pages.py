@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Read-only dashboard, Sources, Outputs and Runs pages."""
+"""HTML pages: dashboard, Sources, Outputs, Allowlist, Runs, Lookup and Settings."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from starlette.responses import RedirectResponse, Response
 
 from threatcull.clock import utcnow
 from threatcull.compiling import stale_source_ids
+from threatcull.lookup import lookup, output_labels
 from threatcull.store.allowlist import add_entry, builtin_entries, operator_entries, remove_entry
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
@@ -21,12 +22,25 @@ from threatcull.store.settings import load_settings
 from threatcull.store.sources import add_custom_source, list_sources, set_business_mode
 from threatcull.store.sources import set_enabled as store_set_enabled
 from threatcull.web.deps import check_csrf, get_conn, require_user
+from threatcull.web.jobs import PipelineRunner
 from threatcull.web.schemas import AllowlistEntryIn, CustomSourceIn, OutputCreateIn
-from threatcull.web.templating import render, render_fragment
+from threatcull.web.templating import flash, render, render_fragment
 
 router = APIRouter()
 
 RUNS_PAGE_LIMIT = 50
+RUN_STARTED = "Run started."
+ALREADY_RUNNING = "A run is already in progress."
+
+
+def _runner(request: Request) -> PipelineRunner:
+    runner: PipelineRunner = request.app.state.runner
+    return runner
+
+
+def _run_status(request: Request) -> dict[str, Any]:
+    runner = _runner(request)
+    return {"running": runner.is_running(), "last_result": runner.last_result}
 
 
 def _notify_sources_changed(request: Request) -> None:
@@ -62,8 +76,18 @@ def dashboard(
             "allowlist_count": len(allowlist_sources),
             "last_compile": last_run(conn, "compile"),
             "outputs": list_outputs(conn),
+            **_run_status(request),
         },
     )
+
+
+@router.get("/partials/status")
+def status_fragment(
+    request: Request,
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    """Run status for the dashboard; while a run is going it re-polls itself every 3 s."""
+    return render_fragment(request, "_status.html", _run_status(request))
 
 
 @router.get("/sources")
@@ -174,7 +198,59 @@ def runs_page(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
-    return render(request, "runs.html", {"runs": recent_runs(conn, RUNS_PAGE_LIMIT)})
+    return render(request, "runs.html", _runs_context(request, conn))
+
+
+def _runs_context(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
+    return {"runs": recent_runs(conn, RUNS_PAGE_LIMIT), **_run_status(request)}
+
+
+@router.post("/runs/now", dependencies=[Depends(check_csrf)])
+def run_now(
+    request: Request,
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    started = _runner(request).start_background()
+    flash(request, RUN_STARTED if started else ALREADY_RUNNING)
+    return RedirectResponse("/runs", status_code=303)
+
+
+@router.post("/runs/compile-force", dependencies=[Depends(check_csrf)])
+def compile_force(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    confirm: Annotated[bool, Form()] = False,
+) -> Response:
+    """Compile with ``force=True`` (overrides a blocked Shrink Guard); no Fetch."""
+    if not confirm:
+        context = _runs_context(request, conn)
+        context["force_error"] = "Tick the confirm box to force a Compile."
+        return render(request, "runs.html", context, status_code=400)
+    result = _runner(request).compile_only(force=True)
+    if result.status == "already_running":
+        flash(request, ALREADY_RUNNING)
+    else:
+        flash(request, f"Compile forced: {result.status}.")
+    return RedirectResponse("/runs", status_code=303)
+
+
+@router.get("/lookup")
+def lookup_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    q: str = "",
+) -> Response:
+    context: dict[str, Any] = {"q": q, "result": None, "labels": (), "invalid": None}
+    if q:
+        result = lookup(conn, q, now=utcnow())
+        if result is None:
+            context["invalid"] = f"{q.strip()!r} is not a public IP, CIDR or domain."
+        else:
+            context["result"] = result
+            context["labels"] = output_labels(conn, result.eligible_outputs)
+    return render(request, "lookup.html", context)
 
 
 def _allowlist_context(conn: sqlite3.Connection) -> dict[str, Any]:

@@ -24,6 +24,21 @@ _env = jinja2.Environment(
 )
 templates = Jinja2Templates(env=_env)
 
+FLASH_KEY = "flash"
+
+
+def flash(request: Request, message: str) -> None:
+    """Queue a one-shot message for the next rendered page (Post/Redirect/Get).
+
+    Stored in the signed session cookie; only our own fixed strings go here.
+    """
+    request.session[FLASH_KEY] = message
+
+
+def _pop_flash(request: Request) -> str | None:
+    message = request.session.pop(FLASH_KEY, None)
+    return message if isinstance(message, str) else None
+
 
 def render(
     request: Request,
@@ -33,10 +48,12 @@ def render(
     status_code: int = 200,
     headers: dict[str, str] | None = None,
 ) -> Response:
-    """Render ``name`` with the logged-in ``user`` and the session ``csrf`` token."""
+    """Render ``name`` with the logged-in ``user``, the session ``csrf`` token and
+    any pending flash message (shown once, then gone)."""
     page: dict[str, Any] = {
         "user": session_user(request),
         "csrf": ensure_csrf_token(request.session),
+        "flash": _pop_flash(request),
     }
     page.update(context or {})
     return templates.TemplateResponse(request, name, page, status_code=status_code, headers=headers)

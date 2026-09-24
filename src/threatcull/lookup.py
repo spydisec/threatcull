@@ -84,3 +84,13 @@ def lookup(conn: sqlite3.Connection, raw: str, *, now: datetime) -> LookupResult
         allowlisted_by=allowlisted_by,
         eligible_outputs=eligible,
     )
+
+
+def output_labels(conn: sqlite3.Connection, names: tuple[str, ...]) -> tuple[str, ...]:
+    """Eligible Output names, each with its ``max_entries`` cap when it has one.
+
+    Qualifying by kind/Tier/category doesn't guarantee publication: an Output
+    with a cap may still cut the Indicator during Compile, so show the cap.
+    """
+    caps = {spec.name: spec.max_entries for spec in list_outputs(conn)}
+    return tuple(f"{name} (cap {caps[name]})" if caps.get(name) else name for name in names)

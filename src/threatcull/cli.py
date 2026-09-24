@@ -21,7 +21,7 @@ from threatcull.compiling import compile_outputs
 from threatcull.fetcher import HttpFetcher
 from threatcull.fetching import fetch_all
 from threatcull.indicators import SourceKind
-from threatcull.lookup import lookup
+from threatcull.lookup import lookup, output_labels
 from threatcull.parsers import SourceFormat
 from threatcull.store.allowlist import add_entry, operator_entries, remove_entry
 from threatcull.store.db import connect
@@ -266,12 +266,7 @@ def _lookup(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
         )
     if result.allowlisted_by:
         print(f"  allowlisted by {result.allowlisted_by.value}: {result.allowlisted_by.note}")
-    # Qualifying by kind/Tier/category doesn't guarantee publication: an Output with a
-    # max_entries cap may still cut this Indicator during Compile, so show the cap.
-    caps = {spec.name: spec.max_entries for spec in list_outputs(conn)}
-    labels = [
-        f"{name} (cap {caps[name]})" if caps.get(name) else name for name in result.eligible_outputs
-    ]
+    labels = output_labels(conn, result.eligible_outputs)
     print(f"  Outputs: {', '.join(labels) or 'none'}")
     return EXIT_OK
 

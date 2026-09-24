@@ -1,0 +1,16 @@
+{# Run status. While a run is going this fragment asks htmx to fetch it again
+   every 3 s (replacing itself); once idle it renders without hx-* attributes,
+   so the polling stops by itself. #}
+{% if running %}
+<div id="run-status" class="run-status" hx-get="/partials/status" hx-trigger="every 3s" hx-swap="outerHTML">
+  <p><strong>Running…</strong> Fetch and Compile are in progress.</p>
+</div>
+{% else %}
+<div id="run-status" class="run-status">
+  {% if last_result %}
+  <p>Idle. Last run from this server: {{ last_result.status }}, finished {{ last_result.finished_at }}.</p>
+  {% else %}
+  <p>Idle.</p>
+  {% endif %}
+</div>
+{% endif %}
