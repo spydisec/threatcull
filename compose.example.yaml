@@ -14,7 +14,8 @@ services:
     # Building from a clone of the repository instead:
     # build: .
     ports:
-      # Published on loopback unless THREATCULL_BIND names a LAN address.
+      # Published on loopback unless THREATCULL_BIND names a LAN address. For another
+      # host port change the first 6969 only: the container and its healthcheck use 6969.
       - "${THREATCULL_BIND:-127.0.0.1}:6969:6969"
     volumes:
       - threatcull-data:/data

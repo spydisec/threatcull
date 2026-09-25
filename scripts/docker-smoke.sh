@@ -14,13 +14,14 @@ cleanup() {
   echo "--- container logs ---"
   docker logs "$name" 2>&1 || true
   docker rm -f "$name" >/dev/null 2>&1 || true
-  docker volume rm "$volume" >/dev/null 2>&1 || true
+  docker volume rm "$volume" "${volume}-ro" >/dev/null 2>&1 || true
+  rm -f "$secret_file"
 }
+secret_file=$(mktemp)
 trap cleanup EXIT
 
 start() {
-  docker run -d --name "$name" -p "127.0.0.1:${port}:6969" -v "${volume}:/data" \
-    -e THREATCULL_ADMIN_PASSWORD=smoke-password-123 "$@" "$image" >/dev/null
+  docker run -d --name "$name" -p "127.0.0.1:${port}:6969" "$@" "$image" >/dev/null
 }
 
 wait_healthy() {
@@ -34,7 +35,7 @@ wait_healthy() {
 
 check() { echo "ok: $1"; }
 
-start
+start -v "${volume}:/data" -e THREATCULL_ADMIN_PASSWORD=smoke-password-123
 wait_healthy && check "healthz answers"
 
 [ "$(docker exec "$name" id -u)" = "10001" ] && check "runs as uid 10001"
@@ -62,7 +63,15 @@ docker exec "$name" threatcull --data-dir /data user list | grep -q '^admin' \
   && check "data persisted on the volume"
 
 docker rm -f "$name" >/dev/null
-start --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true
+# A fresh volume, hardened like compose.example.yaml, with the first admin password
+# from a mounted secret file (THREATCULL_ADMIN_PASSWORD_FILE).
+printf 'from-a-secret-file\n' > "$secret_file"
+chmod 644 "$secret_file"
+start -v "${volume}-ro:/data" -v "${secret_file}:/run/secrets/threatcull_admin:ro" \
+  -e THREATCULL_ADMIN_PASSWORD_FILE=/run/secrets/threatcull_admin \
+  --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true
 wait_healthy && check "runs with a read-only root filesystem and no capabilities"
+docker logs "$name" 2>&1 | grep -q "created user admin from THREATCULL_ADMIN_PASSWORD_FILE" \
+  && check "admin created from the password file"
 
 echo "smoke test passed"
