@@ -163,6 +163,6 @@ def test_a_blocked_compile_explains_itself_and_links_to_force_compile(
     finally:
         conn.close()
     page = client.get("/").text
-    assert "The Shrink Guard blocked the last Compile" in page
+    assert "Outputs not updated" in page
     assert "/runs#force-compile" in page
     assert 'id="force-compile" open' in client.get("/runs").text

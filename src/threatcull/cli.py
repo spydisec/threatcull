@@ -42,7 +42,6 @@ from threatcull.store.runs import fail_interrupted_runs
 from threatcull.store.sources import (
     add_custom_source,
     list_sources,
-    set_business_mode,
     set_enabled,
     sync_catalog,
 )
@@ -90,10 +89,6 @@ def build_parser() -> argparse.ArgumentParser:
     custom.add_argument("--json-key", dest="json_keys", action="append", default=[])
     custom.add_argument(
         "--business-use", choices=[b.value for b in BusinessUse], default=BusinessUse.UNKNOWN.value
-    )
-
-    sub.add_parser("business-mode", help="Turn Business Mode on or off").add_argument(
-        "state", choices=["on", "off"]
     )
 
     allow = sub.add_parser("allow", help="Manage the operator Allowlist")
@@ -286,14 +281,6 @@ def _sources_add_custom(conn: sqlite3.Connection, args: argparse.Namespace) -> i
         business_use=BusinessUse(args.business_use),
     )
     print(f"added {source.id} (disabled; enable it with `threatcull sources enable {source.id}`)")
-    return EXIT_OK
-
-
-def _business_mode(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
-    disabled = set_business_mode(conn, args.state == "on")
-    print(f"Business Mode {args.state}")
-    for source_id in disabled:
-        print(f"disabled {source_id}: not cleared for business use")
     return EXIT_OK
 
 
@@ -536,7 +523,6 @@ _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("sources", "enable"): _sources_enable,
     ("sources", "disable"): _sources_disable,
     ("sources", "add-custom"): _sources_add_custom,
-    ("business-mode", None): _business_mode,
     ("allow", "add"): _allow_add,
     ("allow", "remove"): _allow_remove,
     ("allow", "list"): _allow_list,

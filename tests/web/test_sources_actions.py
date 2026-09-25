@@ -66,16 +66,15 @@ def test_disabling_an_enabled_source_works(
     assert _enabled(tmp_path, "allowed-list") is False
 
 
-def test_enabling_a_forbidden_source_under_business_mode_is_refused(
+def test_a_source_not_cleared_for_business_use_can_be_enabled(
     client: TestClient, logged_in: str, tmp_path: Path
 ) -> None:
-    _seed(tmp_path, FORBIDDEN)  # Business Mode is on by default.
+    _seed(tmp_path, FORBIDDEN)
     response = client.post(
         "/sources/nc-list/enable", data={"csrf": logged_in}, follow_redirects=False
     )
-    assert response.status_code == 400
-    assert "business use" in response.text
-    assert _enabled(tmp_path, "nc-list") is False
+    assert response.status_code == 303
+    assert _enabled(tmp_path, "nc-list") is True
 
 
 def test_restricted_source_needs_acknowledgement(
@@ -140,9 +139,8 @@ _HX = {"HX-Request": "true"}
     "case",
     [
         (RESTRICTED, "restricted-list", "acknowledge"),
-        (FORBIDDEN, "nc-list", "business use"),
     ],
-    ids=["restricted-without-ack", "business-mode-forbidden"],
+    ids=["restricted-without-ack"],
 )
 def test_htmx_refusal_comes_back_as_the_row_with_an_inline_error(
     client: TestClient, logged_in: str, tmp_path: Path, case: tuple[object, str, str]
@@ -400,7 +398,7 @@ def test_api_enable_source_requires_session_and_csrf_header(
     assert _enabled(tmp_path, "allowed-list") is True
 
 
-def test_api_enable_forbidden_source_is_a_400(
+def test_api_enables_a_source_not_cleared_for_business_use(
     client: TestClient, logged_in: str, tmp_path: Path
 ) -> None:
     _seed(tmp_path, FORBIDDEN)
@@ -409,8 +407,8 @@ def test_api_enable_forbidden_source_is_a_400(
         json={"enabled": True},
         headers={"X-CSRF-Token": logged_in},
     )
-    assert response.status_code == 400
-    assert _enabled(tmp_path, "nc-list") is False
+    assert response.status_code == 200
+    assert _enabled(tmp_path, "nc-list") is True
 
 
 def test_api_enable_unknown_source_is_a_404(client: TestClient, logged_in: str) -> None:

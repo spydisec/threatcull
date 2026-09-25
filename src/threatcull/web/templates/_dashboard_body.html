@@ -14,20 +14,22 @@
   </div>
   <div class="dash-head-side">
     <span class="health health-{{ health.tone }}" role="status">{{ health.label }}</span>
-    <span class="badge">Business Mode {{ "on" if business_mode else "off" }}</span>
-    {% if last_compile %}{{ pill(last_compile.status, id="last-compile-status") }}{% endif %}
+    {% if last_compile %}<span class="sr-only">Last Compile status: <span id="last-compile-status">{{ last_compile.status }}</span></span>{% endif %}
     <a class="button" href="/runs">Run now</a>
   </div>
   {% include "_status.html" %}
   {% if last_compile and last_compile.error %}
-  <div class="error guard-note">
-    <p><strong>{{ "The Shrink Guard blocked the last Compile" if last_compile.status == "blocked" else "The last Compile failed" }}:</strong> {{ last_compile.error }}</p>
-    {% if last_compile.status == "blocked" %}
-    <p>Devices keep getting the previous Outputs, so a broken upstream feed can't empty their blocklists.
-      If the drop is expected, <a href="/runs#force-compile">Force Compile</a> publishes the new lists once.
-      Disabling a Source resets the guard for the Outputs it fed, so this only appears for drops the Sources caused themselves.</p>
-    {% endif %}
+  {% if last_compile.status == "blocked" %}
+  <div class="notice notice-warn guard-note" role="status">
+    <p><strong>Outputs not updated:</strong> {{ last_compile.error }}.</p>
+    <p>Devices keep the previous lists, so a broken upstream feed can't empty them.
+      If the drop is expected, <a href="/runs#force-compile">Force Compile</a> publishes the new lists.</p>
   </div>
+  {% elif last_compile.status == "ok" %}
+  <p class="notice notice-info guard-note" role="status">Published with Force Compile. The Shrink Guard had flagged: {{ last_compile.error }}.</p>
+  {% else %}
+  <p class="error guard-note" role="alert"><strong>The last Compile failed:</strong> {{ last_compile.error }}</p>
+  {% endif %}
   {% endif %}
 </header>
 
@@ -66,7 +68,7 @@
   <div class="tile">
     <p class="tile-label">Active domains</p>
     <p class="tile-value">{{ "{:,}".format(stats.kept("domain")) }}</p>
-    <p class="tile-note">{% for name, count in stats.categories.get("domain", {}).items() | sort(attribute="1", reverse=true) %}{{ "{:,}".format(count) }} {{ name }}{% if not loop.last %} / {% endif %}{% else %}none{% endfor %}</p>
+    <p class="tile-note">{% for name, count in stats.categories.get("domain", {}).items() | sort(attribute="1", reverse=true) %}{{ "{:,}".format(count) }} {{ category_labels.get(name, name) | lower }}{% if not loop.last %} / {% endif %}{% else %}none{% endfor %}</p>
   </div>
   <div class="tile{% if failing_count or stale_count %} is-warn{% endif %}">
     <p class="tile-label">Blocklist Sources</p>
@@ -121,13 +123,16 @@
           {% for c in source_changes %}
           <tr>
             <td>{{ c.name }}</td>
-            {% if c.status == "ok" %}
-            <td class="num delta-up">+{{ "{:,}".format(c.added) }}</td>
-            <td class="num delta-down">-{{ "{:,}".format(c.removed) }}</td>
+            {% if c.status in ("ok", "not_modified") %}
+            <td class="num {{ 'delta-up' if c.added else 'muted' }}">+{{ "{:,}".format(c.added) }}</td>
+            <td class="num {{ 'delta-down' if c.removed else 'muted' }}">-{{ "{:,}".format(c.removed) }}</td>
             {% else %}
-            <td colspan="2" class="num">{{ pill(c.status) }}</td>
+            <td class="num muted">-</td>
+            <td class="num muted">-</td>
             {% endif %}
-            <td class="nowrap">{{ c.at | when("running") }}</td>
+            <td class="nowrap">{{ c.at | when("running") }}
+              {% if c.status == "not_modified" %}<div class="sub">unchanged upstream</div>
+              {% elif c.status not in ("ok", "running") %}<div class="sub sub-bad">{{ c.status }}</div>{% endif %}</td>
           </tr>
           {% else %}
           <tr><td colspan="4" class="muted">No Fetch yet.</td></tr>
@@ -146,8 +151,8 @@
           <tr>
             <td>{{ o.name }}</td>
             <td class="num">{{ "{:,}".format(o.count) if o.count is not none else "never" }}</td>
-            <td class="num {% if o.change and o.change > 0 %}delta-up{% elif o.change and o.change < 0 %}delta-down{% endif %}">
-              {% if o.change is none %}<span class="muted">new</span>{% elif o.change > 0 %}+{{ "{:,}".format(o.change) }}{% else %}{{ "{:,}".format(o.change) }}{% endif %}
+            <td class="num {% if o.change and o.change > 0 %}delta-up{% elif o.change and o.change < 0 %}delta-down{% else %}muted{% endif %}">
+              {% if o.change is none %}new{% elif o.change > 0 %}+{{ "{:,}".format(o.change) }}{% elif o.change < 0 %}{{ "{:,}".format(o.change) }}{% else %}0{% endif %}
             </td>
           </tr>
           {% endfor %}

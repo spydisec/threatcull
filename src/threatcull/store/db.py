@@ -121,6 +121,14 @@ _MIGRATIONS: tuple[str, ...] = (
     ALTER TABLE outputs ADD COLUMN last_sources TEXT;
     PRAGMA user_version = 6;
     """,
+    # Business Mode was removed: drop its setting and the reason it left on Sources
+    # (those Sources stay disabled until the operator enables them).
+    """
+    DELETE FROM settings WHERE key = 'business_mode';
+    UPDATE sources SET disabled_reason = NULL
+        WHERE disabled_reason = 'Disabled by Business Mode: not cleared for business use';
+    PRAGMA user_version = 7;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)

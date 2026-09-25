@@ -12,7 +12,7 @@ for firewalls, DNS and SIEMs, including in air-gapped networks.
 
 **For:** SMB IT admins running their own firewall and DNS, designed so OT / air-gapped sites can follow.
 
-**In v1:** licence-tagged Catalog of Sources (plus Custom Sources), Business Mode, Fetch/Compile pipeline,
+**In v1:** licence-tagged Catalog of Sources (plus Custom Sources), Fetch/Compile pipeline,
 allowlists (built-in vendor ranges + operator entries), Confidence Score and Tiers, Outputs as plain /
 hosts / AdGuard / RPZ / CSV / JSON, served over HTTP with Feed Tokens or pushed to S3-compatible storage,
 Indicator lookup, Run history, single admin login, YAML configuration export/import. Runs as a plain
@@ -28,7 +28,7 @@ pushing rules directly to firewalls, per-Source weights, alerting integrations, 
 3. The Run completes and the UI shows per-Source counts and status.
 4. `curl http://<lan-ip>:6969/o/<output>?token=<feed-token>` returns a valid list in the chosen Format.
 5. Looking up an Indicator shows which Sources listed it and when, or the allowlist reason.
-6. Business Mode disables every blocklist Source whose Business Use is not `allowed` and says why.
+6. The Sources page shows each Source's licence class, Business Use and a link to its terms.
 7. The full pipeline test passes with no internet access.
 
 ## Quick start
@@ -107,10 +107,9 @@ every Source straight from its publisher, so the operator of that installation a
 each Source's terms.
 
 - The licence class and Business Use on each Source summarise the published terms as the
-  Catalog understood them. Read the linked terms yourself before relying on a Source,
+  Catalog understood them. ThreatCull shows them but never enforces them: you decide which
+  Sources your use allows. Read the linked terms yourself before relying on a Source,
   especially for business use. They are not legal advice.
-- Business Mode (on by default) keeps every blocklist Source whose Business Use is not
-  `allowed` disabled.
 - Serving Outputs to your own firewalls, DNS servers and SIEM counts as your own use.
   Sharing a Feed URL with another organisation, or exposing `/o/` to the internet, passes
   the data on to others, which many Source licences forbid.

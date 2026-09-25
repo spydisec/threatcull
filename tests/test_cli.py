@@ -77,15 +77,10 @@ def test_run_publishes_outputs_and_lookup_explains(
     assert "ip-medium (cap 25000)" in out
 
 
-def test_business_mode_blocks_noncommercial_sources(
+def test_a_noncommercial_source_can_be_enabled(
     cli: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert main([*cli, "sources", "enable", "src-nc"]) == 1
-    assert "business use" in capsys.readouterr().err
-    assert main([*cli, "business-mode", "off"]) == 0
     assert main([*cli, "sources", "enable", "src-nc"]) == 0
-    assert main([*cli, "business-mode", "on"]) == 0
-    assert "src-nc" in capsys.readouterr().out
 
 
 def test_allowlist_commands(

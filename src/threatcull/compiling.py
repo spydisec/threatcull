@@ -68,7 +68,7 @@ def feeding_sources(spec: OutputSpec, blocklists: Sequence[Source]) -> frozenset
 def rebaselined_outputs(specs: Sequence[OutputSpec], blocklists: Sequence[Source]) -> set[str]:
     """Outputs that lost a feeding Source since they were last published.
 
-    The operator (or Business Mode, or a Catalog update) disabled that Source, so a
+    The operator (or a Catalog update) disabled that Source, so a
     smaller Output is the intended new baseline, not an upstream failure.
     """
     return {

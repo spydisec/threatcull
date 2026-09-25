@@ -149,7 +149,6 @@ def _lookup_json(result: LookupResult, outputs: list[OutputSpec]) -> dict[str, A
 
 def _settings_json(settings: Settings) -> dict[str, Any]:
     return {
-        "business_mode": settings.business_mode,
         "active_window_days": settings.active_window_days,
         "retention_days": settings.retention_days,
         "stale_after_hours": settings.stale_after_hours,

@@ -40,10 +40,10 @@ from threatcull.store.sources import (
     add_custom_source,
     get_source,
     list_sources,
-    set_business_mode,
 )
 from threatcull.store.sources import set_enabled as store_set_enabled
 from threatcull.web.dashboard import (
+    CATEGORY_LABELS,
     FUNNEL_WIDTH,
     chart_data,
     funnel,
@@ -117,7 +117,6 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
     stats = CompileStats.from_json(history[-1].stats) if history else None
     outputs = list_outputs(conn)
     context: dict[str, Any] = {
-        "business_mode": settings.business_mode,
         "enabled_blocklist_count": len(blocklists),
         "failing_count": sum(1 for s in blocklists if s.last_error),
         "stale_count": len(stale_ids),
@@ -132,6 +131,7 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
         "scheduler_on": scheduler is not None,
         "next_compile_at": ts(next_run) if next_run is not None else None,
         "refreshed_at": ts(now),
+        "category_labels": CATEGORY_LABELS,
         "stats": stats,
         **_run_status(request),
     }
@@ -722,22 +722,4 @@ def settings_page(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
-    return render(
-        request, "settings.html", {"settings": load_settings(conn), "disabled_sources": []}
-    )
-
-
-@router.post("/settings/business-mode", dependencies=[Depends(check_csrf)])
-def set_business_mode_page(
-    request: Request,
-    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
-    user: Annotated[str, Depends(require_user)],
-    on: Annotated[bool, Form()] = False,
-) -> Response:
-    disabled = set_business_mode(conn, on)
-    _notify_sources_changed(request)
-    return render(
-        request,
-        "settings.html",
-        {"settings": load_settings(conn), "disabled_sources": disabled},
-    )
+    return render(request, "settings.html", {"settings": load_settings(conn)})
