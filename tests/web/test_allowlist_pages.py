@@ -243,3 +243,54 @@ def test_api_remove_entry_requires_csrf_and_returns_404_for_unknown(
         headers={"X-CSRF-Token": logged_in},
     )
     assert missing.status_code == 404
+
+
+def test_import_file_adds_entries_and_reports_skipped_lines(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    upload = b"# partners\npay.example.com,payments\n8.8.8.8\nnot a value\n"
+    response = client.post(
+        "/allowlist/import",
+        data={"csrf": logged_in},
+        files={"file": ("list.csv", upload, "text/csv")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/allowlist"
+    assert _operator_values(tmp_path) == ["8.8.8.8", "pay.example.com"]
+
+    page = client.get("/allowlist")
+    assert "Imported 2 new entries" in page.text
+    assert "1 line skipped" in page.text
+    assert "line 4" in page.text
+
+
+def test_import_refuses_a_file_that_is_not_utf8(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    response = client.post(
+        "/allowlist/import",
+        data={"csrf": logged_in},
+        files={"file": ("list.txt", b"\xff\xfe\x00", "text/plain")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert "not UTF-8" in response.text
+    assert _operator_values(tmp_path) == []
+
+
+def test_import_without_a_file_is_a_400(client: TestClient, logged_in: str) -> None:
+    response = client.post("/allowlist/import", data={"csrf": logged_in}, follow_redirects=False)
+    assert response.status_code == 400
+    assert "Choose a file" in response.text
+
+
+def test_import_needs_the_csrf_token(client: TestClient, logged_in: str, tmp_path: Path) -> None:
+    response = client.post(
+        "/allowlist/import",
+        data={"csrf": "wrong"},
+        files={"file": ("list.txt", b"8.8.8.8\n", "text/plain")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
+    assert _operator_values(tmp_path) == []

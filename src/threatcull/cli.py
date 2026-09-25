@@ -23,13 +23,20 @@ from threatcull.fetcher import HttpFetcher
 from threatcull.fetching import fetch_all
 from threatcull.home_detect import detect_candidates, public_ip_candidate, public_ip_fetcher
 from threatcull.indicators import SourceKind
+from threatcull.listfile import ListLine, parse_list_file, report_lines
 from threatcull.lookup import lookup, output_labels
 from threatcull.parsers import SourceFormat
-from threatcull.store.allowlist import add_entry, operator_entries, remove_entry
+from threatcull.store.allowlist import add_entry, import_entries, operator_entries, remove_entry
 from threatcull.store.api_tokens import create_api_token, list_api_tokens, revoke_api_token
 from threatcull.store.db import connect
 from threatcull.store.errors import NotFoundError, PolicyError
-from threatcull.store.home import add_home, home_allow_entries, home_entries, remove_home
+from threatcull.store.home import (
+    add_home,
+    home_allow_entries,
+    home_entries,
+    import_home,
+    remove_home,
+)
 from threatcull.store.outputs import ensure_default_outputs, list_outputs, rotate_token
 from threatcull.store.runs import fail_interrupted_runs
 from threatcull.store.sources import (
@@ -96,6 +103,9 @@ def build_parser() -> argparse.ArgumentParser:
     allow_add.add_argument("--note", default="")
     allow_sub.add_parser("remove").add_argument("value")
     allow_sub.add_parser("list")
+    allow_sub.add_parser(
+        "import", help="Add every value from a txt or csv file (value[,note] per line)"
+    ).add_argument("file", type=Path)
 
     _add_home_parser(sub)
 
@@ -128,6 +138,9 @@ def _add_home_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -
     home_add.add_argument("--note", default="")
     home_sub.add_parser("remove").add_argument("value")
     home_sub.add_parser("list")
+    home_sub.add_parser(
+        "import", help="Add every value from a txt or csv file (value[,note] per line)"
+    ).add_argument("file", type=Path)
     detect = home_sub.add_parser(
         "detect", help="Suggest entries from this host's addresses, gateway and DNS resolvers"
     )
@@ -299,6 +312,25 @@ def _allow_remove(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
 def _allow_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     for entry in operator_entries(conn):
         print(f"{entry.value}  {entry.note}")
+    return EXIT_OK
+
+
+def _read_list_file(path: Path) -> list[ListLine]:
+    try:
+        return parse_list_file(path.read_bytes())
+    except OSError as exc:
+        raise ValueError(f"cannot read {path}: {exc.strerror}") from exc
+
+
+def _allow_import(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    report = import_entries(conn, _read_list_file(args.file), now=utcnow())
+    print("\n".join(report_lines(report)))
+    return EXIT_OK
+
+
+def _home_import(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    report = import_home(conn, _read_list_file(args.file), now=utcnow())
+    print("\n".join(report_lines(report)))
     return EXIT_OK
 
 
@@ -506,7 +538,9 @@ _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("allow", "add"): _allow_add,
     ("allow", "remove"): _allow_remove,
     ("allow", "list"): _allow_list,
+    ("allow", "import"): _allow_import,
     ("home", "add"): _home_add,
+    ("home", "import"): _home_import,
     ("home", "remove"): _home_remove,
     ("home", "list"): _home_list,
     ("home", "detect"): _home_detect,

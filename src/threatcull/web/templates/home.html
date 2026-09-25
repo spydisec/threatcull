@@ -14,8 +14,14 @@
 <section class="card">
   <h2>Entries</h2>
   {% if entries %}
+{% if entries|length > 5 %}
+  <div class="table-tools" data-filter-for="home-table" hidden>
+    <input type="search" data-filter-text placeholder="Search entries  ( / )" aria-label="Search entries">
+    <span class="muted" data-filter-count aria-live="polite"></span>
+  </div>
+{% endif %}
   <div class="table-wrap">
-  <table class="table">
+  <table class="table" id="home-table">
     <thead>
       <tr><th>Value</th><th>Kind</th><th>Origin</th><th>Note</th><th class="col-action">Action</th></tr>
     </thead>
@@ -56,6 +62,16 @@
     </label>
     <button type="submit">Add entry</button>
   </form>
+  <h3>Import from a file</h3>
+  <form class="form-row" method="post" action="/home/import" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>A .txt or .csv file, up to 1 MiB and 10,000 entries
+      <input type="file" name="file" accept=".txt,.csv,text/plain,text/csv" required>
+    </label>
+    <button type="submit" class="btn-secondary">Import</button>
+  </form>
+  <p class="hint">One value per line, with an optional <code># note</code>, or csv <code>value,note</code>.
+    Lines starting with <code>#</code> are skipped. Values already on the Home Network keep their note.</p>
 </section>
 
 <section class="card">

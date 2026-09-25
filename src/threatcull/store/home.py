@@ -15,7 +15,9 @@ from typing import Literal, get_args
 
 from threatcull.clock import ts
 from threatcull.indicators import Indicator, IndicatorKind
+from threatcull.listfile import ImportReport, ListLine, apply_lines
 from threatcull.store.allowlist import AllowlistEntry, normalize_allow_value
+from threatcull.store.db import transaction
 from threatcull.store.errors import NotFoundError
 
 HomeOrigin = Literal["manual", "auto"]
@@ -67,6 +69,17 @@ def add_home(
         (indicator.value, indicator.kind, note, origin, ts(now)),
     )
     return HomeEntry(indicator.value, indicator.kind, note, origin)
+
+
+def import_home(conn: sqlite3.Connection, lines: list[ListLine], *, now: datetime) -> ImportReport:
+    """Add every new value from an uploaded list in one transaction."""
+    with transaction(conn):
+        return apply_lines(
+            lines,
+            normalize=normalize_home_value,
+            existing={entry.value for entry in home_entries(conn)},
+            insert=lambda raw, note: add_home(conn, raw, note, now=now),
+        )
 
 
 def remove_home(conn: sqlite3.Connection, raw: str) -> None:

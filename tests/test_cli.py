@@ -207,3 +207,17 @@ def test_invalid_catalog_yaml_reports_cleanly(
     args = ["--data-dir", str(tmp_path / "data"), "--catalog", str(bad)]
     assert main([*args, "init"]) == 1
     assert capsys.readouterr().err.startswith("error:")
+
+
+def test_allow_import_file(
+    cli: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    listing = tmp_path / "allow.csv"
+    listing.write_text("value,note\n8.8.8.8,dns\nbad value\n", encoding="utf-8")
+    assert main([*cli, "init"]) == 0
+    capsys.readouterr()
+    assert main([*cli, "allow", "import", str(listing)]) == 0
+    out = capsys.readouterr().out
+    assert "imported 1 new entry, 0 already present" in out
+    assert "line 3: 'bad value'" in out
+    assert main([*cli, "allow", "import", str(tmp_path / "missing.txt")]) == 1

@@ -344,3 +344,22 @@ def test_dashboard_banner_survives_a_later_failed_compile(
     page = client.get("/").text
     assert BANNER in page
     assert "45.9.20.1" in page
+
+
+def test_home_import_file_adds_entries_and_explains_private_lines(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    response = client.post(
+        "/home/import",
+        data={"csrf": logged_in},
+        files={"file": ("home.txt", b"45.9.20.1  # office\n192.168.1.10\n", "text/plain")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/home"
+
+    page = client.get("/home")
+    assert "Imported 1 new entry" in page.text
+    assert "1 line skipped" in page.text
+    assert "45.9.20.1" in page.text
+    assert "office" in page.text

@@ -7,17 +7,30 @@ import sqlite3
 from collections import Counter
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import ValidationError
 from starlette.responses import RedirectResponse, Response
 
 from threatcull.clock import ts, utcnow
 from threatcull.compiling import stale_source_ids
 from threatcull.home_detect import public_ip_candidate
+from threatcull.listfile import MAX_BYTES, parse_list_file, summary
 from threatcull.lookup import lookup, output_labels
-from threatcull.store.allowlist import add_entry, builtin_entries, operator_entries, remove_entry
+from threatcull.store.allowlist import (
+    add_entry,
+    builtin_entries,
+    import_entries,
+    operator_entries,
+    remove_entry,
+)
 from threatcull.store.errors import NotFoundError, PolicyError
-from threatcull.store.home import add_home, home_allow_entries, home_entries, remove_home
+from threatcull.store.home import (
+    add_home,
+    home_allow_entries,
+    home_entries,
+    import_home,
+    remove_home,
+)
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
 from threatcull.store.runs import last_run, recent_runs
 from threatcull.store.settings import load_settings
@@ -356,6 +369,28 @@ def add_allowlist_entry_page(
     return RedirectResponse("/allowlist", status_code=303)
 
 
+def _read_upload(file: UploadFile | None) -> bytes:
+    """The uploaded list's bytes, read at most one byte past the size limit."""
+    if file is None or not file.filename:
+        raise ValueError("Choose a file to import.")
+    return file.file.read(MAX_BYTES + 1)
+
+
+@router.post("/allowlist/import", dependencies=[Depends(check_csrf)])
+def import_allowlist_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    file: Annotated[UploadFile | None, File()] = None,
+) -> Response:
+    try:
+        lines = parse_list_file(_read_upload(file))
+    except ValueError as exc:
+        return _allowlist_error(request, conn, str(exc), value="", note="", status_code=400)
+    flash(request, summary(import_entries(conn, lines, now=utcnow())))
+    return RedirectResponse("/allowlist", status_code=303)
+
+
 @router.post("/allowlist/remove", dependencies=[Depends(check_csrf)])
 def remove_allowlist_entry_page(
     request: Request,
@@ -397,6 +432,21 @@ def _home_error(
     context = _home_context(conn)
     context.update({"error": message, "value": value, "note": note})
     return render(request, "home.html", context, status_code=status_code)
+
+
+@router.post("/home/import", dependencies=[Depends(check_csrf)])
+def import_home_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    file: Annotated[UploadFile | None, File()] = None,
+) -> Response:
+    try:
+        lines = parse_list_file(_read_upload(file))
+    except ValueError as exc:
+        return _home_error(request, conn, str(exc), value="", note="", status_code=400)
+    flash(request, summary(import_home(conn, lines, now=utcnow())))
+    return RedirectResponse("/home", status_code=303)
 
 
 @router.post("/home", dependencies=[Depends(check_csrf)])
