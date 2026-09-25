@@ -25,6 +25,7 @@ from threatcull.store.allowlist import (
     operator_entries,
     remove_entry,
 )
+from threatcull.store.config import dump_config
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.home import (
     add_home,
@@ -723,3 +724,17 @@ def settings_page(
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
     return render(request, "settings.html", {"settings": load_settings(conn)})
+
+
+@router.get("/settings/export")
+def export_settings(
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    now = utcnow()
+    filename = f"threatcull-config-{now:%Y-%m-%d}.yaml"
+    return Response(
+        dump_config(conn, now=now),
+        media_type="application/yaml",
+        headers={"content-disposition": f'attachment; filename="{filename}"'},
+    )

@@ -1,5 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Settings · ThreatCull{% endblock %}
+{% block title %}Settings · ThreatCull<section class="card" id="configuration">
+  <h2>Configuration</h2>
+  <p>The file holds your settings, Source choices, custom Sources, Allowlist, Home Network and
+    Output definitions. It holds no passwords, tokens or threat data.</p>
+  <p><a class="button btn-secondary" href="/settings/export" download>Export configuration</a></p>
+</section>
+{% endblock %}
 {% block content %}
 <h1>Settings</h1>
 
@@ -15,5 +21,11 @@
     <dt>Max shrink</dt><dd>{{ settings.max_shrink }}</dd>
     <dt>Max stale ratio</dt><dd>{{ settings.max_stale_ratio }}</dd>
   </dl>
+</section>
+<section class="card" id="configuration">
+  <h2>Configuration</h2>
+  <p>The file holds your settings, Source choices, custom Sources, Allowlist, Home Network and
+    Output definitions. It holds no passwords, tokens or threat data.</p>
+  <p><a class="button btn-secondary" href="/settings/export" download>Export configuration</a></p>
 </section>
 {% endblock %}
