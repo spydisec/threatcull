@@ -131,8 +131,9 @@ main { width: 100%; min-width: 0; max-width: 80rem; padding: 1.75rem 2rem 3rem; 
 section.card, details.card { margin-bottom: 1.25rem; }
 .card > :last-child { margin-bottom: 0; }
 
-.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 1.25rem; margin-bottom: 1.25rem; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: 1.25rem; margin-bottom: 1.25rem; }
 .grid-2 > .card { margin-bottom: 0; }
+.grid-2 > * { min-width: 0; }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
 .tile { padding: 1rem 1.1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -345,29 +346,12 @@ tr[hidden] { display: none; }
 .bar-keep { fill: var(--keep); }
 .bar-shared { fill: color-mix(in srgb, var(--keep) 30%, var(--track)); }
 
-.tier-bar { display: block; width: 100%; height: 22px; margin: 0.25rem 0 0.75rem; }
-.tier-high { fill: var(--bad); background: var(--bad); }
-.tier-medium { fill: var(--out); background: var(--out); }
-.tier-low { fill: var(--in); background: var(--in); }
 
 .legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; margin: 0.5rem 0 0; padding: 0; list-style: none; font-size: 0.88em; }
 .legend li { display: inline-flex; align-items: center; gap: 0.4rem; }
 .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 3px; }
-.swatch.bar-keep, .swatch.line-keep { background: var(--keep); }
-.swatch.bar-shared { background: color-mix(in srgb, var(--keep) 30%, var(--track)); }
-.swatch.line-dup { background: var(--dup); }
-.swatch.line-out { background: var(--out); }
+.swatch.bar-keep, .swatch.swatch.bar-shared { background: color-mix(in srgb, var(--keep) 30%, var(--track)); }
 
-.trend { display: block; width: 100%; height: auto; max-height: 260px; }
-.trend .grid { stroke: var(--border); stroke-width: 1; }
-.trend .axis { fill: var(--muted); font-size: 11px; font-family: var(--font); }
-.trend polyline { fill: none; stroke-width: 2; stroke-linejoin: round; }
-.line-keep { stroke: var(--keep); }
-.line-dup { stroke: var(--dup); }
-.line-out { stroke: var(--out); }
-.dot-keep { fill: var(--keep); }
-.dot-dup { fill: var(--dup); }
-.dot-out { fill: var(--out); }
 
 .col-bar { width: 35%; min-width: 8rem; }
 .overlap-bar { display: block; width: 100%; height: 10px; }
@@ -378,3 +362,33 @@ tr[hidden] { display: none; }
   .col-bar { display: none; }
   .card-head { flex-wrap: wrap; }
 }
+
+/* ---- Dashboard header, KPI accents, charts, deltas ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.dash-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1.25rem; margin-bottom: 1.25rem;
+  background: linear-gradient(135deg, var(--surface), color-mix(in srgb, var(--keep) 8%, var(--surface))); }
+.dash-head p { margin: 0; }
+.dash-title { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.01em; }
+.dash-head-side { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.dash-head .run-status, .dash-head > .error { flex-basis: 100%; }
+.dash-head .run-status p { margin: 0; color: var(--muted); font-size: 0.9em; }
+.health { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.8rem; font-weight: 600; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.health::before { content: ""; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 25%, transparent); }
+.health-ok { color: var(--ok); }
+.health-warn { color: var(--warn); }
+.health-bad { color: var(--bad); }
+.health-off { color: var(--muted); }
+.caps { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+.caps-sub { margin: 0 0 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+.card h3.caps-sub { margin: 0 0 0.5rem; padding: 0; border: 0; font-size: 0.75rem; }
+.t-high { color: var(--bad); }
+.t-medium { color: var(--out); }
+.t-low { color: var(--warn); }
+.delta-up { color: var(--ok); }
+.delta-down { color: var(--bad); }
+.changes { margin: 0; }
+.chart { position: relative; }
+.chart-bar { height: 220px; }
+.chart-donut { height: 240px; }
+.chart-line { height: 260px; }
+.dash-foot { margin: 0.5rem 0 0; font-size: 0.85em; }

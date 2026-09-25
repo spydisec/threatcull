@@ -20,6 +20,7 @@ from threatcull.store.settings import Settings
 from threatcull.store.sources import list_sources
 
 TIERS = ("high", "medium", "low")
+KINDS = ("ip", "domain")
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,10 @@ class CompileStats:
     home: int
     tiers: dict[str, int] = field(default_factory=dict)
     sources: dict[str, SourceShare] = field(default_factory=dict)
+    # Kept Indicators per kind ("ip" covers CIDRs) and Tier, and per kind and category
+    # (an Indicator in two categories counts in both). Empty for older Runs.
+    kinds: dict[str, dict[str, int]] = field(default_factory=dict)
+    categories: dict[str, dict[str, int]] = field(default_factory=dict)
 
     @property
     def duplicates(self) -> int:
@@ -47,6 +52,9 @@ class CompileStats:
         """Distinct Indicators left with a Tier after the Allowlist and Home Network."""
         return sum(self.tiers.values())
 
+    def kept(self, kind: str) -> int:
+        return sum(self.kinds.get(kind, {}).values())
+
     def to_json(self) -> dict[str, Any]:
         return {
             "listed": self.listed,
@@ -56,6 +64,8 @@ class CompileStats:
             "home": self.home,
             "tiers": dict(self.tiers),
             "sources": {sid: [s.entries, s.unique] for sid, s in self.sources.items()},
+            "kinds": self.kinds,
+            "categories": self.categories,
         }
 
     @classmethod
@@ -71,15 +81,19 @@ class CompileStats:
             home=data["home"],
             tiers=dict(data["tiers"]),
             sources={sid: SourceShare(*pair) for sid, pair in data["sources"].items()},
+            kinds={kind: dict(tiers) for kind, tiers in data.get("kinds", {}).items()},
+            categories={kind: dict(c) for kind, c in data.get("categories", {}).items()},
         )
 
 
 def compile_stats(conn: sqlite3.Connection, settings: Settings) -> CompileStats:
     listed = unique = allowlisted = home = 0
     tiers: Counter[str] = Counter(dict.fromkeys(TIERS, 0))
+    kinds = {kind: Counter(dict.fromkeys(TIERS, 0)) for kind in KINDS}
+    categories: dict[str, Counter[str]] = {kind: Counter() for kind in KINDS}
     entries: Counter[str] = Counter()
     only: Counter[str] = Counter()
-    for row in conn.execute("SELECT score, source_ids, allowlisted FROM scored"):
+    for row in conn.execute("SELECT kind, score, source_ids, categories, allowlisted FROM scored"):
         ids = row["source_ids"].split(",")
         unique += 1
         listed += len(ids)
@@ -91,7 +105,10 @@ def compile_stats(conn: sqlite3.Connection, settings: Settings) -> CompileStats:
         elif row["allowlisted"]:
             allowlisted += 1
         elif (tier := tier_for(row["score"], settings)) is not None:
+            kind = "domain" if row["kind"] == "domain" else "ip"
             tiers[tier] += 1
+            kinds[kind][tier] += 1
+            categories[kind].update(row["categories"].split(","))
     return CompileStats(
         listed=listed,
         unique=unique,
@@ -100,6 +117,8 @@ def compile_stats(conn: sqlite3.Connection, settings: Settings) -> CompileStats:
         home=home,
         tiers=dict(tiers),
         sources={sid: SourceShare(entries[sid], only[sid]) for sid in sorted(entries)},
+        kinds={kind: dict(counts) for kind, counts in kinds.items()},
+        categories={kind: dict(counts) for kind, counts in categories.items()},
     )
 
 

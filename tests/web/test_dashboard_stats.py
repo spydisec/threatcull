@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -12,8 +12,18 @@ from tests.test_compiling import _setup
 from threatcull.clock import utcnow
 from threatcull.compiling import compile_outputs
 from threatcull.policy.stats import CompileStats, SourceShare
+from threatcull.store.outputs import OutputSpec
 from threatcull.store.runs import Run, compile_history
-from threatcull.web.dashboard import FUNNEL_WIDTH, funnel, source_rows, tier_bar, trend
+from threatcull.web.dashboard import (
+    FUNNEL_WIDTH,
+    Health,
+    OutputChange,
+    chart_data,
+    funnel,
+    health,
+    output_changes,
+    source_rows,
+)
 from threatcull.web.deps import open_db
 
 STATS = CompileStats(
@@ -46,13 +56,6 @@ def test_funnel_scales_every_step_against_what_was_received() -> None:
     assert steps[2].note == "30.0% of received"
 
 
-def test_tier_bar_segments_fill_the_width_in_tier_order() -> None:
-    segments = tier_bar(STATS)
-    assert [s.tier for s in segments] == ["high", "medium", "low"]
-    assert segments[1].x == segments[0].width
-    assert round(sum(s.width for s in segments)) == FUNNEL_WIDTH
-
-
 def test_source_rows_are_largest_first_with_their_unique_share() -> None:
     rows = source_rows(STATS, {"a": "Source A"})
     assert [(r.name, r.entries, r.unique) for r in rows] == [("Source A", 700, 400), ("b", 200, 0)]
@@ -60,15 +63,62 @@ def test_source_rows_are_largest_first_with_their_unique_share() -> None:
     assert rows[0].unique_share == 400 / 700
 
 
-def test_trend_needs_two_compiles_and_labels_each_point() -> None:
-    assert trend([_run("2026-09-24T10:00:00+00:00", STATS)]) is None
-    chart = trend(
-        [_run("2026-09-24T10:00:00+00:00", STATS), _run("2026-09-25T10:00:00+00:00", STATS)]
+def test_chart_data_splits_kinds_and_buckets_the_trends() -> None:
+    stats = CompileStats(
+        listed=10,
+        unique=10,
+        rejected=0,
+        allowlisted=0,
+        home=0,
+        tiers={"high": 1, "medium": 2, "low": 7},
+        kinds={
+            "ip": {"high": 1, "medium": 2, "low": 3},
+            "domain": {"high": 0, "medium": 0, "low": 4},
+        },
+        categories={"ip": {"malicious": 6}, "domain": {"phishing": 3, "spam": 1}},
     )
-    assert chart is not None
-    assert chart.series[0].name == "Unique Indicators kept"
-    assert chart.series[0].dots[1].title.startswith("Unique Indicators kept: 550 (Sep 25")
-    assert chart.y_ticks[-1][1] == "550"
+    now = datetime(2026, 9, 25, 12, 0, tzinfo=UTC)
+    history = [
+        _run("2026-09-20T10:00:00+00:00", stats),
+        _run("2026-09-25T09:00:00+00:00", stats),
+        _run("2026-09-25T11:00:00+00:00", stats),
+    ]
+    data = chart_data(stats, history, now=now)
+    assert data["tiers"] == {
+        "labels": ["high", "medium", "low"],
+        "ip": [1, 2, 3],
+        "domain": [0, 0, 4],
+    }
+    assert data["categories"] == {
+        "title": "Domain categories",
+        "labels": ["phishing", "spam"],
+        "values": [3, 1],
+    }
+    assert data["day"]["labels"] == ["09:00", "11:00"]
+    assert data["day"]["ip"] == [6, 6]
+    assert data["month"]["labels"] == ["Sep 20", "Sep 25"]
+
+
+def test_health_reports_the_worst_problem_first() -> None:
+    ok = _run("2026-09-25T09:00:00+00:00", STATS)
+    assert health(None, [], 0).label == "No Compile yet"
+    assert health(ok, [], 0) == Health("ok", "Pipeline healthy")
+    assert health(ok, [], 2).tone == "warn"
+    blocked = Run(2, "compile", None, "t", "t", "blocked", {}, None)
+    assert health(blocked, [], 0).label == "Compile blocked by the Shrink Guard"
+
+
+def test_output_changes_compare_the_last_two_compiles() -> None:
+    spec_a = OutputSpec("a", "ip", frozenset({"malicious"}), "low", None, "plain", last_count=5)
+    spec_b = OutputSpec("b", "ip", frozenset({"malicious"}), "low", None, "plain")
+    compiles = [
+        Run(1, "compile", None, "t1", "t1", "ok", {"a": 4}, None),
+        Run(2, "compile", None, "t2", "t2", "ok", {"a": 7, "b": 1}, None),
+    ]
+    assert output_changes([spec_a, spec_b], compiles) == [
+        OutputChange("a", 7, 3),
+        OutputChange("b", 1, None),
+    ]
 
 
 def test_dashboard_shows_the_cleanup_funnel_after_a_compile(
@@ -87,11 +137,13 @@ def test_dashboard_shows_the_cleanup_funnel_after_a_compile(
     assert "Duplicates merged" in page
     assert "Unique Indicators kept" in page
     assert "Source A" in page
-    assert "<polyline" in page
+    assert 'data-chart="tiers"' in page
+    assert 'id="chart-data"' in page
 
 
-def test_stats_fragment_is_only_the_cleanup_section(client: TestClient, logged_in: str) -> None:
-    response = client.get("/partials/stats")
+def test_dashboard_fragment_is_only_the_dashboard_body(client: TestClient, logged_in: str) -> None:
+    response = client.get("/partials/dashboard")
     assert response.status_code == 200
     assert "<html" not in response.text
-    assert 'id="cleanup"' in response.text
+    assert 'id="dashboard-body"' in response.text
+    assert 'hx-trigger="every 60s"' in response.text

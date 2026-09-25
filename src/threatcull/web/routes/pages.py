@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections import Counter
+from datetime import timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
@@ -33,7 +34,7 @@ from threatcull.store.home import (
     remove_home,
 )
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
-from threatcull.store.runs import compile_history, last_run, recent_runs
+from threatcull.store.runs import compile_history, last_run, recent_fetches, recent_runs
 from threatcull.store.settings import load_settings
 from threatcull.store.sources import (
     add_custom_source,
@@ -42,7 +43,15 @@ from threatcull.store.sources import (
     set_business_mode,
 )
 from threatcull.store.sources import set_enabled as store_set_enabled
-from threatcull.web.dashboard import FUNNEL_WIDTH, funnel, source_rows, tier_bar, trend
+from threatcull.web.dashboard import (
+    FUNNEL_WIDTH,
+    chart_data,
+    funnel,
+    health,
+    output_changes,
+    source_changes,
+    source_rows,
+)
 from threatcull.web.deps import (
     check_csrf,
     current_user,
@@ -87,31 +96,65 @@ def _validation_message(exc: ValidationError) -> str:
     )
 
 
-def _stats_context(conn: sqlite3.Connection) -> dict[str, Any]:
-    """The cleanup section: the newest Compile Stats and the Compile trend."""
-    history = compile_history(conn)
+def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
+    now = utcnow()
+    settings = load_settings(conn)
+    sources = list_sources(conn)
+    names = {source.id: source.name for source in sources}
+    blocklists = [s for s in sources if s.enabled and s.role == "blocklist"]
+    stale_ids = stale_source_ids(blocklists, now=now, settings=settings)
+    scheduler: Scheduler | None = getattr(request.app.state, "scheduler", None)
+    next_run = scheduler.next_compile_at() if scheduler is not None else None
+    last_compile = last_run(conn, "compile")
+    # A failed Compile records no Home Network hits; the banner must show the last
+    # Compile that actually finished (ok or blocked), not go dark behind a failure.
+    home_compile = last_run(conn, "compile", statuses=("ok", "blocked"))
+    home_alerts = [
+        (value, ", ".join(names.get(sid, sid) for sid in hit_sources.split(",")))
+        for value, hit_sources in (home_compile.home_hits if home_compile else ())
+    ]
+    history = compile_history(conn, since=ts(now - timedelta(days=30)))
     stats = CompileStats.from_json(history[-1].stats) if history else None
-    if stats is None:
-        return {"stats": None}
-    names = {source.id: source.name for source in list_sources(conn)}
-    return {
+    outputs = list_outputs(conn)
+    context: dict[str, Any] = {
+        "business_mode": settings.business_mode,
+        "enabled_blocklist_count": len(blocklists),
+        "failing_count": sum(1 for s in blocklists if s.last_error),
+        "stale_count": len(stale_ids),
+        "allowlist_count": sum(1 for s in sources if s.role == "allowlist"),
+        "last_compile": last_compile,
+        "health": health(last_compile, blocklists, len(stale_ids)),
+        "home_alerts": home_alerts,
+        "home_hit_count": home_compile.counts.get("home_hits", 0) if home_compile else 0,
+        "outputs": outputs,
+        "output_changes": output_changes(outputs, history),
+        "source_changes": source_changes(recent_fetches(conn), {s.id: s.name for s in blocklists}),
+        "scheduler_on": scheduler is not None,
+        "next_compile_at": ts(next_run) if next_run is not None else None,
+        "refreshed_at": ts(now),
         "stats": stats,
-        "stats_at": history[-1].finished_at,
-        "funnel": funnel(stats),
-        "tiers": tier_bar(stats),
-        "source_rows": source_rows(stats, names),
-        "trend": trend(history),
-        "funnel_width": FUNNEL_WIDTH,
+        **_run_status(request),
     }
+    if stats is not None:
+        context.update(
+            {
+                "stats_at": history[-1].finished_at,
+                "funnel": funnel(stats),
+                "funnel_width": FUNNEL_WIDTH,
+                "source_rows": source_rows(stats, names),
+                "chart_data": chart_data(stats, history, now=now),
+            }
+        )
+    return context
 
 
-@router.get("/partials/stats")
-def stats_fragment(
+@router.get("/partials/dashboard")
+def dashboard_fragment(
     request: Request,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
-    return render_fragment(request, "_stats.html", _stats_context(conn))
+    return render_fragment(request, "_dashboard_body.html", _dashboard_context(request, conn))
 
 
 @router.get("/")
@@ -120,40 +163,7 @@ def dashboard(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
-    settings = load_settings(conn)
-    enabled_blocklists = list_sources(conn, enabled_only=True, role="blocklist")
-    stale_ids = stale_source_ids(enabled_blocklists, now=utcnow(), settings=settings)
-    allowlist_sources = list_sources(conn, role="allowlist")
-    scheduler: Scheduler | None = getattr(request.app.state, "scheduler", None)
-    next_run = scheduler.next_compile_at() if scheduler is not None else None
-    next_compile = ts(next_run) if next_run is not None else None
-    last_compile = last_run(conn, "compile")
-    # A failed Compile records no Home Network hits; the banner must show the last
-    # Compile that actually finished (ok or blocked), not go dark behind a failure.
-    home_compile = last_run(conn, "compile", statuses=("ok", "blocked"))
-    source_names = {source.id: source.name for source in list_sources(conn)}
-    home_alerts = [
-        (value, ", ".join(source_names.get(sid, sid) for sid in sources.split(",")))
-        for value, sources in (home_compile.home_hits if home_compile else ())
-    ]
-    return render(
-        request,
-        "dashboard.html",
-        {
-            "business_mode": settings.business_mode,
-            "enabled_blocklist_count": len(enabled_blocklists),
-            "stale_count": len(stale_ids),
-            "allowlist_count": len(allowlist_sources),
-            "last_compile": last_compile,
-            "home_alerts": home_alerts,
-            "home_hit_count": home_compile.counts.get("home_hits", 0) if home_compile else 0,
-            "outputs": list_outputs(conn),
-            "scheduler_on": scheduler is not None,
-            "next_compile_at": next_compile,
-            **_run_status(request),
-            **_stats_context(conn),
-        },
-    )
+    return render(request, "dashboard.html", _dashboard_context(request, conn))
 
 
 # htmx stops polling when a response has this status (and still swaps the body).

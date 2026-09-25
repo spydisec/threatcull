@@ -1,19 +1,23 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Dashboard view-models: the cleanup funnel, the Compile trend and Source overlap.
+"""Dashboard view-models: pipeline health, chart data, latest changes, the cleanup
+funnel and Source overlap.
 
-Charts are server-rendered SVG. The CSP forbids inline styles, but SVG geometry
-attributes are fine, so this module computes every coordinate and the template
-only places them.
+The funnel and overlap bars are server-rendered SVG (the CSP forbids inline styles,
+but SVG geometry attributes are fine). The Tier, category and trend charts are drawn
+by the Chart.js island from the JSON ``chart_data`` builds.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Any
 
 from threatcull.policy.stats import TIERS, CompileStats
+from threatcull.store.outputs import OutputSpec
 from threatcull.store.runs import Run
+from threatcull.store.sources import Source
 
 FUNNEL_WIDTH = 1000
 
@@ -48,26 +52,6 @@ def funnel(stats: CompileStats) -> list[FunnelStep]:
 
 
 @dataclass(frozen=True, slots=True)
-class TierSegment:
-    tier: str
-    value: int
-    x: float
-    width: float
-
-
-def tier_bar(stats: CompileStats) -> list[TierSegment]:
-    total = stats.published
-    segments: list[TierSegment] = []
-    x = 0.0
-    for tier in TIERS:
-        value = stats.tiers.get(tier, 0)
-        width = FUNNEL_WIDTH * value / total if total else 0.0
-        segments.append(TierSegment(tier, value, x, width))
-        x += width
-    return segments
-
-
-@dataclass(frozen=True, slots=True)
 class SourceRow:
     name: str
     entries: int
@@ -93,82 +77,122 @@ def source_rows(stats: CompileStats, names: Mapping[str, str]) -> list[SourceRow
     return sorted(rows, key=lambda row: row.entries, reverse=True)
 
 
-# ---- Trend chart ---------------------------------------------------------------
-
-CHART_W, CHART_H = 640, 200
-PAD_L, PAD_R, PAD_T, PAD_B = 56, 12, 12, 24
-MIN_TREND_POINTS = 2
+# ---- Pipeline health -------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
-class Dot:
-    x: float
-    y: float
-    title: str
+class Health:
+    tone: str  # "ok", "warn", "bad" or "off"
+    label: str
+
+
+def health(last_compile: Run | None, blocklists: Sequence[Source], stale: int) -> Health:
+    failing = sum(1 for source in blocklists if source.last_error)
+    if last_compile is None:
+        return Health("off", "No Compile yet")
+    if last_compile.status == "failed":
+        return Health("bad", "Last Compile failed")
+    if last_compile.status == "blocked":
+        return Health("warn", "Compile blocked by the Shrink Guard")
+    if failing or stale:
+        problems = [f"{failing} failing" if failing else "", f"{stale} Stale" if stale else ""]
+        return Health("warn", "Sources need attention: " + ", ".join(p for p in problems if p))
+    if last_compile.status == "running":
+        return Health("warn", "Compile running")
+    return Health("ok", "Pipeline healthy")
+
+
+# ---- Latest changes --------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
-class Series:
+class SourceChange:
     name: str
-    tone: str
-    points: str  # SVG polyline points
-    dots: tuple[Dot, ...]
+    status: str
+    added: int
+    removed: int
+    at: str | None
+
+
+def source_changes(fetches: Sequence[Run], names: Mapping[str, str]) -> list[SourceChange]:
+    """The newest Fetch of each Source in ``names`` (``fetches`` newest first)."""
+    newest: dict[str, SourceChange] = {}
+    for run in fetches:
+        source_id = run.source_id
+        if source_id is not None and source_id in names and source_id not in newest:
+            newest[source_id] = SourceChange(
+                names[source_id],
+                run.status,
+                run.counts.get("added", 0),
+                run.counts.get("removed", 0),
+                run.finished_at,
+            )
+    return sorted(newest.values(), key=lambda c: (-(c.added + c.removed), c.name))
 
 
 @dataclass(frozen=True, slots=True)
-class Trend:
-    series: tuple[Series, ...]
-    y_ticks: tuple[tuple[float, str], ...]  # (y, label)
-    first_label: str
-    last_label: str
-    width: int = CHART_W
-    height: int = CHART_H
+class OutputChange:
+    name: str
+    count: int | None
+    change: int | None  # since the previous finished Compile
 
 
-def _compact(value: float) -> str:
-    for size, suffix in ((1_000_000, "M"), (1_000, "k")):
-        if value >= size:
-            return f"{value / size:.1f}".rstrip("0").rstrip(".") + suffix
-    return f"{value:.0f}"
+def output_changes(outputs: Sequence[OutputSpec], compiles: Sequence[Run]) -> list[OutputChange]:
+    """``compiles``: finished Compiles, oldest first."""
+    now = compiles[-1].counts if compiles else {}
+    before = compiles[-2].counts if len(compiles) > 1 else {}
+    rows = []
+    for spec in outputs:
+        count = now.get(spec.name, spec.last_count)
+        previous = before.get(spec.name)
+        change = count - previous if count is not None and previous is not None else None
+        rows.append(OutputChange(spec.name, count, change))
+    return rows
 
 
-def _day(stamp: str) -> str:
-    return datetime.fromisoformat(stamp).strftime("%b %d %H:%M")
+# ---- Chart data (drawn by the Chart.js island) -------------------------------------
 
 
-def trend(runs: Sequence[Run]) -> Trend | None:
-    """Kept, duplicates and removed per Compile, oldest first; None below two points."""
-    points = [(run, stats) for run in runs if (stats := CompileStats.from_json(run.stats))]
-    if len(points) < MIN_TREND_POINTS:
-        return None
-    lines = (
-        ("Unique Indicators kept", "keep", [s.published for _, s in points]),
-        ("Duplicates merged", "dup", [s.duplicates for _, s in points]),
-        (
-            "Rejected, allowlisted or Home Network",
-            "out",
-            [s.rejected + s.allowlisted + s.home for _, s in points],
-        ),
-    )
-    top = max(max(values) for _, _, values in lines) or 1
-    inner_w, inner_h = CHART_W - PAD_L - PAD_R, CHART_H - PAD_T - PAD_B
-    step = inner_w / (len(points) - 1)
+def _series(points: Sequence[tuple[Run, CompileStats]], label: str) -> dict[str, Any]:
+    def kept(stats: CompileStats, kind: str) -> int | None:
+        return stats.kept(kind) if stats.kinds else None
 
-    def xy(index: int, value: int) -> tuple[float, float]:
-        return round(PAD_L + index * step, 1), round(PAD_T + inner_h * (1 - value / top), 1)
+    return {
+        "labels": [label_for(run.started_at, label) for run, _ in points],
+        "ip": [kept(stats, "ip") for _, stats in points],
+        "domain": [kept(stats, "domain") for _, stats in points],
+        "high": [stats.tiers.get("high", 0) for _, stats in points],
+        "duplicates": [stats.duplicates for _, stats in points],
+    }
 
-    series = []
-    for name, tone, values in lines:
-        coords = [xy(i, v) for i, v in enumerate(values)]
-        dots = tuple(
-            Dot(x, y, f"{name}: {values[i]:,} ({_day(points[i][0].started_at)} UTC)")
-            for i, (x, y) in enumerate(coords)
-        )
-        series.append(Series(name, tone, " ".join(f"{x},{y}" for x, y in coords), dots))
-    ticks = tuple((round(PAD_T + inner_h * (1 - f), 1), _compact(top * f)) for f in (0.0, 0.5, 1.0))
-    return Trend(
-        tuple(series),
-        ticks,
-        _day(points[0][0].started_at),
-        _day(points[-1][0].started_at),
-    )
+
+def label_for(stamp: str, style: str) -> str:
+    moment = datetime.fromisoformat(stamp)
+    return moment.strftime("%H:%M") if style == "time" else moment.strftime("%b %d")
+
+
+def chart_data(stats: CompileStats, history: Sequence[Run], *, now: datetime) -> dict[str, Any]:
+    """``history``: finished Compiles with stats, oldest first, covering 30 days."""
+    points = [(run, s) for run in history if (s := CompileStats.from_json(run.stats))]
+    day_start = (now - timedelta(hours=24)).isoformat()
+    last_24h = [(run, s) for run, s in points if run.started_at >= day_start]
+    by_day: dict[str, tuple[Run, CompileStats]] = {}
+    for run, s in points:
+        by_day[run.started_at[:10]] = (run, s)  # the day's last Compile wins
+    domain_categories = stats.categories.get("domain", {})
+    categories = domain_categories or stats.categories.get("ip", {})
+    ordered = sorted(categories.items(), key=lambda item: -item[1])
+    return {
+        "tiers": {
+            "labels": list(TIERS),
+            "ip": [stats.kinds.get("ip", {}).get(t, 0) for t in TIERS],
+            "domain": [stats.kinds.get("domain", {}).get(t, 0) for t in TIERS],
+        },
+        "categories": {
+            "title": "Domain categories" if domain_categories else "IP categories",
+            "labels": [name for name, _ in ordered],
+            "values": [value for _, value in ordered],
+        },
+        "day": _series(last_24h, "time"),
+        "month": _series(list(by_day.values()), "date"),
+    }

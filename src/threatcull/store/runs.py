@@ -156,11 +156,23 @@ def fail_interrupted_runs(conn: sqlite3.Connection, *, now: datetime) -> int:
     ).rowcount
 
 
-def compile_history(conn: sqlite3.Connection, limit: int = 30) -> list[Run]:
-    """The newest ``limit`` finished Compiles that recorded Compile Stats, oldest first."""
+def compile_history(
+    conn: sqlite3.Connection, *, since: str | None = None, limit: int = 2000
+) -> list[Run]:
+    """Finished Compiles that recorded Compile Stats, oldest first: the newest ``limit``,
+    or only those started at or after ``since``."""
     rows = conn.execute(
         "SELECT * FROM runs WHERE type = 'compile' AND status IN ('ok', 'blocked') "
-        "AND stats != '{}' ORDER BY started_at DESC, id DESC LIMIT ?",
-        (limit,),
+        "AND stats != '{}' AND started_at >= ? ORDER BY started_at DESC, id DESC LIMIT ?",
+        (since or "", limit),
     )
     return [_to_run(row) for row in rows][::-1]
+
+
+def recent_fetches(conn: sqlite3.Connection, limit: int = 500) -> list[Run]:
+    """The newest ``limit`` Fetch Runs, newest first."""
+    rows = conn.execute(
+        "SELECT * FROM runs WHERE type = 'fetch' ORDER BY started_at DESC, id DESC LIMIT ?",
+        (limit,),
+    )
+    return [_to_run(row) for row in rows]

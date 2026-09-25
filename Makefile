@@ -41,6 +41,6 @@ ui: ## Rebuild the TypeScript islands bundle (needs Node)
 	cd frontend && npm ci --silent --ignore-scripts && npm run -s typecheck && npm run -s build
 
 ui-check: ui ## Fail if the committed islands bundle is out of date
-	git diff --exit-code -- src/threatcull/web/static/islands.js
+	@git diff --quiet -- src/threatcull/web/static/islands.js || { echo "islands.js is out of date: run make ui and stage it"; exit 1; }
 
 check: lint prose types ui-check test security ## Everything CI runs

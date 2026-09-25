@@ -43,6 +43,12 @@ def test_compile_records_the_cleanup_funnel(
     assert stats.tiers == {"high": 0, "medium": 1, "low": 5}
     assert stats.published == 6
     assert stats.sources == {"a": SourceShare(entries=10, unique=9), "b": SourceShare(1, 0)}
+    assert stats.kinds == {
+        "ip": {"high": 0, "medium": 1, "low": 5},
+        "domain": {"high": 0, "medium": 0, "low": 0},
+    }
+    assert stats.categories == {"ip": {"malicious": 6}, "domain": {}}
+    assert stats.kept("ip") == 6
 
 
 def test_stats_are_stored_on_the_compile_run(
@@ -63,3 +69,19 @@ def test_schema_adds_the_stats_column_to_runs(conn: sqlite3.Connection) -> None:
     assert SCHEMA_VERSION >= 5
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(runs)")}
     assert "stats" in columns
+
+
+def test_stats_from_before_the_kind_split_still_read_back() -> None:
+    old = {
+        "listed": 3,
+        "unique": 2,
+        "rejected": 0,
+        "allowlisted": 0,
+        "home": 0,
+        "tiers": {"high": 0, "medium": 1, "low": 1},
+        "sources": {"a": [2, 1]},
+    }
+    stats = CompileStats.from_json(old)
+    assert stats is not None
+    assert stats.kinds == {}
+    assert stats.kept("domain") == 0
