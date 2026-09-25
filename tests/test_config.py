@@ -405,3 +405,24 @@ def test_an_out_of_range_setting_is_refused(
         apply_config(
             conn, parse_config(f"threatcull_config: 1\nsettings: {{{setting}}}\n".encode()), now=now
         )
+
+
+# ---- issue #15 ---------------------------------------------------------------------------
+
+
+def test_a_yaml_syntax_error_is_one_line_with_the_line_number() -> None:
+    with pytest.raises(ConfigError) as caught:
+        parse_config(b"threatcull_config: 1\nsettings: {tier_high: [3,\n")
+    message = str(caught.value)
+    assert "\n" not in message
+    assert "line " in message
+
+
+def test_cli_import_reads_at_most_the_size_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    stream = io.BytesIO(b"#" * (5 * MAX_CONFIG_BYTES))
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(stream))
+    assert main(["--data-dir", str(tmp_path / "d"), "config", "import", "-"]) == 1
+    assert "larger than 1 MiB" in capsys.readouterr().err
+    assert stream.tell() <= MAX_CONFIG_BYTES + 1

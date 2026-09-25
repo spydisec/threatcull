@@ -147,3 +147,19 @@ def test_custom_source_validation(conn: sqlite3.Connection, source_id: str, url:
 def test_unknown_source_raises(conn: sqlite3.Connection) -> None:
     with pytest.raises(NotFoundError):
         get_source(conn, "missing")
+
+
+@pytest.mark.parametrize("url", ["https://feeds.example/list.txt\x00", "https://a.example/\nb"])
+def test_custom_source_urls_cannot_contain_control_characters(
+    conn: sqlite3.Connection, url: str
+) -> None:
+    with pytest.raises(ValueError, match="control characters"):
+        add_custom_source(
+            conn,
+            source_id="custom-ctrl",
+            name="Ctrl",
+            url=url,
+            fmt="plain",
+            kind="ip",
+            category="malicious",
+        )
