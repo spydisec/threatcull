@@ -14,12 +14,13 @@ for firewalls, DNS and SIEMs, including in air-gapped networks.
 
 **In v1:** licence-tagged Catalog of Sources (plus Custom Sources), Fetch/Compile pipeline,
 allowlists (built-in vendor ranges + operator entries), Confidence Score and Tiers, Outputs as plain /
-hosts / AdGuard / RPZ / CSV / JSON, served over HTTP with Feed Tokens or pushed to S3-compatible storage,
+hosts / AdGuard / RPZ / CSV / JSON, served over HTTP with Feed Tokens from the local data directory,
 Indicator lookup, Run history, single admin login, YAML configuration export/import. Runs as a plain
 Python app first, then as one container.
 
 **Not in v1:** multi-tenant SaaS, SSO/RBAC, STIX/TAXII, signed offline bundles, community sighting network,
-pushing rules directly to firewalls, per-Source weights, alerting integrations, built-in TLS.
+pushing rules directly to firewalls, per-Source weights, alerting integrations, built-in TLS,
+publishing Outputs to S3-compatible storage (planned for later).
 
 ## v1 is done when
 
