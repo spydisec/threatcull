@@ -24,15 +24,56 @@ publishing Outputs to S3-compatible storage (planned for later).
 
 ## v1 is done when
 
-1. `uv run threatcull serve --host <lan-ip> --port 6969` starts the app.
+1. `docker compose up` (or `uv run threatcull serve --host <lan-ip> --port 6969`) starts the app.
 2. An admin logs in, enables a few Catalog Sources, adds an allowlist entry and clicks **Run now**.
 3. The Run completes and the UI shows per-Source counts and status.
 4. `curl http://<lan-ip>:6969/o/<output>?token=<feed-token>` returns a valid list in the chosen Format.
 5. Looking up an Indicator shows which Sources listed it and when, or the allowlist reason.
 6. The Sources page shows each Source's licence class, Business Use and a link to its terms.
 7. The full pipeline test passes with no internet access.
+8. A configuration exported from one install imports into a fresh one and restores its Sources,
+   allowlist, Home Network, Outputs and settings.
 
-## Quick start
+## Quick start with Docker
+
+```bash
+git clone <repo-url> threatcull && cd threatcull
+cp compose.example.yaml compose.yaml
+printf '%s\n' '<a long password>' > threatcull_admin.txt && chmod 644 threatcull_admin.txt
+THREATCULL_BIND=<lan-ip> docker compose up -d --build
+```
+
+Open `http://<lan-ip>:6969` and log in as `admin` with that password, then delete
+`threatcull_admin.txt`: ThreatCull reads it on the first start only. The container runs as
+user ID 10001 with a read-only root filesystem and keeps everything (database, Outputs, session
+secret) on the `threatcull-data` volume. Without `THREATCULL_BIND` the port listens on
+`127.0.0.1` only.
+
+The first start creates the default Outputs without printing their Feed Tokens, since
+container logs are not a safe place for them: rotate each token on the Outputs page to get
+its Feed URL. Run CLI commands through the container, for example
+`docker compose run --rm threatcull outputs list`.
+
+**Upgrade:** `git pull && docker compose up -d --build` (or raise the image tag). Database
+migrations run and the shipped Catalog refreshes on start: new Sources appear, and Sources
+you disabled stay disabled.
+
+## Back up and restore
+
+The configuration file holds the settings, Source choices, custom Sources, allowlist, Home
+Network and Output definitions. It holds no passwords, tokens or threat data; Sightings
+rebuild on the next Fetch.
+
+```bash
+docker compose run --rm -T threatcull config export > threatcull-config.yaml
+docker compose run --rm -T threatcull config import - < threatcull-config.yaml
+```
+
+Settings > Configuration in the web UI does the same. An import adds and updates, never
+deletes, and lists anything it skipped; a new Output shows its Feed Token once. For a full
+backup, including users, Feed Tokens and history, copy the `threatcull-data` volume.
+
+## Quick start without Docker
 
 ```bash
 git clone <repo-url> threatcull && cd threatcull
