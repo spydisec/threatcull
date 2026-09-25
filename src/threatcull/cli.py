@@ -28,7 +28,7 @@ from threatcull.lookup import lookup, output_labels
 from threatcull.parsers import SourceFormat
 from threatcull.store.allowlist import add_entry, import_entries, operator_entries, remove_entry
 from threatcull.store.api_tokens import create_api_token, list_api_tokens, revoke_api_token
-from threatcull.store.config import apply_config, dump_config, parse_config
+from threatcull.store.config import MAX_CONFIG_BYTES, apply_config, dump_config, parse_config
 from threatcull.store.db import connect
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.home import (
@@ -544,7 +544,12 @@ def _config_export(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
 
 
 def _config_import(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
-    data = sys.stdin.buffer.read() if args.file == "-" else Path(args.file).read_bytes()
+    # Read one byte past the limit: enough for parse_config to refuse a larger file.
+    if args.file == "-":
+        data = sys.stdin.buffer.read(MAX_CONFIG_BYTES + 1)
+    else:
+        with Path(args.file).open("rb") as handle:
+            data = handle.read(MAX_CONFIG_BYTES + 1)
     result = apply_config(conn, parse_config(data), now=utcnow())
     for line in [*result.applied, *result.skipped]:
         print(line)

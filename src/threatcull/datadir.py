@@ -22,25 +22,35 @@ def ensure_data_dir(path: Path) -> None:
 
     A directory the operator chose and created stays as it is (never
     chmodded); ThreatCull only says when group or other users can get in.
-    Missing parent directories are created with the usual umask.
+    Missing parent directories are created with the usual umask. Raises
+    ``DataDirError`` (one line with the ``chown`` fix) when the directory cannot be
+    created or written, typically a bind mount Docker created as root.
     """
     try:
         path.mkdir(mode=PRIVATE_MODE, parents=True)
     except FileExistsError:
-        mode = path.stat().st_mode
-        if mode & _OTHERS_BITS:
-            log.warning(
-                "data directory %s is readable by other users (mode %o); "
-                "consider chmod 700: it holds the database and the session secret",
-                path,
-                mode & 0o777,
-            )
-        if not os.access(path, os.W_OK | os.X_OK):
-            # Typically a bind mount Docker created as root for a non-root container.
-            uid, gid = os.getuid(), os.getgid()
-            raise DataDirError(
-                f"data directory {path} is not writable by uid {uid}: "
-                f"run chown {uid}:{gid} {path} on the host"
-            ) from None
+        pass
+    except PermissionError as exc:
+        # A missing directory whose parent this process cannot write.
+        raise DataDirError(
+            f"cannot create data directory {path}: {exc.strerror}; create it and "
+            f"run chown {os.getuid()}:{os.getgid()} {path} on the host"
+        ) from None
+    else:
+        path.chmod(PRIVATE_MODE)  # mkdir's mode is masked by the umask
         return
-    path.chmod(PRIVATE_MODE)  # mkdir's mode is masked by the umask
+    # Writability first: a root-owned bind mount is an error, not a loose-mode warning.
+    if not os.access(path, os.W_OK | os.X_OK):
+        uid, gid = os.getuid(), os.getgid()
+        raise DataDirError(
+            f"data directory {path} is not writable by uid {uid}: "
+            f"run chown {uid}:{gid} {path} on the host"
+        )
+    mode = path.stat().st_mode
+    if mode & _OTHERS_BITS:
+        log.warning(
+            "data directory %s is readable by other users (mode %o); "
+            "consider chmod 700: it holds the database and the session secret",
+            path,
+            mode & 0o777,
+        )

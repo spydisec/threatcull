@@ -84,3 +84,28 @@ def test_the_cli_reports_an_unwritable_data_dir_on_one_line(
     assert err.startswith("error: data directory")
     assert "chown" in err
     assert "\n" not in err
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write anywhere")
+def test_an_unwritable_dir_reports_the_error_without_the_loose_mode_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    target = tmp_path / "data"
+    target.mkdir(mode=0o555)  # like a root-owned 0755 bind mount: readable, not writable
+    try:
+        with caplog.at_level(logging.WARNING), pytest.raises(DataDirError):
+            ensure_data_dir(target)
+    finally:
+        target.chmod(0o700)
+    assert "readable by other users" not in caplog.text
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write anywhere")
+def test_a_missing_dir_under_an_unwritable_parent_is_a_clear_error(tmp_path: Path) -> None:
+    parent = tmp_path / "parent"
+    parent.mkdir(mode=0o500)
+    try:
+        with pytest.raises(DataDirError, match=r"cannot create data directory .*chown"):
+            ensure_data_dir(parent / "data")
+    finally:
+        parent.chmod(0o700)
