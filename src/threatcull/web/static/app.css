@@ -2,47 +2,63 @@
 /* No web fonts, no CDN: system font stacks keep the UI working air-gapped. */
 :root {
   color-scheme: light dark;
-  --bg: #f4f5f7;
+  --bg: #f3f5f8;
+  --bg-glow: #dfe9f7;
   --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --fg: #16191f;
-  --muted: #5a6272;
-  --border: #dde1e7;
-  --accent: #1f5fd1;
-  --accent-hover: #184fb0;
+  --surface-2: #f0f3f7;
+  --fg: #1b1f24;
+  --muted: #57606a;
+  --border: #d4dae1;
+  --accent: #0969da;
+  --accent-hover: #0550ae;
   --accent-fg: #ffffff;
-  --ok: #17803d;
-  --ok-bg: #e5f5ea;
-  --warn: #9a5b00;
-  --warn-bg: #fdf1dc;
-  --bad: #b42318;
-  --bad-bg: #fdeceb;
-  --info-bg: #e8f0fe;
-  --focus: #1f5fd1;
-  --radius: 8px;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ok: #1a7f37;
+  --ok-bg: #dafbe1;
+  --warn: #9a6700;
+  --warn-bg: #fff8c5;
+  --bad: #cf222e;
+  --bad-bg: #ffebe9;
+  --info-bg: #ddf4ff;
+  --focus: #0969da;
+  /* chart / accent palette (spydisec.com, darkened for a light background) */
+  --c-green: #1a7f37;
+  --c-red: #cf222e;
+  --c-orange: #d1570b;
+  --c-yellow: #b08800;
+  --c-blue: #0969da;
+  --c-purple: #8250df;
+  --radius: 12px;
+  --font: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1115;
-    --surface: #171a20;
-    --surface-2: #1e222a;
-    --fg: #e6e8ec;
-    --muted: #9aa3b2;
-    --border: #2a2f39;
-    --accent: #6b9dff;
-    --accent-hover: #8ab2ff;
-    --accent-fg: #0b0f17;
-    --ok: #4ccb7a;
-    --ok-bg: #12291b;
-    --warn: #f0b04f;
-    --warn-bg: #2e2412;
-    --bad: #ff8a80;
-    --bad-bg: #331a19;
-    --info-bg: #182338;
-    --focus: #8ab2ff;
+    /* GitHub-dark palette of spydisec.com */
+    --bg: #0d1117;
+    --bg-glow: #122238;
+    --surface: #21262d;
+    --surface-2: #161b22;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent-hover: #79b8ff;
+    --accent-fg: #0d1117;
+    --ok: #00ff88;
+    --ok-bg: rgba(0, 255, 136, 0.14);
+    --warn: #ff8c42;
+    --warn-bg: rgba(255, 140, 66, 0.14);
+    --bad: #ff4444;
+    --bad-bg: rgba(255, 68, 68, 0.14);
+    --info-bg: rgba(88, 166, 255, 0.14);
+    --focus: #58a6ff;
+    --c-green: #00ff88;
+    --c-red: #ff4444;
+    --c-orange: #ff8c42;
+    --c-yellow: #ffd700;
+    --c-blue: #58a6ff;
+    --c-purple: #c084fc;
   }
 }
 
@@ -50,7 +66,7 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: radial-gradient(circle at 90% 0%, var(--bg-glow) 0%, var(--bg) 42%) fixed, var(--bg);
   color: var(--fg);
   font: 15px/1.5 var(--font);
 }
@@ -73,6 +89,7 @@ code { word-break: break-all; }
 
 .sidebar {
   position: sticky;
+  background: var(--surface-2) !important;
   top: 0;
   display: flex;
   flex-direction: column;
@@ -329,8 +346,7 @@ input[type="file"]::file-selector-button { margin-right: 0.75rem; padding: 0.3re
 tr[hidden] { display: none; }
 
 /* ---- Dashboard cleanup section ---- */
-:root { --keep: #1f5fd1; --dup: #8b5cf6; --out: #d97706; --in: #64748b; --track: #eef0f3; }
-@media (prefers-color-scheme: dark) { :root { --keep: #6b9dff; --dup: #a78bfa; --out: #f0b04f; --in: #7b8494; --track: #232833; } }
+:root { --keep: var(--c-green); --dup: var(--c-blue); --out: var(--c-orange); --in: var(--muted); --track: var(--surface-2); }
 .tile-keep { border-color: color-mix(in srgb, var(--keep) 55%, var(--border)); }
 .tiles-small .tile { padding: 0.7rem 0.9rem; }
 .tiles-small .tile-value { font-size: 1.2rem; }
@@ -392,3 +408,40 @@ tr[hidden] { display: none; }
 .chart-donut { height: 240px; }
 .chart-line { height: 260px; }
 .dash-foot { margin: 0.5rem 0 0; font-size: 0.85em; }
+
+/* ---- spydisec.com look for the dashboard ---- */
+#dashboard-body .tiles, #dashboard-body .grid-2 { gap: 12px; margin-bottom: 12px; }
+#dashboard-body section.card, #dashboard-body .dash-head { margin-bottom: 12px; }
+#dashboard-body .card, #dashboard-body .tile { padding: 14px; border-radius: var(--radius); }
+.tile-label { text-transform: uppercase; letter-spacing: 0.07em; font-size: 0.74rem; }
+.tile-value { font-size: 1.7rem; font-weight: 700; }
+.dash-head { background: linear-gradient(120deg, var(--surface-2) 0%, color-mix(in srgb, var(--c-blue) 14%, var(--surface-2)) 100%); }
+.health { background: var(--surface); border-radius: 9px; }
+.health-ok { color: var(--fg); }
+.health-ok::before { background: var(--c-green); box-shadow: 0 0 8px var(--c-green); }
+.health-warn::before { background: var(--c-orange); box-shadow: 0 0 8px var(--c-orange); }
+.health-bad::before { background: var(--c-red); box-shadow: 0 0 8px var(--c-red); }
+.caps { font-size: 0.9rem; letter-spacing: 0.08em; font-weight: 500; margin: 2px 0 10px; }
+.t-high { color: var(--c-red); }
+.t-medium { color: var(--c-orange); }
+.t-low { color: var(--c-yellow); }
+.delta-up { color: var(--c-green); }
+.delta-down { color: var(--c-red); }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+.tag { padding: 2px 9px; font-size: 0.82rem; font-weight: 600; border-radius: 7px; }
+.tag-add { color: var(--c-green); background: color-mix(in srgb, var(--c-green) 16%, transparent); }
+.tag-rem { color: var(--c-red); background: color-mix(in srgb, var(--c-red) 16%, transparent); }
+.tag-net { color: var(--c-orange); background: color-mix(in srgb, var(--c-orange) 16%, transparent); }
+.tier-legend { display: grid; gap: 3px; margin-top: 10px; font-size: 0.8rem; color: var(--muted); }
+.chart-bar { height: 260px; }
+.chart-donut { height: 280px; }
+.chart-line { height: 250px; }
+.dl-table th { color: var(--c-blue); font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; }
+.dl-table tr.dl-group td { padding: 10px 10px 4px; color: var(--c-blue); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; background: color-mix(in srgb, var(--fg) 3%, transparent); }
+.dl-table tbody tr.dl-group:hover { background: none; }
+.dl-btn { display: inline-block; padding: 4px 12px; font-size: 0.8rem; color: var(--c-blue); white-space: nowrap; text-decoration: none; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; }
+.dl-btn:hover { color: var(--c-blue); border-color: var(--c-blue); background: color-mix(in srgb, var(--c-blue) 14%, transparent); }
+.dash-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+.bar-shared { fill: color-mix(in srgb, var(--c-green) 28%, var(--track)); }
+.swatch.bar-shared { background: color-mix(in srgb, var(--c-green) 28%, var(--track)); }
+.sub-inline { margin-left: 0.35rem; color: var(--muted); font-size: 0.8em; }

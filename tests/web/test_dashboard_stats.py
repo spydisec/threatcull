@@ -84,18 +84,14 @@ def test_chart_data_splits_kinds_and_buckets_the_trends() -> None:
         _run("2026-09-25T11:00:00+00:00", stats),
     ]
     data = chart_data(stats, history, now=now)
-    assert data["tiers"] == {
-        "labels": ["high", "medium", "low"],
-        "ip": [1, 2, 3],
-        "domain": [0, 0, 4],
-    }
-    assert data["categories"] == {
-        "title": "Domain categories",
-        "labels": ["phishing", "spam"],
-        "values": [3, 1],
-    }
+    assert data["tiers"]["values"] == [1, 2, 3]
+    assert data["tiers"]["kind"] == "IPs"
+    assert data["categories"]["keys"] == ["phishing", "spam"]
+    assert data["categories"]["labels"] == ["Phishing", "Spam / scam"]
+    assert data["categories"]["values"] == [3, 1]
     assert data["day"]["labels"] == ["09:00", "11:00"]
     assert data["day"]["ip"] == [6, 6]
+    assert data["day"]["delta"] == {"ip": 0, "high": 0}
     assert data["month"]["labels"] == ["Sep 20", "Sep 25"]
 
 

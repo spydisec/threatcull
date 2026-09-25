@@ -76,11 +76,13 @@
 <div class="grid-2">
   <section class="card">
     <h2 class="caps">Confidence Tiers</h2>
-    <div class="chart chart-bar"><canvas data-chart="tiers" aria-label="Kept IPs and domains per Confidence Tier" role="img"></canvas></div>
-    <p class="hint">
-      {% for t in ["high", "medium", "low"] %}{{ t }}: {{ "{:,}".format(stats.tiers.get(t, 0)) }} ({{ "{:.1%}".format(stats.tiers.get(t, 0) / stats.published) if stats.published else "0%" }}){% if not loop.last %} · {% endif %}{% endfor %}.
-      High means at least three independent Sources list the Indicator; low means one.
-    </p>
+    <div class="chart chart-bar"><canvas data-chart="tiers" aria-label="Kept {{ chart_data.tiers.kind }} per Confidence Tier" role="img"></canvas></div>
+    <div class="tier-legend">
+      {% for t in ["high", "medium", "low"] %}
+      <span>{{ t | capitalize }} ({{ chart_data.tiers.kind }}): {{ "{:,}".format(chart_data.tiers["values"][loop.index0]) }} ({{ "{:.1%}".format(chart_data.tiers["values"][loop.index0] / chart_data.tiers.total) if chart_data.tiers.total else "0%" }})</span>
+      {% endfor %}
+      <span>High: three or more independent Sources list it · Low: one Source.</span>
+    </div>
   </section>
   <section class="card">
     <h2 class="caps">{{ chart_data.categories.title }}</h2>
@@ -93,6 +95,16 @@
   <div class="grid-2 changes">
     <div>
       <h3 class="caps-sub">Sources (newest Fetch)</h3>
+      {%- set ok_changes = source_changes | selectattr("status", "equalto", "ok") | list -%}
+      {%- set added = ok_changes | sum(attribute="added") -%}
+      {%- set removed = ok_changes | sum(attribute="removed") -%}
+      <div class="tags">
+        {% if added or removed %}
+        <span class="tag tag-add">+{{ "{:,}".format(added) }} added</span>
+        <span class="tag tag-rem">-{{ "{:,}".format(removed) }} removed</span>
+        <span class="tag tag-net">Net {{ "+" if added >= removed }}{{ "{:,}".format(added - removed) }}</span>
+        {% else %}<span class="muted">No changes in the newest Fetches.</span>{% endif %}
+      </div>
       <div class="table-wrap">
       <table class="table">
         <thead><tr><th>Source</th><th class="num">Added</th><th class="num">Removed</th><th>Fetched</th></tr></thead>
@@ -141,6 +153,8 @@
   <section class="card">
     <h2 class="caps">24h trend</h2>
     {% if chart_data.day.labels | length > 1 %}
+    {%- set d = chart_data.day.delta -%}
+    <p class="hint">IPs delta: {% if d.ip is none %}n/a{% else %}{{ "+" if d.ip >= 0 }}{{ "{:,}".format(d.ip) }}{% endif %} | High delta: {% if d.high is none %}n/a{% else %}{{ "+" if d.high >= 0 }}{{ "{:,}".format(d.high) }}{% endif %}</p>
     <div class="chart chart-line"><canvas data-chart="day" aria-label="Kept IPs and domains over the last 24 hours" role="img"></canvas></div>
     {% else %}<p class="muted">Needs two Compiles in the last 24 hours.</p>{% endif %}
   </section>
@@ -196,31 +210,39 @@
 {% endif %}
 
 <section class="card">
-  <h2 class="caps">Outputs</h2>
+  <h2 class="caps">Download links</h2>
   {% if outputs %}
   <div class="table-wrap">
-  <table class="table">
+  <table class="table dl-table">
     <thead>
-      <tr><th>Name</th><th>Min Tier</th><th class="num">Entries</th><th>Last published</th><th class="col-action"></th></tr>
+      <tr><th>Name</th><th>Min Tier</th><th class="num">Entries</th><th>Last updated</th><th class="col-action"></th></tr>
     </thead>
     <tbody>
-      {% for output in outputs %}
+      {% for kind, label in [("ip", "IP blocklists"), ("domain", "Domain blocklists")] %}
+      {% set group = outputs | selectattr("kind", "equalto", kind) | list %}
+      {% if group %}
+      <tr class="dl-group"><td colspan="5">{{ label }}</td></tr>
+      {% for output in group %}
       <tr>
-        <td class="nowrap"><strong>{{ output.name }}</strong><div class="sub">{{ output.kind }} · {{ output.format }}</div></td>
+        <td class="nowrap">{{ output.name }} <span class="sub-inline">{{ output.format }}</span></td>
         <td>{{ output.min_tier }}</td>
-        <td class="num">{{ "{:,}".format(output.last_count) if output.last_count is not none else "never" }}</td>
-        <td class="nowrap">{{ output.last_published_at | when }}</td>
-        <td class="actions">{% if output.last_published_at %}<a class="button btn-secondary" href="/outputs/{{ output.name }}/download" download>Download</a>{% endif %}</td>
+        <td class="num">{{ "{:,}".format(output.last_count) if output.last_count is not none else "-" }}</td>
+        <td class="nowrap">{{ output.last_published_at | when("-") }}</td>
+        <td class="actions">{% if output.last_published_at %}<a class="dl-btn" href="/outputs/{{ output.name }}/download" download>&darr; Download</a>{% endif %}</td>
       </tr>
+      {% endfor %}
+      {% endif %}
       {% endfor %}
     </tbody>
   </table>
   </div>
-  <p class="hint">Devices fetch each Output from its Feed URL with a Feed Token: see <a href="/outputs">Outputs</a>.</p>
   {% else %}
   <p>No Outputs configured.</p>
   {% endif %}
 </section>
 
-<p class="dash-foot muted">Refreshes every minute. Last refreshed {{ refreshed_at | when }}.</p>
+<div class="dash-foot muted">
+  <span>Auto refresh every minute. Last refreshed: <strong>{{ refreshed_at | when }}</strong></span>
+  <span><a href="/outputs">Feed URLs and tokens</a> | <a href="/runs">Run history</a></span>
+</div>
 </div>

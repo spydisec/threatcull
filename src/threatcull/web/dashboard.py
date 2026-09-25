@@ -153,16 +153,34 @@ def output_changes(outputs: Sequence[OutputSpec], compiles: Sequence[Run]) -> li
 # ---- Chart data (drawn by the Chart.js island) -------------------------------------
 
 
+CATEGORY_LABELS = {
+    "malicious": "Malicious",
+    "c2": "C2",
+    "scanner": "Scanners",
+    "phishing": "Phishing",
+    "spam": "Spam / scam",
+    "ads_tracking": "Ads / tracking",
+    "infrastructure": "Infrastructure",
+}
+
+
+def _delta(values: Sequence[int | None]) -> int | None:
+    known = [value for value in values if value is not None]
+    return known[-1] - known[0] if len(known) > 1 else None
+
+
 def _series(points: Sequence[tuple[Run, CompileStats]], label: str) -> dict[str, Any]:
     def kept(stats: CompileStats, kind: str) -> int | None:
         return stats.kept(kind) if stats.kinds else None
 
+    ip = [kept(stats, "ip") for _, stats in points]
+    high = [stats.tiers.get("high", 0) for _, stats in points]
     return {
         "labels": [label_for(run.started_at, label) for run, _ in points],
-        "ip": [kept(stats, "ip") for _, stats in points],
+        "ip": ip,
         "domain": [kept(stats, "domain") for _, stats in points],
-        "high": [stats.tiers.get("high", 0) for _, stats in points],
-        "duplicates": [stats.duplicates for _, stats in points],
+        "high": high,
+        "delta": {"ip": _delta(ip), "high": _delta(high)},
     }
 
 
@@ -182,15 +200,23 @@ def chart_data(stats: CompileStats, history: Sequence[Run], *, now: datetime) ->
     domain_categories = stats.categories.get("domain", {})
     categories = domain_categories or stats.categories.get("ip", {})
     ordered = sorted(categories.items(), key=lambda item: -item[1])
+    ip_tiers = [stats.kinds.get("ip", {}).get(t, 0) for t in TIERS]
+    domain_tiers = [stats.kinds.get("domain", {}).get(t, 0) for t in TIERS]
+    tier_kind = "IPs" if any(ip_tiers) or not any(domain_tiers) else "domains"
+    tier_values = ip_tiers if tier_kind == "IPs" else domain_tiers
     return {
         "tiers": {
             "labels": list(TIERS),
-            "ip": [stats.kinds.get("ip", {}).get(t, 0) for t in TIERS],
-            "domain": [stats.kinds.get("domain", {}).get(t, 0) for t in TIERS],
+            "ip": ip_tiers,
+            "domain": domain_tiers,
+            "kind": tier_kind,
+            "values": tier_values,
+            "total": sum(tier_values),
         },
         "categories": {
             "title": "Domain categories" if domain_categories else "IP categories",
-            "labels": [name for name, _ in ordered],
+            "keys": [name for name, _ in ordered],
+            "labels": [CATEGORY_LABELS.get(name, name) for name, _ in ordered],
             "values": [value for _, value in ordered],
         },
         "day": _series(last_24h, "time"),
