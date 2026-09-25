@@ -25,6 +25,7 @@ from threatcull.store.allowlist import (
     operator_entries,
     remove_entry,
 )
+from threatcull.store.config import apply_config, dump_config, parse_config
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.home import (
     add_home,
@@ -723,3 +724,41 @@ def settings_page(
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
     return render(request, "settings.html", {"settings": load_settings(conn)})
+
+
+@router.get("/settings/export")
+def export_settings(
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    now = utcnow()
+    filename = f"threatcull-config-{now:%Y-%m-%d}.yaml"
+    return Response(
+        dump_config(conn, now=now),
+        media_type="application/yaml",
+        headers={"content-disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/settings/import", dependencies=[Depends(check_csrf)])
+def import_settings(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    file: Annotated[UploadFile | None, File()] = None,
+) -> Response:
+    data_dir = request.app.state.data_dir
+    try:
+        result = apply_config(
+            conn,
+            parse_config(_read_upload(file)),
+            now=utcnow(),
+            url_check=lambda url: web_file_url_error(url, data_dir),
+        )
+    except ValueError as exc:  # ConfigError, or no file chosen
+        context = {"settings": load_settings(conn), "import_error": str(exc)}
+        return render(request, "settings.html", context, status_code=400)
+    _notify_sources_changed(request)
+    return render(
+        request, "settings.html", {"settings": load_settings(conn), "import_result": result}
+    )

@@ -27,6 +27,11 @@ repos:
     hooks:
       - id: zizmor
 
+  - repo: https://github.com/AleksaC/hadolint-py
+    rev: v2.15.1
+    hooks:
+      - id: hadolint
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0
     hooks:

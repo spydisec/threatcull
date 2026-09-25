@@ -191,12 +191,7 @@ def add_custom_source(
     json_keys: tuple[str, ...] = (),
     business_use: BusinessUse = BusinessUse.UNKNOWN,
 ) -> Source:
-    if not _CUSTOM_ID.fullmatch(source_id):
-        raise ValueError("custom Source ids look like custom-<name> (lowercase, digits, dashes)")
-    if _CONTROL_CHARS.search(name):
-        raise ValueError("custom Source names cannot contain control characters")
-    if not url.startswith(_CUSTOM_SCHEMES):
-        raise ValueError("custom Source URLs must use https://, http:// or file://")
+    _check_custom(source_id, name, url)
     conn.execute(
         """
         INSERT INTO sources (id, name, family, url, format, kind, role, category, licence_class,
@@ -218,4 +213,48 @@ def add_custom_source(
             json.dumps(list(json_keys)),
         ),
     )
+    return get_source(conn, source_id)
+
+
+def _check_custom(source_id: str, name: str, url: str) -> None:
+    if not _CUSTOM_ID.fullmatch(source_id):
+        raise ValueError("custom Source ids look like custom-<name> (lowercase, digits, dashes)")
+    if _CONTROL_CHARS.search(name):
+        raise ValueError("custom Source names cannot contain control characters")
+    if not url.startswith(_CUSTOM_SCHEMES):
+        raise ValueError("custom Source URLs must use https://, http:// or file://")
+
+
+def update_custom_source(
+    conn: sqlite3.Connection,
+    *,
+    source_id: str,
+    name: str,
+    url: str,
+    fmt: SourceFormat,
+    kind: SourceKind,
+    category: Category,
+    csv_column: int = 0,
+    json_keys: tuple[str, ...] = (),
+    business_use: BusinessUse = BusinessUse.UNKNOWN,
+) -> Source:
+    """Replace the definition of an existing custom Source (its enabled state stays)."""
+    _check_custom(source_id, name, url)
+    updated = conn.execute(
+        "UPDATE sources SET name = ?, url = ?, format = ?, kind = ?, category = ?, "
+        "business_use = ?, csv_column = ?, json_keys = ? WHERE id = ? AND custom = 1",
+        (
+            name,
+            url,
+            fmt,
+            kind,
+            category,
+            str(business_use),
+            csv_column,
+            json.dumps(list(json_keys)),
+            source_id,
+        ),
+    ).rowcount
+    if updated == 0:
+        raise NotFoundError(f"no custom Source {source_id}")
     return get_source(conn, source_id)

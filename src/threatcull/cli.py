@@ -18,7 +18,7 @@ import yaml
 from threatcull.catalog import BusinessUse, Category, load_catalog
 from threatcull.clock import utcnow
 from threatcull.compiling import compile_outputs
-from threatcull.datadir import ensure_data_dir
+from threatcull.datadir import DataDirError, ensure_data_dir
 from threatcull.fetcher import HttpFetcher
 from threatcull.fetching import fetch_all
 from threatcull.home_detect import detect_candidates, public_ip_candidate, public_ip_fetcher
@@ -28,6 +28,7 @@ from threatcull.lookup import lookup, output_labels
 from threatcull.parsers import SourceFormat
 from threatcull.store.allowlist import add_entry, import_entries, operator_entries, remove_entry
 from threatcull.store.api_tokens import create_api_token, list_api_tokens, revoke_api_token
+from threatcull.store.config import apply_config, dump_config, parse_config
 from threatcull.store.db import connect
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.home import (
@@ -53,6 +54,7 @@ from threatcull.web.security import parse_trusted_proxies
 DB_NAME = "threatcull.db"
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED = 0, 1, 2
 ADMIN_ENV_VAR = "THREATCULL_ADMIN_PASSWORD"
+ADMIN_FILE_ENV_VAR = "THREATCULL_ADMIN_PASSWORD_FILE"  # a Docker secret; wins over the above
 Handler = Callable[[sqlite3.Connection, argparse.Namespace], int]
 
 
@@ -120,6 +122,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_serve_parser(sub)
     _add_api_token_parser(sub)
+    _add_config_parser(sub)
     return parser
 
 
@@ -185,6 +188,18 @@ def _add_serve_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) 
     )
 
 
+def _add_config_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    config = sub.add_parser(
+        "config", help="Export or import the configuration as YAML (no passwords or tokens)"
+    )
+    config_sub = config.add_subparsers(dest="action", required=True)
+    export = config_sub.add_parser("export", help="Write the configuration as YAML")
+    export.add_argument("-o", "--output", type=Path, help="file to write (default: stdout)")
+    config_sub.add_parser(
+        "import", help="Merge a YAML configuration file into this install (never deletes)"
+    ).add_argument("file", help="the YAML file, or - to read it from stdin")
+
+
 def _add_api_token_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     api_token = sub.add_parser("api-token", help="Manage API tokens for scripts")
     token_sub = api_token.add_subparsers(dest="action", required=True)
@@ -205,7 +220,11 @@ def _trusted_proxy(value: str) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    ensure_data_dir(args.data_dir)
+    try:
+        ensure_data_dir(args.data_dir)
+    except DataDirError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
     conn = connect(args.data_dir / DB_NAME)
     try:
         sync_catalog(conn, load_catalog(args.catalog))
@@ -473,16 +492,30 @@ def _user_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
 
 def _serve(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     if count_users(conn) == 0:
-        password = os.environ.get(ADMIN_ENV_VAR)
+        source, password = ADMIN_ENV_VAR, os.environ.get(ADMIN_ENV_VAR)
+        if password_file := os.environ.get(ADMIN_FILE_ENV_VAR):
+            try:
+                source, password = (
+                    ADMIN_FILE_ENV_VAR,
+                    Path(password_file).read_text(encoding="utf-8").splitlines()[0],
+                )
+            except (OSError, IndexError):
+                print(
+                    f"error: {ADMIN_FILE_ENV_VAR} names {password_file}, "
+                    "which is missing, unreadable or empty",
+                    file=sys.stderr,
+                )
+                return EXIT_ERROR
         if not password:
             print(
                 "error: no web UI users yet. Create one with `threatcull user create <name>` "
-                f"(or set {ADMIN_ENV_VAR} to create 'admin' on first start).",
+                f"(or set {ADMIN_FILE_ENV_VAR} or {ADMIN_ENV_VAR} to create 'admin' "
+                "on first start).",
                 file=sys.stderr,
             )
             return EXIT_ERROR
         create_user(conn, "admin", password, now=utcnow())
-        print(f"created user admin from {ADMIN_ENV_VAR}")
+        print(f"created user admin from {source}")
     # No run survives a restart: close any the last process left "running".
     fail_interrupted_runs(conn, now=utcnow())
     install_feed_token_redaction()  # Feed Tokens must never land in the access log
@@ -493,6 +526,32 @@ def _serve(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     # from X-Forwarded-For for peers it trusts (loopback by default), bypassing
     # client_ip() and the explicit --trusted-proxy opt-in.
     uvicorn.run(app, host=args.host, port=args.port, log_level="info", proxy_headers=False)
+    return EXIT_OK
+
+
+def _config_export(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    text = dump_config(conn, now=utcnow())
+    if args.output is None:
+        sys.stdout.write(text)
+        return EXIT_OK
+    # 0600 from the first byte: the file describes the operator's network.
+    fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    args.output.chmod(0o600)  # an existing file keeps its old mode through O_CREAT
+    print(f"wrote {args.output}", file=sys.stderr)
+    return EXIT_OK
+
+
+def _config_import(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    data = sys.stdin.buffer.read() if args.file == "-" else Path(args.file).read_bytes()
+    result = apply_config(conn, parse_config(data), now=utcnow())
+    for line in [*result.applied, *result.skipped]:
+        print(line)
+    for name, token in result.new_feed_tokens.items():
+        print(f"new Feed Token for {name} (shown once): {token}")
+    if not result.applied and not result.skipped:
+        print("nothing to change: this install already matches the file")
     return EXIT_OK
 
 
@@ -543,6 +602,8 @@ _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("user", "list"): _user_list,
     ("serve", None): _serve,
     ("api-token", "create"): _api_token_create,
+    ("config", "export"): _config_export,
+    ("config", "import"): _config_import,
     ("api-token", "list"): _api_token_list,
     ("api-token", "revoke"): _api_token_revoke,
 }
