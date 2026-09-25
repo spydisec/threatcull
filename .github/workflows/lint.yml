@@ -35,6 +35,22 @@ jobs:
           uvx vale sync
           uvx vale README.md .github
 
+  islands:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Typecheck and rebuild the TypeScript islands
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck
+          npm run build
+      - name: Committed bundle is up to date
+        run: git diff --exit-code -- src/threatcull/web/static/islands.js
+
   commitlint:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

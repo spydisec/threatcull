@@ -41,6 +41,26 @@ updates:
     labels:
       - ci
 
+  # Build tooling for the TypeScript islands (esbuild, typescript). Rebuild and
+  # commit src/threatcull/web/static/islands.js when merging a bump.
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    target-branch: dev
+    groups:
+      frontend:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

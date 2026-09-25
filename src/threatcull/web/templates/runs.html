@@ -53,8 +53,13 @@
     <span class="muted">The last {{ runs|length }} Runs.</span>
   </div>
   {% if runs %}
+  <div class="table-tools" data-filter-for="runs-table" hidden>
+    <input type="search" data-filter-text placeholder="Search Runs  ( / )" aria-label="Search Runs">
+    <select data-filter-state aria-label="Show"><option value="">All</option><option value="fetch">Fetches</option><option value="compile">Compiles</option><option value="ok">ok</option><option value="failed">failed</option><option value="blocked">blocked</option></select>
+    <span class="muted" data-filter-count aria-live="polite"></span>
+  </div>
   <div class="table-wrap">
-  <table class="table">
+  <table class="table" id="runs-table">
     <thead>
       <tr>
         <th>Type</th><th>Source</th><th>Started</th><th>Finished</th><th>Status</th>
@@ -63,7 +68,7 @@
     </thead>
     <tbody>
       {% for run in runs %}
-      <tr>
+      <tr data-state="{{ run.type }} {{ run.status }}">
         <td><span class="badge">{{ run.type }}</span></td>
         <td class="nowrap mono">{{ run.source_id or "" }}</td>
         <td class="nowrap">{{ run.started_at | when }}</td>

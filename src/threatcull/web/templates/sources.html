@@ -12,8 +12,13 @@
 {% endif %}
 <section class="card">
   {% if sources %}
+  <div class="table-tools" data-filter-for="sources-table" hidden>
+    <input type="search" data-filter-text placeholder="Search Sources  ( / )" aria-label="Search Sources">
+    <select data-filter-state aria-label="Show"><option value="">All</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option><option value="failed">Failed</option><option value="blocklist">Blocklists</option><option value="allowlist">Allowlists</option></select>
+    <span class="muted" data-filter-count aria-live="polite"></span>
+  </div>
   <div class="table-wrap">
-  <table class="table table-sources">
+  <table class="table table-sources" id="sources-table">
     <thead>
       <tr>
         <th>Source</th><th>Category</th><th>Licence</th><th>Business use</th>

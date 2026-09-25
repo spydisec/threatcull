@@ -1,0 +1,14 @@
+{
+  "name": "threatcull-islands",
+  "private": true,
+  "description": "Small TypeScript modules for the ThreatCull web UI, bundled into src/threatcull/web/static/islands.js",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --minify --format=iife --target=es2020 --legal-comments=eof --outfile=../src/threatcull/web/static/islands.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}

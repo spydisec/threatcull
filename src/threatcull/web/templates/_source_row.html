@@ -1,5 +1,6 @@
 {% from "_ui.html" import pill %}
-<tr id="source-row-{{ source.id }}"{% if not source.enabled %} class="row-off"{% endif %}>
+<tr id="source-row-{{ source.id }}"{% if not source.enabled %} class="row-off"{% endif %}
+    data-state="{{ 'enabled' if source.enabled else 'disabled' }}{{ ' failed' if source.enabled and source.last_error else '' }} {{ source.role }}">
   <td>
     <strong>{{ source.name }}</strong>
     <div class="sub mono">{{ source.id }}</div>
