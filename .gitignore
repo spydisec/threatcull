@@ -13,6 +13,7 @@ data/
 .env
 *.db
 *.db-*
+secret.key
 
 # Working plans (local only)
 docs/superpowers/
@@ -24,3 +25,16 @@ CONTEXT.md
 CONTEXT-MAP.md
 docs/adr/
 docs/agents/
+.superpowers/
+
+# Vale: downloaded packages (restored by `vale sync`)
+.vale/styles/*
+!.vale/styles/ThreatCull/
+!.vale/styles/config/
+
+# Frontend build tooling (the built bundle in web/static is committed)
+frontend/node_modules/
+
+# Docker: the first admin password (compose secret) and local compose overrides
+threatcull_admin.txt
+compose.yaml

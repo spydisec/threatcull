@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Sources · ThreatCull{% endblock %}
+{% block content %}
+<h1>Sources</h1>
+<p class="lead">
+  ThreatCull downloads each Source straight from its publisher, so you are responsible for
+  following each Source's terms. The licence labels summarise those terms but are not legal
+  advice: open the licence link before relying on a Source.
+</p>
+{% if error is defined and error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+<section class="card">
+  {% if sources %}
+  <div class="table-tools" data-filter-for="sources-table" hidden>
+    <input type="search" data-filter-text placeholder="Search Sources  ( / )" aria-label="Search Sources">
+    <select data-filter-state aria-label="Show"><option value="">All</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option><option value="failed">Failed</option><option value="blocklist">Blocklists</option><option value="allowlist">Allowlists</option></select>
+    <span class="muted" data-filter-count aria-live="polite"></span>
+  </div>
+  <div class="table-wrap">
+  <table class="table table-sources" id="sources-table">
+    <thead>
+      <tr>
+        <th>Source</th><th>Category</th><th>Licence</th><th>Business use</th>
+        <th>Status</th><th class="col-action">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for source in sources %}
+      {% include "_source_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p>No Sources yet.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Add a custom Source</h2>
+  {% if custom_error is defined and custom_error %}
+  <p class="error">{{ custom_error }}</p>
+  {% endif %}
+  <form class="inline-form" method="post" action="/sources/custom">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Id
+      <input type="text" name="id" placeholder="custom-my-feed" required>
+    </label>
+    <label>Name
+      <input type="text" name="name" required>
+    </label>
+    <label>URL
+      <input type="text" name="url" placeholder="https://, http:// or file://" required>
+    </label>
+    <label>Format
+      <select name="format">
+        <option value="plain">plain</option>
+        <option value="hosts">hosts</option>
+        <option value="adblock">adblock</option>
+        <option value="csv">csv</option>
+        <option value="json">json</option>
+      </select>
+    </label>
+    <label>Kind
+      <select name="kind">
+        <option value="ip">ip</option>
+        <option value="domain">domain</option>
+      </select>
+    </label>
+    <label>Category
+      <select name="category">
+        <option value="malicious">malicious</option>
+        <option value="c2">c2</option>
+        <option value="scanner">scanner</option>
+        <option value="phishing">phishing</option>
+        <option value="spam">spam</option>
+        <option value="ads_tracking">ads_tracking</option>
+        <option value="infrastructure">infrastructure</option>
+      </select>
+    </label>
+    <label>CSV column (for csv format)
+      <input type="number" name="csv_column" value="0" min="0">
+    </label>
+    <label>JSON keys (for json format, comma-separated)
+      <input type="text" name="json_keys" value="">
+    </label>
+    <label>Business use
+      <select name="business_use">
+        <option value="unknown">unknown</option>
+        <option value="allowed">allowed</option>
+        <option value="forbidden">forbidden</option>
+      </select>
+    </label>
+    <button type="submit">Add Source</button>
+  </form>
+</section>
+{% endblock %}

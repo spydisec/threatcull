@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Jinja2 templates (always auto-escaped) and a page-render helper."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import jinja2
+from fastapi import Request
+from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
+from starlette.responses import HTMLResponse, Response
+
+from threatcull.web.deps import session_user
+from threatcull.web.security import ensure_csrf_token
+
+WEB_DIR = Path(__file__).parent
+STATIC_DIR = WEB_DIR / "static"
+
+_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(WEB_DIR / "templates"),
+    autoescape=True,
+    undefined=jinja2.StrictUndefined,
+)
+
+
+def _when(value: str | None, missing: str = "never") -> Markup:
+    """Show a stored ISO-8601 UTC timestamp as ``2026-09-24 21:53 UTC``; the
+    full value stays in the tooltip."""
+    if not value:
+        return Markup("{}").format(missing)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return Markup("{}").format(value)
+    return Markup('<time datetime="{}" title="{}">{} UTC</time>').format(
+        value, value, parsed.strftime("%Y-%m-%d %H:%M")
+    )
+
+
+_env.filters["when"] = _when
+templates = Jinja2Templates(env=_env)
+
+FLASH_KEY = "flash"
+
+
+def flash(request: Request, message: str) -> None:
+    """Queue a one-shot message for the next rendered page (Post/Redirect/Get).
+
+    Stored in the signed session cookie; only our own fixed strings go here.
+    """
+    request.session[FLASH_KEY] = message
+
+
+def _pop_flash(request: Request) -> str | None:
+    message = request.session.pop(FLASH_KEY, None)
+    return message if isinstance(message, str) else None
+
+
+def render(
+    request: Request,
+    name: str,
+    context: dict[str, Any] | None = None,
+    *,
+    status_code: int = 200,
+    headers: dict[str, str] | None = None,
+) -> Response:
+    """Render ``name`` with the logged-in ``user``, the session ``csrf`` token and
+    any pending flash message (shown once, then gone)."""
+    page: dict[str, Any] = {
+        "user": session_user(request),
+        "csrf": ensure_csrf_token(request.session),
+        "flash": _pop_flash(request),
+    }
+    page.update(context or {})
+    return templates.TemplateResponse(request, name, page, status_code=status_code, headers=headers)
+
+
+def render_fragment(
+    request: Request,
+    name: str,
+    context: dict[str, Any] | None = None,
+    *,
+    status_code: int = 200,
+) -> Response:
+    """Render an htmx-swap fragment: just the piece, no ``base.html`` layout.
+
+    Still carries the session ``csrf`` token, since a fragment usually
+    contains its own form.
+    """
+    page: dict[str, Any] = {"csrf": ensure_csrf_token(request.session)}
+    page.update(context or {})
+    return HTMLResponse(_env.get_template(name).render(**page), status_code=status_code)

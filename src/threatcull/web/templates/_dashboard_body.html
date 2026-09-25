@@ -1,0 +1,262 @@
+{# The whole dashboard. htmx swaps a fresh copy in every minute (/partials/dashboard),
+   and the Chart.js island redraws the charts from #chart-data after each swap. #}
+{% from "_ui.html" import pill %}
+<div id="dashboard-body" hx-get="/partials/dashboard" hx-trigger="every 60s" hx-swap="outerHTML">
+
+<header class="card dash-head">
+  <div>
+    <p class="dash-title">ThreatCull</p>
+    <p class="muted">
+      {% if last_compile %}Last Compile {{ last_compile.finished_at | when("still running") }}{% else %}No Compile has run yet.{% endif %}
+      {% if scheduler_on %}· Next compile at {{ next_compile_at | when("not scheduled") }}{% endif %}
+    </p>
+    {% if not scheduler_on %}<p class="muted">Scheduler is off: Fetch and Compile run only when started by hand.</p>{% endif %}
+  </div>
+  <div class="dash-head-side">
+    <span class="health health-{{ health.tone }}" role="status">{{ health.label }}</span>
+    {% if last_compile %}<span class="sr-only">Last Compile status: <span id="last-compile-status">{{ last_compile.status }}</span></span>{% endif %}
+    <a class="button" href="/runs">Run now</a>
+  </div>
+  {% include "_status.html" %}
+  {% if last_compile and last_compile.error %}
+  {% if last_compile.status == "blocked" %}
+  <div class="notice notice-warn guard-note" role="status">
+    <p><strong>Outputs not updated:</strong> {{ last_compile.error }}.</p>
+    <p>Devices keep the previous lists, so a broken upstream feed can't empty them.
+      If the drop is expected, <a href="/runs#force-compile">Force Compile</a> publishes the new lists.</p>
+  </div>
+  {% elif last_compile.status == "ok" %}
+  <p class="notice notice-info guard-note" role="status">Published with Force Compile. The Shrink Guard had flagged: {{ last_compile.error }}.</p>
+  {% else %}
+  <p class="error guard-note" role="alert"><strong>The last Compile failed:</strong> {{ last_compile.error }}</p>
+  {% endif %}
+  {% endif %}
+</header>
+
+{% if home_alerts %}
+<section class="alert-banner" role="alert">
+  <h2>Your Home Network appears in upstream feeds</h2>
+  <p>
+    The last Compile kept these values out of every Output. Check why the Sources list
+    them (Lookup explains each one).
+  </p>
+  <ul>
+    {% for value, sources in home_alerts %}
+    <li><a href="/lookup?q={{ value | urlencode }}">{{ value }}</a>, listed by {{ sources }}</li>
+    {% endfor %}
+  </ul>
+  {% if home_hit_count > home_alerts | length %}
+  <p>and {{ home_hit_count - home_alerts | length }} more.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if not stats %}
+<section id="cleanup" class="card">
+  <h2>Cleanup</h2>
+  <p class="muted">No Compile has recorded cleanup numbers yet. They appear after the next Compile: use <a href="/runs">Run now</a> or wait for the scheduler.</p>
+</section>
+{% else %}
+{%- set received = stats.listed + stats.rejected -%}
+{%- set ip = stats.kinds.get("ip", {}) -%}
+<div class="tiles">
+  <div class="tile">
+    <p class="tile-label">Active IPs</p>
+    <p class="tile-value">{{ "{:,}".format(stats.kept("ip")) }}</p>
+    <p class="tile-note"><span class="t-high">{{ "{:,}".format(ip.get("high", 0)) }} high</span> / <span class="t-medium">{{ "{:,}".format(ip.get("medium", 0)) }} medium</span> / <span class="t-low">{{ "{:,}".format(ip.get("low", 0)) }} low</span></p>
+  </div>
+  <div class="tile">
+    <p class="tile-label">Active domains</p>
+    <p class="tile-value">{{ "{:,}".format(stats.kept("domain")) }}</p>
+    <p class="tile-note">{% for name, count in stats.categories.get("domain", {}).items() | sort(attribute="1", reverse=true) %}{{ "{:,}".format(count) }} {{ category_labels.get(name, name) | lower }}{% if not loop.last %} / {% endif %}{% else %}none{% endfor %}</p>
+  </div>
+  <div class="tile{% if failing_count or stale_count %} is-warn{% endif %}">
+    <p class="tile-label">Blocklist Sources</p>
+    <p class="tile-value">{{ enabled_blocklist_count }}</p>
+    <p class="tile-note">{{ failing_count }} failing, {{ stale_count }} Stale · <a href="/sources">Sources</a></p>
+  </div>
+  <div class="tile tile-keep">
+    <p class="tile-label">Cleaned up</p>
+    <p class="tile-value">{{ "{:,}".format(stats.duplicates + stats.rejected + stats.allowlisted + stats.home) }}</p>
+    <p class="tile-note">{{ "{:,}".format(stats.duplicates) }} duplicates · {{ "{:,}".format(stats.rejected) }} invalid · {{ "{:,}".format(stats.allowlisted + stats.home) }} allowlisted</p>
+  </div>
+</div>
+
+<script type="application/json" id="chart-data">{{ chart_data | tojson }}</script>
+
+<div class="grid-2">
+  <section class="card">
+    <h2 class="caps">Confidence Tiers</h2>
+    <div class="chart chart-bar"><canvas data-chart="tiers" aria-label="Kept {{ chart_data.tiers.kind }} per Confidence Tier" role="img"></canvas></div>
+    <div class="tier-legend">
+      {% for t in ["high", "medium", "low"] %}
+      <span>{{ t | capitalize }} ({{ chart_data.tiers.kind }}): {{ "{:,}".format(chart_data.tiers["values"][loop.index0]) }} ({{ "{:.1%}".format(chart_data.tiers["values"][loop.index0] / chart_data.tiers.total) if chart_data.tiers.total else "0%" }})</span>
+      {% endfor %}
+      <span>High: three or more independent Sources list it · Low: one Source.</span>
+    </div>
+  </section>
+  <section class="card">
+    <h2 class="caps">{{ chart_data.categories.title }}</h2>
+    <div class="chart chart-donut"><canvas data-chart="categories" aria-label="{{ chart_data.categories.title }}" role="img"></canvas></div>
+  </section>
+</div>
+
+<section class="card">
+  <h2 class="caps">Latest changes</h2>
+  <div class="grid-2 changes">
+    <div>
+      <h3 class="caps-sub">Sources (newest Fetch)</h3>
+      {%- set ok_changes = source_changes | selectattr("status", "equalto", "ok") | list -%}
+      {%- set added = ok_changes | sum(attribute="added") -%}
+      {%- set removed = ok_changes | sum(attribute="removed") -%}
+      <div class="tags">
+        {% if added or removed %}
+        <span class="tag tag-add">+{{ "{:,}".format(added) }} added</span>
+        <span class="tag tag-rem">-{{ "{:,}".format(removed) }} removed</span>
+        <span class="tag tag-net">Net {{ "+" if added >= removed }}{{ "{:,}".format(added - removed) }}</span>
+        {% else %}<span class="muted">No changes in the newest Fetches.</span>{% endif %}
+      </div>
+      <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Source</th><th class="num">Added</th><th class="num">Removed</th><th>Fetched</th></tr></thead>
+        <tbody>
+          {% for c in source_changes %}
+          <tr>
+            <td>{{ c.name }}</td>
+            {% if c.status in ("ok", "not_modified") %}
+            <td class="num {{ 'delta-up' if c.added else 'muted' }}">+{{ "{:,}".format(c.added) }}</td>
+            <td class="num {{ 'delta-down' if c.removed else 'muted' }}">-{{ "{:,}".format(c.removed) }}</td>
+            {% else %}
+            <td class="num muted">-</td>
+            <td class="num muted">-</td>
+            {% endif %}
+            <td class="nowrap">{{ c.at | when("running") }}
+              {% if c.status == "not_modified" %}<div class="sub">unchanged upstream</div>
+              {% elif c.status not in ("ok", "running") %}<div class="sub sub-bad">{{ c.status }}</div>{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="muted">No Fetch yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+    <div>
+      <h3 class="caps-sub">Outputs (since the previous Compile)</h3>
+      <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Output</th><th class="num">Entries</th><th class="num">Change</th></tr></thead>
+        <tbody>
+          {% for o in output_changes %}
+          <tr>
+            <td>{{ o.name }}</td>
+            <td class="num">{{ "{:,}".format(o.count) if o.count is not none else "never" }}</td>
+            <td class="num {% if o.change and o.change > 0 %}delta-up{% elif o.change and o.change < 0 %}delta-down{% else %}muted{% endif %}">
+              {% if o.change is none %}new{% elif o.change > 0 %}+{{ "{:,}".format(o.change) }}{% elif o.change < 0 %}{{ "{:,}".format(o.change) }}{% else %}0{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2 class="caps">24h trend</h2>
+    {% if chart_data.day.labels | length > 1 %}
+    {%- set d = chart_data.day.delta -%}
+    <p class="hint">IPs delta: {% if d.ip is none %}n/a{% else %}{{ "+" if d.ip >= 0 }}{{ "{:,}".format(d.ip) }}{% endif %} | High delta: {% if d.high is none %}n/a{% else %}{{ "+" if d.high >= 0 }}{{ "{:,}".format(d.high) }}{% endif %}</p>
+    <div class="chart chart-line"><canvas data-chart="day" aria-label="Kept IPs and domains over the last 24 hours" role="img"></canvas></div>
+    {% else %}<p class="muted">Needs two Compiles in the last 24 hours.</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2 class="caps">30d trend</h2>
+    {% if chart_data.month.labels | length > 1 %}
+    <div class="chart chart-line"><canvas data-chart="month" aria-label="Kept IPs and domains over the last 30 days" role="img"></canvas></div>
+    {% else %}<p class="muted">Needs Compiles on two different days.</p>{% endif %}
+  </section>
+</div>
+
+<div class="grid-2">
+  <section id="cleanup" class="card">
+    <div class="card-head"><h2 class="caps">Cleanup funnel</h2><span class="muted">Compile {{ stats_at | when }}</span></div>
+    <div class="funnel">
+      {% for step in funnel %}
+      <div class="funnel-label">{{ step.label }}<span class="sub">{{ step.note }}</span></div>
+      <svg class="funnel-bar" viewBox="0 0 {{ funnel_width }} 14" preserveAspectRatio="none" aria-hidden="true">
+        <rect class="track" x="0" y="0" width="{{ funnel_width }}" height="14" rx="3"></rect>
+        <rect class="bar-{{ step.tone }}" x="0" y="0" width="{{ step.width }}" height="14" rx="3"></rect>
+      </svg>
+      <div class="funnel-value num">{{ "{:,}".format(step.value) }}</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2 class="caps">Source overlap</h2><span class="muted">entries no other Source lists</span></div>
+    <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Source</th><th class="num">Entries</th><th class="num">Only here</th><th class="col-bar"></th></tr>
+      </thead>
+      <tbody>
+        {% for row in source_rows %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td class="num">{{ "{:,}".format(row.entries) }}</td>
+          <td class="num">{{ "{:.0%}".format(row.unique_share) }}</td>
+          <td class="col-bar">
+            <svg class="overlap-bar" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="bar-shared" x="0" y="0" width="{{ row.width }}" height="10" rx="2"></rect>
+              <rect class="bar-keep" x="0" y="0" width="{{ row.unique_width }}" height="10" rx="2"></rect>
+            </svg>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+</div>
+{% endif %}
+
+<section class="card">
+  <h2 class="caps">Download links</h2>
+  {% if outputs %}
+  <div class="table-wrap">
+  <table class="table dl-table">
+    <thead>
+      <tr><th>Name</th><th>Min Tier</th><th class="num">Entries</th><th>Last updated</th><th class="col-action"></th></tr>
+    </thead>
+    <tbody>
+      {% for kind, label in [("ip", "IP blocklists"), ("domain", "Domain blocklists")] %}
+      {% set group = outputs | selectattr("kind", "equalto", kind) | list %}
+      {% if group %}
+      <tr class="dl-group"><td colspan="5">{{ label }}</td></tr>
+      {% for output in group %}
+      <tr>
+        <td class="nowrap">{{ output.name }} <span class="sub-inline">{{ output.format }}</span></td>
+        <td>{{ output.min_tier }}</td>
+        <td class="num">{{ "{:,}".format(output.last_count) if output.last_count is not none else "-" }}</td>
+        <td class="nowrap">{{ output.last_published_at | when("-") }}</td>
+        <td class="actions">{% if output.last_published_at %}<a class="dl-btn" href="/outputs/{{ output.name }}/download" download>&darr; Download</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p>No Outputs configured.</p>
+  {% endif %}
+</section>
+
+<div class="dash-foot muted">
+  <span>Auto refresh every minute. Last refreshed: <strong>{{ refreshed_at | when }}</strong></span>
+  <span><a href="/outputs">Feed URLs and tokens</a> | <a href="/runs">Run history</a></span>
+</div>
+</div>

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "_ui.html" import pill, counts %}
+{% block title %}Runs · ThreatCull{% endblock %}
+{% block content %}
+<h1>Runs</h1>
+
+<section class="card">
+  <h2>Run now</h2>
+  {% include "_status.html" %}
+  {% if last_result and not running %}
+  <dl class="stats">
+    <dt>Sources fetched</dt>
+    <dd>{{ last_result.fetched }}</dd>
+    <dt>Failed Sources</dt>
+    <dd>{{ last_result.failed_sources|join(", ") if last_result.failed_sources else "none" }}</dd>
+    <dt>Counts</dt>
+    <dd>{{ counts(last_result.counts) if last_result.counts else "none" }}</dd>
+    {% for reason in last_result.reasons %}
+    <dt>Guard</dt>
+    <dd>{{ reason }}</dd>
+    {% endfor %}
+    {% if last_result.error %}
+    <dt>Error</dt>
+    <dd class="error">{{ last_result.error }}</dd>
+    {% endif %}
+  </dl>
+  {% endif %}
+  <div class="row">
+    <form method="post" action="/runs/now">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit">Run now</button>
+    </form>
+    <p class="muted">Fetches every enabled Source, then Compiles. Only one run happens at a time.</p>
+  </div>
+</section>
+
+<details class="card danger" id="force-compile"{% if (force_error is defined and force_error) or (last_compile_status is defined and last_compile_status == "blocked") %} open{% endif %}>
+  <summary>Force Compile</summary>
+  <p>A Compile blocked by the Shrink Guard keeps the previous Outputs. Force one to publish anyway (no Fetch).</p>
+  {% if force_error is defined and force_error %}
+  <p class="error">{{ force_error }}</p>
+  {% endif %}
+  <form class="row" method="post" action="/runs/compile-force">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="check"><input type="checkbox" name="confirm" value="true" required> I understand this publishes Outputs the guard blocked</label>
+    <button type="submit" class="btn-danger">Force Compile</button>
+  </form>
+</details>
+
+<section class="card">
+  <div class="card-head">
+    <h2>History</h2>
+    <span class="muted">The last {{ runs|length }} Runs.</span>
+  </div>
+  {% if runs %}
+  <div class="table-tools" data-filter-for="runs-table" hidden>
+    <input type="search" data-filter-text placeholder="Search Runs  ( / )" aria-label="Search Runs">
+    <select data-filter-state aria-label="Show"><option value="">All</option><option value="fetch">Fetches</option><option value="compile">Compiles</option><option value="ok">ok</option><option value="failed">failed</option><option value="blocked">blocked</option></select>
+    <span class="muted" data-filter-count aria-live="polite"></span>
+  </div>
+  <div class="table-wrap">
+  <table class="table" id="runs-table">
+    <thead>
+      <tr>
+        <th>Type</th><th>Source</th><th>Started</th><th>Finished</th><th>Status</th>
+        <th>Counts</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in runs %}
+      <tr data-state="{{ run.type }} {{ run.status }}">
+        <td><span class="badge">{{ run.type }}</span></td>
+        <td class="nowrap mono">{{ run.source_id or "" }}</td>
+        <td class="nowrap">{{ run.started_at | when }}</td>
+        <td class="nowrap">{{ run.finished_at | when("running") }}</td>
+        <td>{{ pill(run.status) }}</td>
+        <td>
+          {{ counts(run.counts) }}
+          {% if run.error %}<div class="sub sub-bad">{{ run.error }}</div>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p>No Runs yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

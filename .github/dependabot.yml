@@ -1,0 +1,99 @@
+version: 2
+
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: dev
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+
+  # Hook revs in .pre-commit-config.yaml. The ruff rev must match ruff in
+  # uv.lock; the uv entry above bumps the lock file in a separate PR.
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: dev
+    groups:
+      hooks:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci
+      include: scope
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - ci
+
+  # Build tooling for the TypeScript islands (esbuild, typescript). Rebuild and
+  # commit src/threatcull/web/static/islands.js when merging a bump.
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    target-branch: dev
+    groups:
+      frontend:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
+  # Base images in the Dockerfile are pinned by digest; this bumps the digests.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: dev
+    groups:
+      images:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: dev
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci
+      include: scope
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 5
+    labels:
+      - ci

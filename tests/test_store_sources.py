@@ -1,0 +1,149 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+import sqlite3
+
+import pytest
+
+from tests.factories import make_entry
+from threatcull.catalog import BusinessUse
+from threatcull.store.errors import NotFoundError, PolicyError
+from threatcull.store.sources import (
+    REMOVED_FROM_CATALOG_REASON,
+    RESTRICTED_TERMS_REASON,
+    add_custom_source,
+    get_source,
+    list_sources,
+    set_enabled,
+    sync_catalog,
+)
+
+ALLOWED = make_entry(id="allowed-list", default_enabled=True)
+NONCOMMERCIAL = make_entry(
+    id="nc-list",
+    url="https://example.com/nc.txt",
+    licence_class="noncommercial",
+    business_use="forbidden",
+)
+RESTRICTED = make_entry(
+    id="restricted-list",
+    url="https://example.com/r.txt",
+    licence_class="restricted",
+    business_use="allowed",
+)
+ALLOW_SOURCE = make_entry(
+    id="cdn-ranges",
+    url="https://example.com/cdn.txt",
+    role="allowlist",
+    category="infrastructure",
+    business_use="unknown",
+    default_enabled=True,
+)
+
+
+def test_sync_inserts_catalog_sources_with_default_enablement(conn: sqlite3.Connection) -> None:
+    sync_catalog(conn, [ALLOWED, NONCOMMERCIAL, ALLOW_SOURCE])
+    enabled = {s.id for s in list_sources(conn, enabled_only=True)}
+    assert enabled == {"allowed-list", "cdn-ranges"}
+    assert get_source(conn, "nc-list").licence_class == "noncommercial"
+
+
+def test_resync_updates_metadata_but_keeps_operator_choices(conn: sqlite3.Connection) -> None:
+    sync_catalog(conn, [ALLOWED])
+    set_enabled(conn, "allowed-list", False)
+    sync_catalog(conn, [make_entry(id="allowed-list", name="Renamed", default_enabled=True)])
+    source = get_source(conn, "allowed-list")
+    assert (source.name, source.enabled) == ("Renamed", False)
+
+
+def test_sources_dropped_from_catalog_are_disabled_with_reason(conn: sqlite3.Connection) -> None:
+    sync_catalog(conn, [ALLOWED])
+    sync_catalog(conn, [])
+    source = get_source(conn, "allowed-list")
+    assert (source.enabled, source.disabled_reason) == (False, REMOVED_FROM_CATALOG_REASON)
+
+
+def test_any_source_can_be_enabled_whatever_its_business_use(conn: sqlite3.Connection) -> None:
+    sync_catalog(conn, [NONCOMMERCIAL])
+    assert set_enabled(conn, "nc-list", True).enabled
+
+
+def test_restricted_sources_need_acknowledgement(conn: sqlite3.Connection) -> None:
+    sync_catalog(conn, [RESTRICTED])
+    with pytest.raises(PolicyError, match="acknowledge"):
+        set_enabled(conn, "restricted-list", True)
+    assert set_enabled(conn, "restricted-list", True, acknowledge_restricted=True).enabled
+
+
+def test_business_use_reclassification_keeps_the_operator_choice(conn: sqlite3.Connection) -> None:
+    sync_catalog(conn, [ALLOWED])
+    sync_catalog(conn, [make_entry(id="allowed-list", business_use="forbidden")])
+    source = get_source(conn, "allowed-list")
+    assert source.enabled is True
+    assert source.business_use == "forbidden"
+
+
+def test_catalog_reclassification_to_restricted_disables_the_source(
+    conn: sqlite3.Connection,
+) -> None:
+    sync_catalog(conn, [ALLOWED])
+    sync_catalog(conn, [make_entry(id="allowed-list", licence_class="restricted")])
+    source = get_source(conn, "allowed-list")
+    assert (source.enabled, source.disabled_reason) == (False, RESTRICTED_TERMS_REASON)
+    assert RESTRICTED_TERMS_REASON == "Terms changed to restricted; acknowledge to re-enable"
+
+
+def test_acknowledged_restricted_source_stays_enabled_on_resync(conn: sqlite3.Connection) -> None:
+    sync_catalog(conn, [RESTRICTED])
+    set_enabled(conn, "restricted-list", True, acknowledge_restricted=True)
+    sync_catalog(conn, [RESTRICTED])
+    assert get_source(conn, "restricted-list").enabled
+
+
+@pytest.mark.parametrize("name", ["Evil\n# injected", "Tab\tname", "CR\rname", "Nul\x00", "\x1f"])
+def test_custom_source_names_reject_control_characters(conn: sqlite3.Connection, name: str) -> None:
+    with pytest.raises(ValueError, match="control characters"):
+        add_custom_source(
+            conn,
+            source_id="custom-bad",
+            name=name,
+            url="https://example.com/x",
+            fmt="plain",
+            kind="ip",
+            category="malicious",
+        )
+
+
+def test_custom_sources(conn: sqlite3.Connection) -> None:
+    source = add_custom_source(
+        conn,
+        source_id="custom-honeypot",
+        name="Our honeypot",
+        url="file:///data/hp.txt",
+        fmt="plain",
+        kind="ip",
+        category="scanner",
+        business_use=BusinessUse.ALLOWED,
+    )
+    assert (source.custom, source.enabled, source.licence_class) == (True, False, "unknown")
+    assert set_enabled(conn, "custom-honeypot", True).enabled
+
+
+@pytest.mark.parametrize(
+    ("source_id", "url"),
+    [("honeypot", "file:///x"), ("custom-ok", "ftp://example.com/x")],
+)
+def test_custom_source_validation(conn: sqlite3.Connection, source_id: str, url: str) -> None:
+    with pytest.raises(ValueError, match="custom"):
+        add_custom_source(
+            conn,
+            source_id=source_id,
+            name="x",
+            url=url,
+            fmt="plain",
+            kind="ip",
+            category="malicious",
+        )
+
+
+def test_unknown_source_raises(conn: sqlite3.Connection) -> None:
+    with pytest.raises(NotFoundError):
+        get_source(conn, "missing")

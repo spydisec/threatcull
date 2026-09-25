@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Home Network · ThreatCull{% endblock %}
+{% block content %}
+<h1>Home Network</h1>
+<p class="lead">
+  Your own public addresses, networks and domains. ThreatCull never publishes them in any
+  Output and warns you when a Source lists one. Private and special-purpose addresses are
+  never published anyway, so they need no entry.
+</p>
+{% if error is defined and error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+<section class="card">
+  <h2>Entries</h2>
+  {% if entries %}
+{% if entries|length > 5 %}
+  <div class="table-tools" data-filter-for="home-table" hidden>
+    <input type="search" data-filter-text placeholder="Search entries  ( / )" aria-label="Search entries">
+    <span class="muted" data-filter-count aria-live="polite"></span>
+  </div>
+{% endif %}
+  <div class="table-wrap">
+  <table class="table" id="home-table">
+    <thead>
+      <tr><th>Value</th><th>Kind</th><th>Origin</th><th>Note</th><th class="col-action">Action</th></tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+      <tr>
+        <td class="mono">{{ entry.value }}</td>
+        <td>{{ entry.kind }}</td>
+        <td><span class="badge badge-{{ entry.origin }}">{{ entry.origin }}</span></td>
+        <td>{{ entry.note }}</td>
+        <td class="actions">
+          <form method="post" action="/home/remove">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="value" value="{{ entry.value }}">
+            <button type="submit">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p>No Home Network entries yet.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Add an entry</h2>
+  <form class="form-row" method="post" action="/home">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Value
+      <input type="text" name="value" placeholder="your public IP, CIDR or domain"
+             value="{{ value if value is defined else '' }}" required>
+    </label>
+    <label>Note
+      <input type="text" name="note" value="{{ note if note is defined else '' }}">
+    </label>
+    <button type="submit">Add entry</button>
+  </form>
+  <h3>Import from a file</h3>
+  <form class="form-row" method="post" action="/home/import" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>A .txt or .csv file, up to 1 MiB and 10,000 entries
+      <input type="file" name="file" accept=".txt,.csv,text/plain,text/csv" required>
+    </label>
+    <button type="submit" class="btn-secondary">Import</button>
+  </form>
+  <p class="hint">One value per line, with an optional <code># note</code>, or csv <code>value,note</code>.
+    Lines starting with <code>#</code> are skipped. Values already on the Home Network keep their note.</p>
+</section>
+
+<section class="card">
+  <h2>Detect</h2>
+  <div class="grid-2 detect">
+    <div>
+      <p>
+        Detect reads this host's own settings (its addresses, default gateway and DNS resolvers)
+        without sending anything over the network. It only suggests entries: add the ones you want.
+      </p>
+      <form method="post" action="/home/detect">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" class="btn-secondary">Detect</button>
+      </form>
+    </div>
+    <div>
+      <p>
+        Detect my public IP asks api.ipify.org which address your requests come from. It
+        contacts the internet, so it runs only when you press it.
+      </p>
+      <form method="post" action="/home/detect-public">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" class="btn-secondary">Detect my public IP</button>
+      </form>
+    </div>
+  </div>
+  {% if public_ip_failed is defined and public_ip_failed %}
+  <p class="error">Could not learn the public IP from api.ipify.org.</p>
+  {% endif %}
+  {% if candidates is defined and candidates is not none %}
+  {% if candidates %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr><th>Candidate</th><th>Why</th><th class="col-action">Action</th></tr>
+    </thead>
+    <tbody>
+      {% for candidate in candidates %}
+      <tr>
+        <td class="mono">{{ candidate.value }}</td>
+        <td>{{ candidate.reason }}</td>
+        <td class="actions">
+          <form method="post" action="/home">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="value" value="{{ candidate.value }}">
+            <input type="hidden" name="note" value="{{ candidate.reason }}">
+            <input type="hidden" name="origin" value="auto">
+            <button type="submit">Add</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p>No new candidates: every public address found is already covered.</p>
+  {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

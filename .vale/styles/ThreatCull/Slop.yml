@@ -1,0 +1,47 @@
+extends: existence
+message: "Cut '%s': say what the thing does instead."
+level: error
+ignorecase: true
+tokens:
+  - comprehensive
+  - robust
+  - seamless(?:ly)?
+  - leverag(?:e|es|ed|ing)
+  - utili[sz]e
+  - cutting-edge
+  - state-of-the-art
+  - game[- ]changer
+  - supercharge
+  - effortless(?:ly)?
+  - blazing(?:ly)?[- ]fast
+  - delve
+  - unlock the power
+  - in today's
+  - it's worth noting
+  - best-in-class
+  # Adapted from stop-slop by Hardik Pandya (MIT) — see NOTICE.md
+  - here's the thing
+  - here's (?:what|why|this|that) (?:i|matters|happened)
+  - the uncomfortable truth is
+  - it turns out
+  - let me be clear
+  - the truth is
+  - make no mistake
+  - let that sink in
+  - full stop\.
+  - this matters because
+  - at its core
+  - at the end of the day
+  - when it comes to
+  - in a world where
+  - the reality is
+  - let me walk you through
+  - in this section,? we'll
+  - as we'll see
+  - plot twist
+  - you already know this
+  - a feature,? not a bug
+  - the reasons are structural
+  - the implications are significant
+  - the stakes are high
+  - the consequences are real

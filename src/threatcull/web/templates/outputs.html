@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "_ui.html" import copy_field %}
+{% block title %}Outputs · ThreatCull{% endblock %}
+{% block content %}
+<h1>Outputs</h1>
+<p class="lead">Rotate the token to get a new one. A Feed Token is shown only once, when it is created or rotated.</p>
+
+{% if error is defined and error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+{% if revealed_token is defined and revealed_token %}
+<section class="card reveal">
+  <h2>New Feed Token for {{ revealed_name }}</h2>
+  <p class="error">
+    This token is shown once and will not be shown again.
+    {% if revealed_rotated %}The old token for {{ revealed_name }} has stopped working.{% endif %}
+  </p>
+  {% if revealed_rotated %}
+  <p><strong>Copy it now: refreshing this page rotates the token again.</strong></p>
+  {% else %}
+  <p><strong>Copy it now: refreshing this page won't show it again.</strong></p>
+  {% endif %}
+  <p class="muted">Feed URL (query string)</p>
+  {{ copy_field("reveal-query", base_url ~ "o/" ~ revealed_name ~ "?token=" ~ revealed_token, "Feed URL with the token in the query string") }}
+  <p class="muted">Feed URL (path segment)</p>
+  {{ copy_field("reveal-path", base_url ~ "o/" ~ revealed_name ~ "/" ~ revealed_token, "Feed URL with the token in the path") }}
+</section>
+{% endif %}
+
+<section class="card">
+  {% if outputs %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Name</th><th>Min Tier</th><th class="num">Cap</th>
+        <th class="num">Last count</th><th>Last published</th><th>URL</th><th class="col-action">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for output in outputs %}
+      <tr>
+        <td class="nowrap"><strong>{{ output.name }}</strong><div class="sub">{{ output.kind }} · {{ output.format }}</div></td>
+        <td>{{ output.min_tier }}</td>
+        <td class="num nowrap">{{ "{:,}".format(output.max_entries) if output.max_entries else "no cap" }}</td>
+        <td class="num">{{ "{:,}".format(output.last_count) if output.last_count is not none else "never" }}</td>
+        <td class="nowrap">{{ output.last_published_at | when }}</td>
+        <td>{{ copy_field("url-" ~ loop.index, base_url ~ "o/" ~ output.name ~ "?token=<your Feed Token>", "Feed URL for " ~ output.name) }}</td>
+        <td class="actions">
+          <form method="post" action="/outputs/{{ output.name }}/rotate">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button type="submit">Rotate token</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p>No Outputs configured.</p>
+  {% endif %}
+</section>
+
+<details class="card"{% if create_error is defined and create_error %} open{% endif %}>
+  <summary>Create an Output</summary>
+  {% if create_error is defined and create_error %}
+  <p class="error">{{ create_error }}</p>
+  {% endif %}
+  <form class="inline-form" method="post" action="/outputs">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Name
+      <input type="text" name="name" placeholder="my-output" required>
+    </label>
+    <label>Kind
+      <select name="kind">
+        <option value="ip">ip</option>
+        <option value="domain">domain</option>
+      </select>
+    </label>
+    <label>Format
+      <select name="format">
+        <option value="plain">plain</option>
+        <option value="hosts">hosts</option>
+        <option value="adguard">adguard</option>
+        <option value="rpz">rpz</option>
+        <option value="csv">csv</option>
+        <option value="json">json</option>
+      </select>
+    </label>
+    <label>Min tier
+      <select name="min_tier">
+        <option value="high">high</option>
+        <option value="medium">medium</option>
+        <option value="low">low</option>
+      </select>
+    </label>
+    <label>Max entries (optional)
+      <input type="text" name="max_entries" value="" placeholder="no cap">
+    </label>
+    <fieldset>
+      <legend>Categories</legend>
+      {% for cat in ["malicious", "c2", "scanner", "phishing", "spam", "ads_tracking", "infrastructure"] %}
+      <label><input type="checkbox" name="categories" value="{{ cat }}"> {{ cat }}</label>
+      {% endfor %}
+    </fieldset>
+    <button type="submit">Create Output</button>
+  </form>
+</details>
+{% endblock %}

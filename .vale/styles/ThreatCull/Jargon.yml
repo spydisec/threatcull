@@ -1,0 +1,14 @@
+# Adapted from stop-slop by Hardik Pandya (MIT) — see NOTICE.md
+extends: substitution
+message: "Use '%s' instead of '%s'."
+level: error
+ignorecase: true
+swap:
+  deep dive: analysis
+  double down: commit
+  circle back: return to
+  moving forward: next
+  lean into: accept
+  take a step back: reconsider
+  on the same page: agreed
+  navigate (?:the )?challenges: handle the problems
