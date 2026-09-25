@@ -52,9 +52,7 @@ jobs:
         run: git diff --exit-code -- src/threatcull/web/static/islands.js
 
   commitlint:
-    # Dependabot copies release notes into its commit bodies; their long lines break
-    # body-max-line-length, and Dependabot's message format cannot be configured.
-    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -68,4 +66,4 @@ jobs:
       - name: Conventional Commits, subject <= 72 chars
         uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
         with:
-          configFile: ./.commitlintrc.yaml
+          configFile: ./commitlint.config.mjs
