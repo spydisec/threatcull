@@ -112,11 +112,11 @@ class _Strict(BaseModel):
 class _SettingsIn(_Strict):
     """Any subset of the Settings fields; the rest keep their current values."""
 
-    active_window_days: int | None = None
-    retention_days: int | None = None
-    stale_after_hours: int | None = None
-    tier_high: int | None = None
-    tier_medium: int | None = None
+    active_window_days: int | None = Field(default=None, ge=1, le=365)
+    retention_days: int | None = Field(default=None, ge=1, le=3650)
+    stale_after_hours: int | None = Field(default=None, ge=1, le=8760)
+    tier_high: int | None = Field(default=None, ge=1, le=100)
+    tier_medium: int | None = Field(default=None, ge=1, le=100)
     max_shrink: float | None = None
     max_stale_ratio: float | None = None
 
@@ -188,6 +188,8 @@ def parse_config(data: bytes) -> ConfigDocument:
     try:
         # _NoAliasLoader subclasses yaml.SafeLoader (no Python tags) and refuses aliases.
         raw = yaml.load(text, Loader=_NoAliasLoader)  # noqa: S506  # nosec B506
+    except RecursionError as exc:  # e.g. 200,000 "[" in a row: fits in 1 MiB
+        raise ConfigError("the file nests too deeply to be a ThreatCull configuration") from exc
     except yaml.YAMLError as exc:
         raise ConfigError(f"the file is not a valid ThreatCull configuration: {exc}") from exc
     if not isinstance(raw, dict):
@@ -259,7 +261,12 @@ def _apply_sources(
             else ""
         )
         result.applied.append(f"{verb} Source {source_id}{note}")
+    seen: set[str] = set()
     for custom in doc.custom_sources:
+        if custom.id in seen:
+            result.skipped.append(f"skipped custom Source {custom.id}: listed twice in the file")
+            continue
+        seen.add(custom.id)
         existing = sources.get(custom.id)
         if existing is not None and not existing.custom:
             result.skipped.append(
@@ -321,7 +328,12 @@ def _apply_lists(
 
 def _apply_outputs(conn: sqlite3.Connection, doc: ConfigDocument, result: ImportResult) -> None:
     existing = {o.name: o for o in list_outputs(conn)}
+    seen: set[str] = set()
     for item in doc.outputs:
+        if item.name in seen:
+            result.skipped.append(f"skipped Output {item.name}: listed twice in the file")
+            continue
+        seen.add(item.name)
         try:
             spec = OutputSpec(
                 item.name,

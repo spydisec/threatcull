@@ -356,3 +356,52 @@ def test_cli_import_of_a_refused_file_exits_1(
     bad.write_text("threatcull_config: 9\n")
     assert main(["--data-dir", str(tmp_path / "d"), "config", "import", str(bad)]) == 1
     assert "threatcull_config" in capsys.readouterr().err
+
+
+# ---- final review fixes ------------------------------------------------------------------
+
+
+def test_deeply_nested_yaml_is_refused_not_a_crash(conn: sqlite3.Connection, now: datetime) -> None:
+    _seed(conn, now)
+    before = dump_config(conn, now=now)
+    with pytest.raises(ConfigError, match="nests too deeply"):
+        parse_config(b"threatcull_config: 1\nsettings: " + b"[" * 200_000)
+    assert dump_config(conn, now=now) == before
+
+
+def test_a_name_listed_twice_in_the_file_is_skipped_not_a_crash(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
+    output = (
+        b"  - {name: twice, kind: ip, categories: [malicious], min_tier: high,\n"
+        b"     max_entries: null, format: plain}\n"
+    )
+    custom = (
+        b"  - {id: custom-twice, name: T, url: 'https://t.example/l.txt', format: plain,\n"
+        b"     kind: ip, category: malicious}\n"
+    )
+    doc = parse_config(
+        b"threatcull_config: 1\noutputs:\n" + output * 2 + b"custom_sources:\n" + custom * 2
+    )
+    result = apply_config(conn, doc, now=now)
+    assert list(result.new_feed_tokens) == ["twice"]
+    assert "skipped Output twice: listed twice in the file" in result.skipped
+    assert "skipped custom Source custom-twice: listed twice in the file" in result.skipped
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [
+        "retention_days: 1000000",
+        "active_window_days: 0",
+        "stale_after_hours: 10000000",
+        "tier_high: 1000",
+    ],
+)
+def test_an_out_of_range_setting_is_refused(
+    conn: sqlite3.Connection, now: datetime, setting: str
+) -> None:
+    with pytest.raises(ConfigError, match="settings"):
+        apply_config(
+            conn, parse_config(f"threatcull_config: 1\nsettings: {{{setting}}}\n".encode()), now=now
+        )

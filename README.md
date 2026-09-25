@@ -43,8 +43,9 @@ printf '%s\n' '<a long password>' > threatcull_admin.txt && chmod 644 threatcull
 THREATCULL_BIND=<lan-ip> docker compose up -d --build
 ```
 
-Open `http://<lan-ip>:6969` and log in as `admin` with that password, then delete
-`threatcull_admin.txt`: ThreatCull reads it on the first start only. The container runs as
+Open `http://<lan-ip>:6969` and log in as `admin` with that password, then empty the file
+with `: > threatcull_admin.txt`. ThreatCull reads it on the first start only; keep the empty
+file, because compose refuses to start when a secret file is missing. The container runs as
 user ID 10001 with a read-only root filesystem and keeps everything (database, Outputs, session
 secret) on the `threatcull-data` volume. Without `THREATCULL_BIND` the port listens on
 `127.0.0.1` only.

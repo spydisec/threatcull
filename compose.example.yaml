@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copy to compose.yaml, put the first admin password in threatcull_admin.txt, then:
 #   THREATCULL_BIND=<lan-ip> docker compose up -d --build
-# The container (uid 10001) must be able to read that file (chmod 644). It is read on the
-# first start only, to create 'admin': delete it once you have logged in.
+# The container (uid 10001) must be able to read that file (chmod 644, or
+# chown 10001 threatcull_admin.txt && chmod 400 threatcull_admin.txt). It is read on the
+# first start only, to create 'admin': once you have logged in, empty it with
+#   : > threatcull_admin.txt
+# (keep the file: compose refuses to start when a secret file is missing).
 services:
   threatcull:
     build: .
