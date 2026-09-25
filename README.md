@@ -36,11 +36,15 @@ publishing Outputs to S3-compatible storage (planned for later).
 
 ## Quick start with Docker
 
+GitHub Actions publishes the image to `ghcr.io/spydisec/threatcull` for amd64 and arm64,
+so you need only Docker and the compose file, not the source code:
+
 ```bash
-git clone <repo-url> threatcull && cd threatcull
-cp compose.example.yaml compose.yaml
+mkdir threatcull && cd threatcull
+curl -fsSL -o compose.yaml \
+  https://raw.githubusercontent.com/spydisec/threatcull/main/compose.example.yaml
 printf '%s\n' '<a long password>' > threatcull_admin.txt && chmod 644 threatcull_admin.txt
-THREATCULL_BIND=<lan-ip> docker compose up -d --build
+THREATCULL_BIND=<lan-ip> docker compose up -d
 ```
 
 Open `http://<lan-ip>:6969` and log in as `admin` with that password, then empty the file
@@ -55,9 +59,13 @@ container logs are not a safe place for them: rotate each token on the Outputs p
 its Feed URL. Run CLI commands through the container, for example
 `docker compose run --rm threatcull outputs list`.
 
-**Upgrade:** `git pull && docker compose up -d --build` (or raise the image tag). Database
-migrations run and the shipped Catalog refreshes on start: new Sources appear, and Sources
-you disabled stay disabled.
+**Upgrade:** `docker compose pull && docker compose up -d`. The `:1` tag follows every 1.x
+release; pin an exact version such as `:1.0.0` in `compose.yaml` to upgrade only by hand.
+Database migrations run and the shipped Catalog refreshes on start: new Sources appear, and
+Sources you disabled stay disabled.
+
+**Build it yourself:** clone the repository, copy `compose.example.yaml` to `compose.yaml`,
+swap its `image:` line for `build: .` and run `docker compose up -d --build`.
 
 ## Back up and restore
 
