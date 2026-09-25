@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from threatcull import cli
-from threatcull.datadir import ensure_data_dir
+from threatcull.datadir import DataDirError, ensure_data_dir
 from threatcull.web.app import create_app
 
 
@@ -57,3 +57,30 @@ def test_create_app_creates_its_data_dir_0700(tmp_path: Path) -> None:
     target = tmp_path / "fresh"
     create_app(target, start_scheduler=False)
     assert _mode(target) == 0o700
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write anywhere")
+def test_a_data_dir_the_process_cannot_write_is_a_clear_error(tmp_path: Path) -> None:
+    target = tmp_path / "data"
+    target.mkdir(mode=0o500)
+    try:
+        with pytest.raises(DataDirError, match=r"not writable by uid \d+: run chown"):
+            ensure_data_dir(target)
+    finally:
+        target.chmod(0o700)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write anywhere")
+def test_the_cli_reports_an_unwritable_data_dir_on_one_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "data"
+    target.mkdir(mode=0o500)
+    try:
+        assert cli.main(["--data-dir", str(target), "outputs", "list"]) == 1
+    finally:
+        target.chmod(0o700)
+    err = capsys.readouterr().err.strip()
+    assert err.startswith("error: data directory")
+    assert "chown" in err
+    assert "\n" not in err

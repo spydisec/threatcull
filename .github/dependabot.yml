@@ -61,6 +61,25 @@ updates:
     labels:
       - dependencies
 
+  # Base images in the Dockerfile are pinned by digest; this bumps the digests.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: dev
+    groups:
+      images:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

@@ -4,12 +4,17 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 PRIVATE_MODE = 0o700
 _OTHERS_BITS = 0o077
+
+
+class DataDirError(Exception):
+    """The data directory exists but this process cannot use it (one line for the operator)."""
 
 
 def ensure_data_dir(path: Path) -> None:
@@ -30,5 +35,12 @@ def ensure_data_dir(path: Path) -> None:
                 path,
                 mode & 0o777,
             )
+        if not os.access(path, os.W_OK | os.X_OK):
+            # Typically a bind mount Docker created as root for a non-root container.
+            uid, gid = os.getuid(), os.getgid()
+            raise DataDirError(
+                f"data directory {path} is not writable by uid {uid}: "
+                f"run chown {uid}:{gid} {path} on the host"
+            ) from None
         return
     path.chmod(PRIVATE_MODE)  # mkdir's mode is masked by the umask

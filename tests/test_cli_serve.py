@@ -12,6 +12,7 @@ from threatcull import cli
 from threatcull.store.db import connect
 from threatcull.store.outputs import list_outputs
 from threatcull.store.sources import list_sources
+from threatcull.store.users import verify_user
 from threatcull.web.routes.feeds import FeedTokenAccessFilter
 
 # Brief requires proving an explicit non-default host is passed through untouched;
@@ -140,3 +141,34 @@ def test_serve_on_an_upgraded_catalog_keeps_the_operator_choices(
     assert cli.main(["--data-dir", str(data_dir), "--catalog", str(new), "serve"]) == 0
     assert _enabled(data_dir) == {"a": False, "b": True, "c": True}
     assert "Default Outputs created" not in capsys.readouterr().out
+
+
+def test_serve_creates_the_admin_from_a_password_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    captured_run: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    secret = tmp_path / "admin.txt"
+    secret.write_text("from the file\n")
+    monkeypatch.setenv("THREATCULL_ADMIN_PASSWORD_FILE", str(secret))  # wins over the env var
+    data_dir = tmp_path / "data"
+    assert cli.main(["--data-dir", str(data_dir), "serve"]) == 0
+    assert "created user admin from THREATCULL_ADMIN_PASSWORD_FILE" in capsys.readouterr().out
+    conn = connect(data_dir / "threatcull.db")
+    try:
+        assert verify_user(conn, "admin", "from the file")
+        assert not verify_user(conn, "admin", "correct horse battery")
+    finally:
+        conn.close()
+
+
+def test_serve_with_a_missing_password_file_fails_on_one_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(uvicorn, "run", lambda *a, **k: None)
+    monkeypatch.setenv("THREATCULL_ADMIN_PASSWORD_FILE", str(tmp_path / "missing.txt"))
+    assert cli.main(["--data-dir", str(tmp_path / "data"), "serve"]) == 1
+    err = capsys.readouterr().err.strip()
+    assert "THREATCULL_ADMIN_PASSWORD_FILE" in err
+    assert "\n" not in err

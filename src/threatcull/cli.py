@@ -18,7 +18,7 @@ import yaml
 from threatcull.catalog import BusinessUse, Category, load_catalog
 from threatcull.clock import utcnow
 from threatcull.compiling import compile_outputs
-from threatcull.datadir import ensure_data_dir
+from threatcull.datadir import DataDirError, ensure_data_dir
 from threatcull.fetcher import HttpFetcher
 from threatcull.fetching import fetch_all
 from threatcull.home_detect import detect_candidates, public_ip_candidate, public_ip_fetcher
@@ -54,6 +54,7 @@ from threatcull.web.security import parse_trusted_proxies
 DB_NAME = "threatcull.db"
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED = 0, 1, 2
 ADMIN_ENV_VAR = "THREATCULL_ADMIN_PASSWORD"
+ADMIN_FILE_ENV_VAR = "THREATCULL_ADMIN_PASSWORD_FILE"  # a Docker secret; wins over the above
 Handler = Callable[[sqlite3.Connection, argparse.Namespace], int]
 
 
@@ -219,7 +220,11 @@ def _trusted_proxy(value: str) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    ensure_data_dir(args.data_dir)
+    try:
+        ensure_data_dir(args.data_dir)
+    except DataDirError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
     conn = connect(args.data_dir / DB_NAME)
     try:
         sync_catalog(conn, load_catalog(args.catalog))
@@ -487,16 +492,30 @@ def _user_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
 
 def _serve(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     if count_users(conn) == 0:
-        password = os.environ.get(ADMIN_ENV_VAR)
+        source, password = ADMIN_ENV_VAR, os.environ.get(ADMIN_ENV_VAR)
+        if password_file := os.environ.get(ADMIN_FILE_ENV_VAR):
+            try:
+                source, password = (
+                    ADMIN_FILE_ENV_VAR,
+                    Path(password_file).read_text(encoding="utf-8").splitlines()[0],
+                )
+            except (OSError, IndexError):
+                print(
+                    f"error: {ADMIN_FILE_ENV_VAR} names {password_file}, "
+                    "which is missing, unreadable or empty",
+                    file=sys.stderr,
+                )
+                return EXIT_ERROR
         if not password:
             print(
                 "error: no web UI users yet. Create one with `threatcull user create <name>` "
-                f"(or set {ADMIN_ENV_VAR} to create 'admin' on first start).",
+                f"(or set {ADMIN_FILE_ENV_VAR} or {ADMIN_ENV_VAR} to create 'admin' "
+                "on first start).",
                 file=sys.stderr,
             )
             return EXIT_ERROR
         create_user(conn, "admin", password, now=utcnow())
-        print(f"created user admin from {ADMIN_ENV_VAR}")
+        print(f"created user admin from {source}")
     # No run survives a restart: close any the last process left "running".
     fail_interrupted_runs(conn, now=utcnow())
     install_feed_token_redaction()  # Feed Tokens must never land in the access log

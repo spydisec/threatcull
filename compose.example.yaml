@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copy to compose.yaml, put the first admin password in threatcull_admin.txt, then:
+#   THREATCULL_BIND=<lan-ip> docker compose up -d --build
+# The container (uid 10001) must be able to read that file (chmod 644). It is read on the
+# first start only, to create 'admin': delete it once you have logged in.
+services:
+  threatcull:
+    build: .
+    # Or use the published image instead of building:
+    # image: ghcr.io/spydisec/threatcull:1.0.0
+    ports:
+      # Published on loopback unless THREATCULL_BIND names a LAN address.
+      - "${THREATCULL_BIND:-127.0.0.1}:6969:6969"
+    volumes:
+      - threatcull-data:/data
+    environment:
+      # Creates the 'admin' user on the first start only; ignored afterwards.
+      THREATCULL_ADMIN_PASSWORD_FILE: /run/secrets/threatcull_admin
+    secrets:
+      - threatcull_admin
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+
+volumes:
+  threatcull-data:
+
+secrets:
+  threatcull_admin:
+    file: ./threatcull_admin.txt
