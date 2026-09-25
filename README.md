@@ -99,6 +99,22 @@ on a bare IP, no DNS name, no TLS.
   shows. Leave `--secure-cookies` off when serving plain HTTP: over an insecure connection
   the browser discards a `Secure` cookie and login fails.
 
+## Sources and licences
+
+ThreatCull ships software and a Catalog of Source definitions (URL, format, licence class
+and a link to the licence evidence). It ships no threat data. Each installation downloads
+every Source straight from its publisher, so the operator of that installation accepts
+each Source's terms.
+
+- The licence class and Business Use on each Source summarise the published terms as the
+  Catalog understood them. Read the linked terms yourself before relying on a Source,
+  especially for business use. They are not legal advice.
+- Business Mode (on by default) keeps every blocklist Source whose Business Use is not
+  `allowed` disabled.
+- Serving Outputs to your own firewalls, DNS servers and SIEM counts as your own use.
+  Sharing a Feed URL with another organisation, or exposing `/o/` to the internet, passes
+  the data on to others, which many Source licences forbid.
+
 ## Licence
 
 [GNU AGPL-3.0](LICENSE).
