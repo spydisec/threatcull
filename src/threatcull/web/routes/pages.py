@@ -297,7 +297,12 @@ def runs_page(
 
 
 def _runs_context(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
-    return {"runs": recent_runs(conn, RUNS_PAGE_LIMIT), **_run_status(request)}
+    last_compile = last_run(conn, "compile")
+    return {
+        "runs": recent_runs(conn, RUNS_PAGE_LIMIT),
+        "last_compile_status": last_compile.status if last_compile else None,
+        **_run_status(request),
+    }
 
 
 @router.post("/runs/now", dependencies=[Depends(check_csrf)])

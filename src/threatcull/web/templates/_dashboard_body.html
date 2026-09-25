@@ -19,7 +19,16 @@
     <a class="button" href="/runs">Run now</a>
   </div>
   {% include "_status.html" %}
-  {% if last_compile and last_compile.error %}<p class="error">{{ last_compile.error }}</p>{% endif %}
+  {% if last_compile and last_compile.error %}
+  <div class="error guard-note">
+    <p><strong>{{ "The Shrink Guard blocked the last Compile" if last_compile.status == "blocked" else "The last Compile failed" }}:</strong> {{ last_compile.error }}</p>
+    {% if last_compile.status == "blocked" %}
+    <p>Devices keep getting the previous Outputs, so a broken upstream feed can't empty their blocklists.
+      If the drop is expected, <a href="/runs#force-compile">Force Compile</a> publishes the new lists once.
+      Disabling a Source resets the guard for the Outputs it fed, so this only appears for drops the Sources caused themselves.</p>
+    {% endif %}
+  </div>
+  {% endif %}
 </header>
 
 {% if home_alerts %}

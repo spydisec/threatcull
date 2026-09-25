@@ -11,9 +11,11 @@ from fastapi.testclient import TestClient
 from tests.test_compiling import _setup
 from threatcull.clock import utcnow
 from threatcull.compiling import compile_outputs
+from threatcull.indicators import Indicator
 from threatcull.policy.stats import CompileStats, SourceShare
 from threatcull.store.outputs import OutputSpec
 from threatcull.store.runs import Run, compile_history
+from threatcull.store.sightings import record_fetch_success
 from threatcull.web.dashboard import (
     FUNNEL_WIDTH,
     Health,
@@ -143,3 +145,24 @@ def test_dashboard_fragment_is_only_the_dashboard_body(client: TestClient, logge
     assert "<html" not in response.text
     assert 'id="dashboard-body"' in response.text
     assert 'hx-trigger="every 60s"' in response.text
+
+
+def test_a_blocked_compile_explains_itself_and_links_to_force_compile(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    conn = open_db(tmp_path)
+    try:
+        now = utcnow()
+        _setup(conn, now)
+        compile_outputs(conn, tmp_path / "outputs", now=now)
+        later = now + timedelta(minutes=1)
+        record_fetch_success(
+            conn, "a", {Indicator("45.9.20.1", "ip")}, now=later, etag=None, last_modified=None
+        )
+        assert compile_outputs(conn, tmp_path / "outputs", now=later).status == "blocked"
+    finally:
+        conn.close()
+    page = client.get("/").text
+    assert "The Shrink Guard blocked the last Compile" in page
+    assert "/runs#force-compile" in page
+    assert 'id="force-compile" open' in client.get("/runs").text

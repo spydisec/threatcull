@@ -221,3 +221,14 @@ def test_allow_import_file(
     assert "imported 1 new entry, 0 already present" in out
     assert "line 3: 'bad value'" in out
     assert main([*cli, "allow", "import", str(tmp_path / "missing.txt")]) == 1
+
+
+def test_compile_reports_outputs_whose_guard_baseline_was_reset(
+    cli: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main([*cli, "init"]) == 0
+    assert main([*cli, "run"]) == 0
+    assert main([*cli, "sources", "disable", "src-a"]) == 0
+    capsys.readouterr()
+    assert main([*cli, "compile"]) == 0
+    assert "baseline reset (a Source that fed it was disabled)" in capsys.readouterr().out

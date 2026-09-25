@@ -445,3 +445,6 @@ tr[hidden] { display: none; }
 .bar-shared { fill: color-mix(in srgb, var(--c-green) 28%, var(--track)); }
 .swatch.bar-shared { background: color-mix(in srgb, var(--c-green) 28%, var(--track)); }
 .sub-inline { margin-left: 0.35rem; color: var(--muted); font-size: 0.8em; }
+.guard-note { flex-basis: 100%; }
+.guard-note p { margin: 0.2rem 0; }
+.guard-note a { color: inherit; font-weight: 600; }

@@ -117,6 +117,10 @@ _MIGRATIONS: tuple[str, ...] = (
     ALTER TABLE runs ADD COLUMN stats TEXT NOT NULL DEFAULT '{}';
     PRAGMA user_version = 5;
     """,
+    """
+    ALTER TABLE outputs ADD COLUMN last_sources TEXT;
+    PRAGMA user_version = 6;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)

@@ -34,7 +34,7 @@
   </div>
 </section>
 
-<details class="card danger"{% if force_error is defined and force_error %} open{% endif %}>
+<details class="card danger" id="force-compile"{% if (force_error is defined and force_error) or (last_compile_status is defined and last_compile_status == "blocked") %} open{% endif %}>
   <summary>Force Compile</summary>
   <p>A Compile blocked by the Shrink Guard keeps the previous Outputs. Force one to publish anyway (no Fetch).</p>
   {% if force_error is defined and force_error %}

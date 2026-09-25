@@ -8,7 +8,7 @@ so memory stays bounded however many Indicators the Sources list.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -21,7 +21,7 @@ from threatcull.policy.scoring import create_scored_table, drop_scored_table
 from threatcull.policy.stats import CompileStats, compile_stats
 from threatcull.store.allowlist import builtin_entries, operator_entries
 from threatcull.store.home import home_allow_entries
-from threatcull.store.outputs import list_outputs, record_published
+from threatcull.store.outputs import OutputSpec, list_outputs, record_published
 from threatcull.store.runs import finish_run, start_run
 from threatcull.store.settings import Settings, load_settings
 from threatcull.store.sightings import prune
@@ -39,6 +39,8 @@ class CompileReport:
     home_hit_count: int = 0
     home_hits: tuple[tuple[str, str], ...] = ()  # (value, Source ids), first HOME_HITS_CAP
     stats: CompileStats | None = None
+    # Outputs whose shrink check was skipped: a Source that fed them was disabled.
+    rebaselined: tuple[str, ...] = ()
 
 
 HOME_HITS_CAP = 100
@@ -56,6 +58,26 @@ def stale_source_ids(
     return tuple(s.id for s in sources if s.last_success_at is None or s.last_success_at < cutoff)
 
 
+def feeding_sources(spec: OutputSpec, blocklists: Sequence[Source]) -> frozenset[str]:
+    """Enabled blocklist Sources whose kind and category can put Indicators in ``spec``."""
+    return frozenset(
+        s.id for s in blocklists if s.kind == spec.kind and s.category in spec.categories
+    )
+
+
+def rebaselined_outputs(specs: Sequence[OutputSpec], blocklists: Sequence[Source]) -> set[str]:
+    """Outputs that lost a feeding Source since they were last published.
+
+    The operator (or Business Mode, or a Catalog update) disabled that Source, so a
+    smaller Output is the intended new baseline, not an upstream failure.
+    """
+    return {
+        spec.name
+        for spec in specs
+        if spec.last_sources is not None and spec.last_sources - feeding_sources(spec, blocklists)
+    }
+
+
 def shrink_reasons(
     previous: Mapping[str, int | None],
     new: Mapping[str, int],
@@ -63,6 +85,7 @@ def shrink_reasons(
     stale: int,
     enabled: int,
     settings: Settings,
+    rebaselined: Set[str] = frozenset(),
 ) -> list[str]:
     reasons: list[str] = []
     if enabled and stale / enabled > settings.max_stale_ratio:
@@ -71,6 +94,8 @@ def shrink_reasons(
             f"(limit {settings.max_stale_ratio:.0%})"
         )
     for name, count in new.items():
+        if name in rebaselined:
+            continue
         before = previous.get(name)
         if before and count < before * (1 - settings.max_shrink):
             reasons.append(
@@ -135,22 +160,33 @@ def _compile(
                 )
             )
         counts = {output.name: output.count for output in staged}
+        rebaselined = rebaselined_outputs(specs, blocklists)
         reasons = shrink_reasons(
             {spec.name: spec.last_count for spec in specs},
             counts,
             stale=len(stale),
             enabled=len(blocklists),
             settings=settings,
+            rebaselined=rebaselined,
         )
         if reasons and not force:
             return CompileReport(
                 "blocked", counts, tuple(reasons), allowlisted, stale, hit_count, hits, stats
             )
+        feeds = {spec.name: feeding_sources(spec, blocklists) for spec in specs}
         for output in staged:
             output.tmp.replace(output.path)
-            record_published(conn, output.name, output.count, now=now)
+            record_published(conn, output.name, output.count, now=now, sources=feeds[output.name])
         return CompileReport(
-            "ok", counts, tuple(reasons), allowlisted, stale, hit_count, hits, stats
+            "ok",
+            counts,
+            tuple(reasons),
+            allowlisted,
+            stale,
+            hit_count,
+            hits,
+            stats,
+            tuple(sorted(rebaselined)),
         )
     finally:
         # Blocked or failed: nothing is published. Published temp files are already gone.

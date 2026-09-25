@@ -402,6 +402,8 @@ def _compile(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
         print(f"WARNING: Home Network listed {more} more times", file=sys.stderr)
     for reason in report.reasons:
         print(f"guard: {reason}")
+    for name in report.rebaselined:
+        print(f"guard: {name} baseline reset (a Source that fed it was disabled)")
     if report.status == "blocked":
         print("Compile blocked: previous Outputs kept. Re-run with --force to publish anyway.")
         return EXIT_BLOCKED
