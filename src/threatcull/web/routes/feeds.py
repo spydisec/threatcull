@@ -29,7 +29,7 @@ from threatcull.store.outputs import (
     get_output,
     verify_token,
 )
-from threatcull.web.deps import get_conn
+from threatcull.web.deps import get_conn, require_user
 
 router = APIRouter()
 
@@ -162,7 +162,13 @@ def _serve(request: Request, conn: sqlite3.Connection, name: str, token: str) ->
     token_ok = _verify(conn, name, token)
     if spec is None or not token_ok:
         return _not_found()
+    return _serve_file(request, spec)
 
+
+def _serve_file(
+    request: Request, spec: OutputSpec, extra_headers: dict[str, str] | None = None
+) -> Response:
+    """Stream ``spec``'s published file (or a 304/HEAD); 404 if it was never published."""
     path = output_path(request.app.state.data_dir / "outputs", spec)
     try:
         handle = _open_output(path)
@@ -176,7 +182,7 @@ def _serve(request: Request, conn: sqlite3.Connection, name: str, token: str) ->
     except BaseException:
         handle.close()
         raise
-    headers = _file_headers(stat_result, _CONTENT_TYPES[spec.format])
+    headers = _file_headers(stat_result, _CONTENT_TYPES[spec.format]) | (extra_headers or {})
     probe = Response(status_code=200, headers=headers)
     conditional = _conditional(request, probe)
     if conditional is not probe or request.method == "HEAD":
@@ -252,3 +258,18 @@ def install_feed_token_redaction() -> None:
     logger = logging.getLogger("uvicorn.access")
     if not any(isinstance(existing, FeedTokenAccessFilter) for existing in logger.filters):
         logger.addFilter(FeedTokenAccessFilter())
+
+
+@router.get("/outputs/{name}/download")
+def download_output(
+    request: Request,
+    name: str,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    """A logged-in operator downloads an Output's file, no Feed Token needed."""
+    spec = _lookup_spec(conn, name)
+    if spec is None:
+        return _not_found()
+    filename = output_path(Path(), spec).name
+    return _serve_file(request, spec, {"content-disposition": f'attachment; filename="{filename}"'})
