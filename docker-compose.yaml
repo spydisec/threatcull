@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Run with `docker compose up -d`, or paste into a Portainer stack.
+services:
+  threatcull:
+    image: ghcr.io/spydisec/threatcull:1
+    container_name: threatcull
+    ports:
+      - "6969:6969" # use "127.0.0.1:6969:6969" to reach it from this host only
+    volumes:
+      - threatcull-data:/data
+    environment:
+      # Password for the 'admin' user (12+ characters). Used on the first start only.
+      - THREATCULL_ADMIN_PASSWORD=
+    restart: unless-stopped
+
+volumes:
+  threatcull-data: {}

@@ -35,6 +35,5 @@ docs/agents/
 # Frontend build tooling (the built bundle in web/static is committed)
 frontend/node_modules/
 
-# Docker: the first admin password (compose secret) and local compose overrides
-threatcull_admin.txt
+# Local compose overrides
 compose.yaml
