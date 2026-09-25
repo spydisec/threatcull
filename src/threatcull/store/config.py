@@ -191,7 +191,7 @@ def parse_config(data: bytes) -> ConfigDocument:
     except RecursionError as exc:  # e.g. 200,000 "[" in a row: fits in 1 MiB
         raise ConfigError("the file nests too deeply to be a ThreatCull configuration") from exc
     except yaml.YAMLError as exc:
-        raise ConfigError(f"the file is not a valid ThreatCull configuration: {exc}") from exc
+        raise ConfigError(_yaml_problem(exc)) from exc
     if not isinstance(raw, dict):
         raise ConfigError("the file must be a YAML mapping (key: value) at the top level")
     try:
@@ -351,18 +351,19 @@ def _apply_outputs(conn: sqlite3.Connection, doc: ConfigDocument, result: Import
             result.new_feed_tokens[spec.name] = create_output(conn, spec)
             result.applied.append(f"created Output {spec.name}")
             continue
-        same = (
-            current.kind,
-            current.categories,
-            current.min_tier,
-            current.max_entries,
-            current.format,
-        ) == (spec.kind, spec.categories, spec.min_tier, spec.max_entries, spec.format)
-        if not same:
+        if _definition(current) != _definition(spec):
             result.skipped.append(
                 f"skipped Output {spec.name}: exists with a different definition; "
                 "edit it on the Outputs page"
             )
+
+
+def _yaml_problem(exc: yaml.YAMLError) -> str:
+    """One line for the operator: PyYAML's own message spans several lines."""
+    problem = getattr(exc, "problem", None) or "unreadable YAML"
+    mark = getattr(exc, "problem_mark", None)
+    where = f" (line {mark.line + 1})" if mark is not None else ""
+    return f"the file is not a valid ThreatCull configuration: {problem}{where}"
 
 
 def _definition(spec: OutputSpec) -> tuple[object, ...]:

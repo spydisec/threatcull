@@ -78,7 +78,7 @@ def test_serve_installs_the_feed_token_access_log_filter(
                 logger.removeFilter(existing)
 
 
-def _catalog_file(path: Path, ids: list[str]) -> Path:
+def _catalog_file(path: Path, ids: list[str], *, disabled: tuple[str, ...] = ()) -> Path:
     entries = [
         {
             "id": source_id,
@@ -92,7 +92,7 @@ def _catalog_file(path: Path, ids: list[str]) -> Path:
             "licence": "MIT",
             "licence_url": "https://example.com/l",
             "refresh_minutes": 60,
-            "default_enabled": True,
+            "default_enabled": source_id not in disabled,
         }
         for source_id in ids
     ]
@@ -172,3 +172,28 @@ def test_serve_with_a_missing_password_file_fails_on_one_line(
     err = capsys.readouterr().err.strip()
     assert "THREATCULL_ADMIN_PASSWORD_FILE" in err
     assert "\n" not in err
+
+
+def test_an_upgrade_keeps_tokens_and_the_secret_and_adds_default_disabled_sources(
+    tmp_path: Path, captured_run: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_dir = tmp_path / "data"
+    old = _catalog_file(tmp_path / "old.yaml", ["a"])
+    assert cli.main(["--data-dir", str(data_dir), "--catalog", str(old), "serve"]) == 0
+    secret = (data_dir / "secret.key").read_bytes()
+    conn = connect(data_dir / "threatcull.db")
+    try:
+        hashes = dict(conn.execute("SELECT name, feed_token_hash FROM outputs").fetchall())
+    finally:
+        conn.close()
+
+    new = _catalog_file(tmp_path / "new.yaml", ["a", "late"], disabled=("late",))
+    assert cli.main(["--data-dir", str(data_dir), "--catalog", str(new), "serve"]) == 0
+
+    assert _enabled(data_dir) == {"a": True, "late": False}
+    assert (data_dir / "secret.key").read_bytes() == secret
+    conn = connect(data_dir / "threatcull.db")
+    try:
+        assert dict(conn.execute("SELECT name, feed_token_hash FROM outputs").fetchall()) == hashes
+    finally:
+        conn.close()

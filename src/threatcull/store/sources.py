@@ -223,6 +223,8 @@ def _check_custom(source_id: str, name: str, url: str) -> None:
         raise ValueError("custom Source names cannot contain control characters")
     if not url.startswith(_CUSTOM_SCHEMES):
         raise ValueError("custom Source URLs must use https://, http:// or file://")
+    if _CONTROL_CHARS.search(url):
+        raise ValueError("custom Source URLs cannot contain control characters")
 
 
 def update_custom_source(

@@ -42,6 +42,8 @@ ENV PATH=/app/.venv/bin:$PATH \
 VOLUME ["/data"]
 EXPOSE 6969
 USER 10001:10001
+# The healthcheck assumes the default port. To use another host port, change the host
+# side of the port mapping (for example "8080:6969") rather than serve --port.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD ["python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:6969/healthz', timeout=4).status == 200 else 1)"]
 # The CLI is the entrypoint: `docker compose run --rm threatcull user create admin` works.
