@@ -4,6 +4,40 @@
   <p>The file holds your settings, Source choices, custom Sources, Allowlist, Home Network and
     Output definitions. It holds no passwords, tokens or threat data.</p>
   <p><a class="button btn-secondary" href="/settings/export" download>Export configuration</a></p>
+  <h3>Import a configuration file</h3>
+  {% if import_error is defined and import_error %}
+  <p class="error" role="alert">{{ import_error }}</p>
+  {% endif %}
+  <form class="form-row" method="post" action="/settings/import" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>A ThreatCull .yaml file, up to 1 MiB
+      <input type="file" name="file" accept=".yaml,.yml,application/yaml,text/yaml" required>
+    </label>
+    <button type="submit" class="btn-secondary">Import</button>
+  </form>
+  <p class="hint">The import adds and updates; it never deletes anything. Values already on your
+    Allowlist or Home Network keep their notes.</p>
+  {% if import_result is defined and import_result %}
+  <div class="import-result" role="status">
+    {% if import_result.new_feed_tokens %}
+    <div class="notice notice-warn">
+      <p><strong>Copy these now: each new Feed Token is shown once and will not be shown again.</strong></p>
+      {% for name, token in import_result.new_feed_tokens.items() %}
+      <p>New Feed Token for {{ name }}: <code>{{ token }}</code></p>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if import_result.applied %}
+    <ul class="result-list">{% for line in import_result.applied %}<li>{{ line }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if import_result.skipped %}
+    <ul class="result-list skipped">{% for line in import_result.skipped %}<li>{{ line }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if not import_result.applied and not import_result.skipped %}
+    <p class="muted">Nothing to change: this install already matches the file.</p>
+    {% endif %}
+  </div>
+  {% endif %}
 </section>
 {% endblock %}
 {% block content %}
@@ -27,5 +61,39 @@
   <p>The file holds your settings, Source choices, custom Sources, Allowlist, Home Network and
     Output definitions. It holds no passwords, tokens or threat data.</p>
   <p><a class="button btn-secondary" href="/settings/export" download>Export configuration</a></p>
+  <h3>Import a configuration file</h3>
+  {% if import_error is defined and import_error %}
+  <p class="error" role="alert">{{ import_error }}</p>
+  {% endif %}
+  <form class="form-row" method="post" action="/settings/import" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>A ThreatCull .yaml file, up to 1 MiB
+      <input type="file" name="file" accept=".yaml,.yml,application/yaml,text/yaml" required>
+    </label>
+    <button type="submit" class="btn-secondary">Import</button>
+  </form>
+  <p class="hint">The import adds and updates; it never deletes anything. Values already on your
+    Allowlist or Home Network keep their notes.</p>
+  {% if import_result is defined and import_result %}
+  <div class="import-result" role="status">
+    {% if import_result.new_feed_tokens %}
+    <div class="notice notice-warn">
+      <p><strong>Copy these now: each new Feed Token is shown once and will not be shown again.</strong></p>
+      {% for name, token in import_result.new_feed_tokens.items() %}
+      <p>New Feed Token for {{ name }}: <code>{{ token }}</code></p>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if import_result.applied %}
+    <ul class="result-list">{% for line in import_result.applied %}<li>{{ line }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if import_result.skipped %}
+    <ul class="result-list skipped">{% for line in import_result.skipped %}<li>{{ line }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if not import_result.applied and not import_result.skipped %}
+    <p class="muted">Nothing to change: this install already matches the file.</p>
+    {% endif %}
+  </div>
+  {% endif %}
 </section>
 {% endblock %}

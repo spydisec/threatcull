@@ -452,3 +452,6 @@ tr[hidden] { display: none; }
 .notice-warn { color: var(--fg); background: var(--warn-bg); border: 1px solid color-mix(in srgb, var(--c-orange) 40%, transparent); }
 .notice-warn strong { color: var(--c-orange); }
 .notice-info { color: var(--muted); background: var(--info-bg); }
+.import-result { margin-top: 0.9rem; display: grid; gap: 0.6rem; }
+.result-list { margin: 0; padding-left: 1.2rem; font-size: 0.9em; }
+.result-list.skipped { color: var(--c-orange); }

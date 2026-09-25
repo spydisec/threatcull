@@ -28,7 +28,7 @@ from threatcull.lookup import lookup, output_labels
 from threatcull.parsers import SourceFormat
 from threatcull.store.allowlist import add_entry, import_entries, operator_entries, remove_entry
 from threatcull.store.api_tokens import create_api_token, list_api_tokens, revoke_api_token
-from threatcull.store.config import dump_config
+from threatcull.store.config import apply_config, dump_config, parse_config
 from threatcull.store.db import connect
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.home import (
@@ -194,6 +194,9 @@ def _add_config_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
     config_sub = config.add_subparsers(dest="action", required=True)
     export = config_sub.add_parser("export", help="Write the configuration as YAML")
     export.add_argument("-o", "--output", type=Path, help="file to write (default: stdout)")
+    config_sub.add_parser(
+        "import", help="Merge a YAML configuration file into this install (never deletes)"
+    ).add_argument("file", help="the YAML file, or - to read it from stdin")
 
 
 def _add_api_token_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -521,6 +524,18 @@ def _config_export(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _config_import(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    data = sys.stdin.buffer.read() if args.file == "-" else Path(args.file).read_bytes()
+    result = apply_config(conn, parse_config(data), now=utcnow())
+    for line in [*result.applied, *result.skipped]:
+        print(line)
+    for name, token in result.new_feed_tokens.items():
+        print(f"new Feed Token for {name} (shown once): {token}")
+    if not result.applied and not result.skipped:
+        print("nothing to change: this install already matches the file")
+    return EXIT_OK
+
+
 def _api_token_create(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     token = create_api_token(conn, args.name, args.user, now=utcnow())
     print(f"API token '{args.name}' for user {args.user} (shown once, store it safely): {token}")
@@ -569,6 +584,7 @@ _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("serve", None): _serve,
     ("api-token", "create"): _api_token_create,
     ("config", "export"): _config_export,
+    ("config", "import"): _config_import,
     ("api-token", "list"): _api_token_list,
     ("api-token", "revoke"): _api_token_revoke,
 }
