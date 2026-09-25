@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui.html" import pill, counts %}
 {% block title %}Runs · ThreatCull{% endblock %}
 {% block content %}
 <h1>Runs</h1>
@@ -13,11 +14,7 @@
     <dt>Failed Sources</dt>
     <dd>{{ last_result.failed_sources|join(", ") if last_result.failed_sources else "none" }}</dd>
     <dt>Counts</dt>
-    <dd>
-      {% if last_result.counts %}
-      {% for name, count in last_result.counts.items() %}{{ name }}: {{ count }}{% if not loop.last %}, {% endif %}{% endfor %}
-      {% else %}none{% endif %}
-    </dd>
+    <dd>{{ counts(last_result.counts) if last_result.counts else "none" }}</dd>
     {% for reason in last_result.reasons %}
     <dt>Guard</dt>
     <dd>{{ reason }}</dd>
@@ -28,55 +25,59 @@
     {% endif %}
   </dl>
   {% endif %}
-  <form class="inline-form" method="post" action="/runs/now">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <button type="submit">Run now</button>
-  </form>
-  <p class="muted">Fetches every enabled Source, then Compiles. Only one run happens at a time.</p>
+  <div class="row">
+    <form method="post" action="/runs/now">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit">Run now</button>
+    </form>
+    <p class="muted">Fetches every enabled Source, then Compiles. Only one run happens at a time.</p>
+  </div>
 </section>
 
-<section class="card">
-  <h2>Force Compile</h2>
+<details class="card danger"{% if force_error is defined and force_error %} open{% endif %}>
+  <summary>Force Compile</summary>
   <p>A Compile blocked by the Shrink Guard keeps the previous Outputs. Force one to publish anyway (no Fetch).</p>
   {% if force_error is defined and force_error %}
   <p class="error">{{ force_error }}</p>
   {% endif %}
-  <form method="post" action="/runs/compile-force">
+  <form class="row" method="post" action="/runs/compile-force">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label><input type="checkbox" name="confirm" value="true" required> I understand this publishes Outputs the guard blocked</label>
-    <button type="submit">Force Compile</button>
+    <label class="check"><input type="checkbox" name="confirm" value="true" required> I understand this publishes Outputs the guard blocked</label>
+    <button type="submit" class="btn-danger">Force Compile</button>
   </form>
-</section>
+</details>
 
-<h2>History</h2>
-<p>The last {{ runs|length }} Runs.</p>
 <section class="card">
+  <div class="card-head">
+    <h2>History</h2>
+    <span class="muted">The last {{ runs|length }} Runs.</span>
+  </div>
   {% if runs %}
+  <div class="table-wrap">
   <table class="table">
     <thead>
       <tr>
         <th>Type</th><th>Source</th><th>Started</th><th>Finished</th><th>Status</th>
-        <th>Counts</th><th>Error</th>
+        <th>Counts</th>
       </tr>
     </thead>
     <tbody>
       {% for run in runs %}
       <tr>
-        <td>{{ run.type }}</td>
-        <td>{{ run.source_id or "-" }}</td>
-        <td>{{ run.started_at }}</td>
-        <td>{{ run.finished_at or "running" }}</td>
-        <td>{{ run.status }}</td>
+        <td><span class="badge">{{ run.type }}</span></td>
+        <td class="nowrap mono">{{ run.source_id or "" }}</td>
+        <td class="nowrap">{{ run.started_at | when }}</td>
+        <td class="nowrap">{{ run.finished_at | when("running") }}</td>
+        <td>{{ pill(run.status) }}</td>
         <td>
-          {% if run.counts %}
-          {% for name, count in run.counts.items() %}{{ name }}: {{ count }}{% if not loop.last %}, {% endif %}{% endfor %}
-          {% else %}-{% endif %}
+          {{ counts(run.counts) }}
+          {% if run.error %}<div class="sub sub-bad">{{ run.error }}</div>{% endif %}
         </td>
-        <td>{{ run.error or "-" }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p>No Runs yet.</p>
   {% endif %}

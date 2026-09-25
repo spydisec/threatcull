@@ -9,3 +9,22 @@ document.body.addEventListener("htmx:configRequest", function (event) {
     event.detail.headers["X-CSRF-Token"] = meta.content;
   }
 });
+
+// Copy buttons: navigator.clipboard needs HTTPS or localhost, so over a plain
+// LAN address fall back to selecting the field and execCommand("copy").
+document.addEventListener("click", function (event) {
+  var button = event.target.closest("[data-copy]");
+  if (!button) return;
+  var field = document.getElementById(button.getAttribute("data-copy"));
+  if (!field) return;
+  var done = function () {
+    button.textContent = "Copied";
+    setTimeout(function () { button.textContent = "Copy"; }, 1500);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(field.value).then(done);
+  } else {
+    field.select();
+    if (document.execCommand("copy")) done();
+  }
+});

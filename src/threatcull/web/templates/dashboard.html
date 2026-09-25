@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui.html" import pill %}
 {% block title %}Dashboard · ThreatCull{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
@@ -21,79 +22,86 @@
 </section>
 {% endif %}
 
-<section class="card">
-  <h2>Pipeline</h2>
-  {% include "_status.html" %}
-  {% if scheduler_on %}
-  <p>Next compile at {{ next_compile_at or "not scheduled" }}.</p>
-  {% else %}
-  <p class="muted">Scheduler is off: Fetch and Compile run only when started by hand.</p>
-  {% endif %}
-  <p><a href="/runs">Run now or see the Run history</a></p>
-</section>
+<div class="tiles">
+  <div class="tile">
+    <p class="tile-label">Enabled blocklist Sources</p>
+    <p class="tile-value">{{ enabled_blocklist_count }}</p>
+    <p class="tile-note"><a href="/sources">Manage Sources</a></p>
+  </div>
+  <div class="tile{% if stale_count %} is-warn{% endif %}">
+    <p class="tile-label">Stale Sources</p>
+    <p class="tile-value">{{ stale_count }}</p>
+    <p class="tile-note">{{ "No fresh data" if stale_count else "All fresh" }}</p>
+  </div>
+  <div class="tile">
+    <p class="tile-label">Allowlist Sources</p>
+    <p class="tile-value">{{ allowlist_count }}</p>
+    <p class="tile-note"><a href="/allowlist">Allowlist</a></p>
+  </div>
+  <div class="tile">
+    <p class="tile-label">Business Mode</p>
+    <p class="tile-value">{{ "On" if business_mode else "Off" }}</p>
+    <p class="tile-note"><a href="/settings">Settings</a></p>
+  </div>
+</div>
 
-<section class="card">
-  <h2>Status</h2>
-  <dl class="stats">
-    <dt>Business Mode</dt>
-    <dd>{{ "On" if business_mode else "Off" }}</dd>
-    <dt>Enabled blocklist Sources</dt>
-    <dd>{{ enabled_blocklist_count }}</dd>
-    <dt>Stale Sources</dt>
-    <dd>{{ stale_count }}</dd>
-    <dt>Allowlist Sources</dt>
-    <dd>{{ allowlist_count }}</dd>
-  </dl>
-</section>
-
-<section class="card">
-  <h2>Last Compile</h2>
-  {% if last_compile %}
-  <dl class="stats">
-    <dt>Status</dt>
-    <dd id="last-compile-status">{{ last_compile.status }}</dd>
-    <dt>Finished</dt>
-    <dd>{{ last_compile.finished_at or "still running" }}</dd>
-    <dt>Counts</dt>
-    <dd>
-      {% if last_compile.counts %}
-      {% for name, count in last_compile.counts.items() %}{{ name }}: {{ count }}{% if not loop.last %}, {% endif %}{% endfor %}
-      {% else %}none{% endif %}
-    </dd>
-    {% if last_compile.error %}
-    <dt>Error</dt>
-    <dd class="error">{{ last_compile.error }}</dd>
+<div class="grid-2">
+  <section class="card">
+    <h2>Pipeline</h2>
+    {% include "_status.html" %}
+    {% if scheduler_on %}
+    <p>Next compile at {{ next_compile_at | when("not scheduled") }}.</p>
+    {% else %}
+    <p class="muted">Scheduler is off: Fetch and Compile run only when started by hand.</p>
     {% endif %}
-  </dl>
-  {% else %}
-  <p>No Compile has run yet.</p>
-  {% endif %}
-</section>
+    <p><a class="button" href="/runs">Run now or see the Run history</a></p>
+  </section>
+
+  <section class="card">
+    <h2>Last Compile</h2>
+    {% if last_compile %}
+    <dl class="stats">
+      <dt>Status</dt>
+      <dd>{{ pill(last_compile.status, id="last-compile-status") }}</dd>
+      <dt>Finished</dt>
+      <dd>{{ last_compile.finished_at | when("still running") }}</dd>
+      {% if last_compile.error %}
+      <dt>Error</dt>
+      <dd class="error">{{ last_compile.error }}</dd>
+      {% endif %}
+    </dl>
+    {% else %}
+    <p>No Compile has run yet.</p>
+    {% endif %}
+  </section>
+</div>
 
 <section class="card">
   <h2>Outputs</h2>
   {% if outputs %}
+  <div class="table-wrap">
   <table class="table">
     <thead>
       <tr>
-        <th>Name</th><th>Kind</th><th>Format</th><th>Min Tier</th><th>Cap</th>
-        <th>Last count</th><th>Last published</th>
+        <th>Name</th><th>Kind</th><th>Format</th><th>Min Tier</th><th class="num">Cap</th>
+        <th class="num">Last count</th><th>Last published</th>
       </tr>
     </thead>
     <tbody>
       {% for output in outputs %}
       <tr>
-        <td>{{ output.name }}</td>
+        <td><strong>{{ output.name }}</strong></td>
         <td>{{ output.kind }}</td>
         <td>{{ output.format }}</td>
         <td>{{ output.min_tier }}</td>
-        <td>{{ output.max_entries or "no cap" }}</td>
-        <td>{{ output.last_count if output.last_count is not none else "never" }}</td>
-        <td>{{ output.last_published_at or "never" }}</td>
+        <td class="num">{{ "{:,}".format(output.max_entries) if output.max_entries else "no cap" }}</td>
+        <td class="num">{{ "{:,}".format(output.last_count) if output.last_count is not none else "never" }}</td>
+        <td class="nowrap">{{ output.last_published_at | when }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p>No Outputs configured.</p>
   {% endif %}

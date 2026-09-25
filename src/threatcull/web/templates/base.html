@@ -15,34 +15,40 @@
   {% endif %}
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="/">ThreatCull</a>
-    {% if user %}
-    <nav class="nav" aria-label="Main">
-      <a href="/">Dashboard</a>
-      <a href="/sources">Sources</a>
-      <a href="/allowlist">Allowlist</a>
-      <a href="/home">Home Network</a>
-      <a href="/outputs">Outputs</a>
-      <a href="/runs">Runs</a>
-      <a href="/lookup">Lookup</a>
-      <a href="/settings">Settings</a>
-    </nav>
-    <form class="logout" method="post" action="/logout">
-      <input type="hidden" name="csrf" value="{{ csrf }}">
-      <span class="who">{{ user }}</span>
-      <button type="submit">Log out</button>
-    </form>
-    {% endif %}
-  </header>
-  <main>
+  {% set logo %}<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>{% endset %}
+  {% if user %}
+  {% set path = request.url.path %}
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="/">{{ logo }}ThreatCull</a>
+      <nav class="nav" aria-label="Main">
+        {% for href, label in [("/", "Dashboard"), ("/sources", "Sources"), ("/allowlist", "Allowlist"), ("/home", "Home Network"), ("/outputs", "Outputs"), ("/runs", "Runs"), ("/lookup", "Lookup"), ("/settings", "Settings")] %}
+        <a href="{{ href }}"{% if path == href or (href != "/" and path.startswith(href ~ "/")) %} aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+      </nav>
+      <form class="logout" method="post" action="/logout">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <span class="who">{{ user }}</span>
+        <button type="submit">Log out</button>
+      </form>
+    </aside>
+    <main>
+      {% if flash %}
+      <p class="flash" role="status">{{ flash }}</p>
+      {% endif %}
+      {% block content %}
+      <h1>ThreatCull</h1>
+      <p>Signed in as {{ user }}.</p>
+      {% endblock %}
+    </main>
+  </div>
+  {% else %}
+  <main class="main-anon">
     {% if flash %}
     <p class="flash" role="status">{{ flash }}</p>
     {% endif %}
-    {% block content %}
-    <h1>ThreatCull</h1>
-    <p>Signed in as {{ user }}.</p>
-    {% endblock %}
+    {{ self.content() }}
   </main>
+  {% endif %}
 </body>
 </html>

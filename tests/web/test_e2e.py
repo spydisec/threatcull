@@ -28,7 +28,7 @@ from threatcull.web.jobs import PipelineRunner
 WAIT = 10.0
 _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 _TOKEN_URL = re.compile(r"/o/ip-high\?token=([A-Za-z0-9_-]+)")
-_LAST_COMPILE_STATUS = re.compile(r'<dd id="last-compile-status">([^<]*)</dd>')
+_LAST_COMPILE_STATUS = re.compile(r'id="last-compile-status">([^<]*)<')
 
 
 def _last_compile_status(client: TestClient) -> str:

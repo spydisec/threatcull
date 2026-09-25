@@ -2,12 +2,13 @@
 {% block title %}Lookup · ThreatCull{% endblock %}
 {% block content %}
 <h1>Lookup</h1>
-<p>Why is an IP, CIDR or domain listed?</p>
+<p class="lead">Why is an IP, CIDR or domain listed?</p>
 
 <section class="card">
-  <form method="get" action="/lookup">
-    <label for="lookup-q">IP, CIDR or domain</label>
-    <input id="lookup-q" type="text" name="q" value="{{ q }}" maxlength="512" required>
+  <form class="form-row" method="get" action="/lookup">
+    <label for="lookup-q">IP, CIDR or domain
+      <input id="lookup-q" class="mono" type="text" name="q" value="{{ q }}" maxlength="512" required autofocus>
+    </label>
     <button type="submit">Look up</button>
   </form>
 </section>
@@ -18,7 +19,7 @@
 
 {% if result %}
 <section class="card">
-  <h2>{{ result.value }} ({{ result.kind }})</h2>
+  <h2><span class="mono">{{ result.value }}</span> <span class="badge">{{ result.kind }}</span></h2>
   <dl class="stats">
     <dt>Score</dt>
     <dd>score {{ result.score }} ({{ result.tier or "not listed" }})</dd>
@@ -39,6 +40,7 @@
 <section class="card">
   <h2>Sightings</h2>
   {% if result.sightings %}
+  <div class="table-wrap">
   <table class="table">
     <thead>
       <tr><th>Source</th><th>State</th><th>First seen</th><th>Last seen</th><th>Source status</th></tr>
@@ -47,14 +49,15 @@
       {% for s in result.sightings %}
       <tr>
         <td>{{ s.source_name }}</td>
-        <td>{{ "current" if s.current else "no longer listed" }}</td>
-        <td>{{ s.first_seen }}</td>
-        <td>{{ s.last_seen }}</td>
+        <td>{% if s.current %}<span class="pill pill-bad">current</span>{% else %}<span class="pill pill-off">no longer listed</span>{% endif %}</td>
+        <td class="nowrap">{{ s.first_seen | when }}</td>
+        <td class="nowrap">{{ s.last_seen | when }}</td>
         <td>{{ "enabled" if s.enabled else "Source disabled" }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p>No Source lists this value.</p>
   {% endif %}

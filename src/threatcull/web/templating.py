@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import jinja2
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from starlette.responses import HTMLResponse, Response
 
 from threatcull.web.deps import session_user
@@ -22,6 +24,23 @@ _env = jinja2.Environment(
     autoescape=True,
     undefined=jinja2.StrictUndefined,
 )
+
+
+def _when(value: str | None, missing: str = "never") -> Markup:
+    """Show a stored ISO-8601 UTC timestamp as ``2026-09-24 21:53 UTC``; the
+    full value stays in the tooltip."""
+    if not value:
+        return Markup("{}").format(missing)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return Markup("{}").format(value)
+    return Markup('<time datetime="{}" title="{}">{} UTC</time>').format(
+        value, value, parsed.strftime("%Y-%m-%d %H:%M")
+    )
+
+
+_env.filters["when"] = _when
 templates = Jinja2Templates(env=_env)
 
 FLASH_KEY = "flash"
