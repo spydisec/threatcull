@@ -17,18 +17,19 @@ serves the result to your firewalls, DNS servers and SIEM.
 You need Docker with Compose. The image is published for amd64 and arm64.
 
 ```bash
-mkdir threatcull && cd threatcull
-curl -fsSL -o compose.yaml \
-  https://raw.githubusercontent.com/spydisec/threatcull/main/compose.example.yaml
-printf '%s\n' '<a long password>' > threatcull_admin.txt && chmod 644 threatcull_admin.txt
-THREATCULL_BIND=<lan-ip> docker compose up -d
+curl -fsSLO https://raw.githubusercontent.com/spydisec/threatcull/main/docker-compose.yaml
 ```
 
-Open `http://<lan-ip>:6969` and log in as `admin`. Then empty the password file with
-`: > threatcull_admin.txt`; keep the file itself, because compose needs it to exist.
+Set `THREATCULL_ADMIN_PASSWORD` in `docker-compose.yaml` (12 or more characters), then:
 
-Without `THREATCULL_BIND`, ThreatCull listens on `127.0.0.1` only. Data lives on the
-`threatcull-data` volume.
+```bash
+docker compose up -d
+```
+
+Open `http://<server-ip>:6969` and log in as `admin`. ThreatCull reads the password on the first
+start only; you can clear it from the file afterwards. Data lives on the `threatcull-data` volume.
+
+**Portainer:** Stacks > Add stack, paste `docker-compose.yaml`, set the password, Deploy.
 
 ## First steps
 
@@ -38,7 +39,7 @@ Without `THREATCULL_BIND`, ThreatCull listens on `127.0.0.1` only. Data lives on
 4. Point your firewall or DNS server at the feed URL:
 
 ```bash
-curl http://<lan-ip>:6969/o/ip-high/<feed-token>
+curl http://<server-ip>:6969/o/ip-high/<feed-token>
 ```
 
 ## Upgrade
@@ -82,6 +83,8 @@ uv run threatcull serve --host <lan-ip> --port 6969
   lists one.
 - **Scripts:** create an API token with `threatcull api-token create <name> --user admin` and send it
   as `Authorization: Bearer <token>` to `/api/v1/`.
+- **Hardening:** the container runs as a non-root user and also works with `read_only: true`,
+  `tmpfs: [/tmp]` and `cap_drop: [ALL]` in the compose file.
 - **Reverse proxy with TLS:** start `serve` with `--secure-cookies` and `--trusted-proxy <proxy-ip>`.
 - **Scheduling:** `serve` runs fetches and compiles itself. Don't also run `threatcull run` from `cron`
   on the same data directory.

@@ -63,7 +63,7 @@ docker exec "$name" threatcull --data-dir /data user list | grep -q '^admin' \
   && check "data persisted on the volume"
 
 docker rm -f "$name" >/dev/null
-# A fresh volume, hardened like compose.example.yaml, with the first admin password
+# A fresh volume on a hardened container, with the first admin password
 # from a mounted secret file (THREATCULL_ADMIN_PASSWORD_FILE).
 printf 'from-a-secret-file\n' > "$secret_file"
 chmod 644 "$secret_file"
