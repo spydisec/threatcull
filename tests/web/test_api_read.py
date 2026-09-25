@@ -61,7 +61,6 @@ RUN_KEYS = {
     "home_hits",
 }
 SETTINGS_KEYS = {
-    "business_mode",
     "active_window_days",
     "retention_days",
     "stale_after_hours",
@@ -164,10 +163,10 @@ def test_api_runs_limit_boundary_is_accepted(
     assert response.status_code == 200
 
 
-def test_api_settings_returns_business_mode(client: TestClient, logged_in: str) -> None:
+def test_api_settings_has_no_business_mode(client: TestClient, logged_in: str) -> None:
     response = client.get("/api/v1/settings")
     assert response.status_code == 200
-    assert "business_mode" in response.json()
+    assert "business_mode" not in response.json()
 
 
 def test_api_settings_returns_exactly_the_allow_listed_keys(

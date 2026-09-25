@@ -31,3 +31,6 @@ docs/agents/
 .vale/styles/*
 !.vale/styles/ThreatCull/
 !.vale/styles/config/
+
+# Frontend build tooling (the built bundle in web/static is committed)
+frontend/node_modules/

@@ -9,6 +9,8 @@ from datetime import datetime
 
 from threatcull.clock import ts
 from threatcull.indicators import Indicator, IndicatorKind, normalize
+from threatcull.listfile import ImportReport, ListLine, apply_lines
+from threatcull.store.db import transaction
 from threatcull.store.errors import NotFoundError
 
 
@@ -37,6 +39,19 @@ def add_entry(
         (indicator.value, indicator.kind, note, ts(now)),
     )
     return AllowlistEntry(indicator.value, indicator.kind, note, "operator")
+
+
+def import_entries(
+    conn: sqlite3.Connection, lines: list[ListLine], *, now: datetime
+) -> ImportReport:
+    """Add every new value from an uploaded list in one transaction."""
+    with transaction(conn):
+        return apply_lines(
+            lines,
+            normalize=normalize_allow_value,
+            existing={entry.value for entry in operator_entries(conn)},
+            insert=lambda raw, note: add_entry(conn, raw, note, now=now),
+        )
 
 
 def remove_entry(conn: sqlite3.Connection, raw: str) -> None:

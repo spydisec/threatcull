@@ -76,3 +76,24 @@ def test_migration_4_adds_home_network_to_a_version_3_database(tmp_path: Path) -
         assert (run["status"], run["home_hits"]) == ("ok", "[]")
     finally:
         upgraded.close()
+
+
+def test_migration_drops_business_mode_and_its_disabled_reason(tmp_path: Path) -> None:
+    conn = connect(tmp_path / "old.db")
+    conn.execute("INSERT INTO settings (key, value) VALUES ('business_mode', 'true')")
+    conn.execute(
+        "INSERT INTO sources (id, name, family, url, format, kind, role, category, "
+        "licence_class, business_use, licence, licence_url, refresh_minutes, csv_column, "
+        "json_keys, custom, enabled, disabled_reason) VALUES ('nc', 'NC', 'nc', 'https://x', "
+        "'plain', 'ip', 'blocklist', 'malicious', 'noncommercial', 'forbidden', 'CC BY-NC', "
+        "'https://x/l', 60, 0, '[]', 0, 0, "
+        "'Disabled by Business Mode: not cleared for business use')"
+    )
+    conn.execute("PRAGMA user_version = 6")
+    migrate(conn)
+    assert (
+        conn.execute("SELECT COUNT(*) FROM settings WHERE key = 'business_mode'").fetchone()[0] == 0
+    )
+    row = conn.execute("SELECT enabled, disabled_reason FROM sources WHERE id = 'nc'").fetchone()
+    conn.close()
+    assert (row["enabled"], row["disabled_reason"]) == (0, None)

@@ -14,7 +14,7 @@ from threatcull.store.outputs import OutputFormat, OutputSpec, create_output, ge
 from threatcull.store.runs import recent_runs
 from threatcull.store.settings import Settings
 from threatcull.store.sightings import record_fetch_success
-from threatcull.store.sources import sync_catalog
+from threatcull.store.sources import set_enabled, sync_catalog
 
 IPS = {Indicator(f"45.9.20.{i}", "ip") for i in range(1, 11)}
 
@@ -189,3 +189,44 @@ def test_failure_mid_compile_publishes_nothing_and_cleans_up(
     assert list(out_dir.iterdir()) == []
     assert recent_runs(conn)[0].status == "failed"
     assert get_output(conn, "ips").last_count is None
+
+
+def test_disabling_a_source_resets_the_shrink_baseline(
+    conn: sqlite3.Connection, now: datetime, tmp_path: Path
+) -> None:
+    # "ips" publishes 10 (Source A) + overlap from B; disabling A shrinks it to 1.
+    _setup(conn, now)
+    assert compile_outputs(conn, tmp_path, now=now).status == "ok"
+    set_enabled(conn, "a", False)
+
+    report = compile_outputs(conn, tmp_path, now=now + timedelta(minutes=1))
+
+    assert report.status == "ok"
+    assert report.counts["ips"] == 1
+    assert report.rebaselined == ("ips", "ips-two")  # both are fed by Source A
+    assert get_output(conn, "ips").last_count == 1
+
+
+def test_an_upstream_collapse_with_the_same_sources_is_still_blocked(
+    conn: sqlite3.Connection, now: datetime, tmp_path: Path
+) -> None:
+    _setup(conn, now)
+    assert compile_outputs(conn, tmp_path, now=now).status == "ok"
+    later = now + timedelta(minutes=1)
+    record_fetch_success(
+        conn, "a", {Indicator("45.9.20.1", "ip")}, now=later, etag=None, last_modified=None
+    )
+
+    report = compile_outputs(conn, tmp_path, now=later)
+
+    assert report.status == "blocked"
+    assert report.rebaselined == ()
+    assert get_output(conn, "ips").last_count == 10
+
+
+def test_published_outputs_remember_the_sources_that_fed_them(
+    conn: sqlite3.Connection, now: datetime, tmp_path: Path
+) -> None:
+    _setup(conn, now)
+    compile_outputs(conn, tmp_path, now=now)
+    assert get_output(conn, "ips").last_sources == frozenset({"a", "b"})

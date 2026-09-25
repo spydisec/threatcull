@@ -12,14 +12,15 @@ for firewalls, DNS and SIEMs, including in air-gapped networks.
 
 **For:** SMB IT admins running their own firewall and DNS, designed so OT / air-gapped sites can follow.
 
-**In v1:** licence-tagged Catalog of Sources (plus Custom Sources), Business Mode, Fetch/Compile pipeline,
+**In v1:** licence-tagged Catalog of Sources (plus Custom Sources), Fetch/Compile pipeline,
 allowlists (built-in vendor ranges + operator entries), Confidence Score and Tiers, Outputs as plain /
-hosts / AdGuard / RPZ / CSV / JSON, served over HTTP with Feed Tokens or pushed to S3-compatible storage,
+hosts / AdGuard / RPZ / CSV / JSON, served over HTTP with Feed Tokens from the local data directory,
 Indicator lookup, Run history, single admin login, YAML configuration export/import. Runs as a plain
 Python app first, then as one container.
 
 **Not in v1:** multi-tenant SaaS, SSO/RBAC, STIX/TAXII, signed offline bundles, community sighting network,
-pushing rules directly to firewalls, per-Source weights, alerting integrations, built-in TLS.
+pushing rules directly to firewalls, per-Source weights, alerting integrations, built-in TLS,
+publishing Outputs to S3-compatible storage (planned for later).
 
 ## v1 is done when
 
@@ -28,7 +29,7 @@ pushing rules directly to firewalls, per-Source weights, alerting integrations, 
 3. The Run completes and the UI shows per-Source counts and status.
 4. `curl http://<lan-ip>:6969/o/<output>?token=<feed-token>` returns a valid list in the chosen Format.
 5. Looking up an Indicator shows which Sources listed it and when, or the allowlist reason.
-6. Business Mode disables every blocklist Source whose Business Use is not `allowed` and says why.
+6. The Sources page shows each Source's licence class, Business Use and a link to its terms.
 7. The full pipeline test passes with no internet access.
 
 ## Quick start
@@ -98,6 +99,21 @@ on a bare IP, no DNS name, no TLS.
   login rate limiter, `X-Forwarded-Proto` and `X-Forwarded-Host` for the Feed URLs it
   shows. Leave `--secure-cookies` off when serving plain HTTP: over an insecure connection
   the browser discards a `Secure` cookie and login fails.
+
+## Sources and licences
+
+ThreatCull ships software and a Catalog of Source definitions (URL, format, licence class
+and a link to the licence evidence). It ships no threat data. Each installation downloads
+every Source straight from its publisher, so the operator of that installation accepts
+each Source's terms.
+
+- The licence class and Business Use on each Source summarise the published terms as the
+  Catalog understood them. ThreatCull shows them but never enforces them: you decide which
+  Sources your use allows. Read the linked terms yourself before relying on a Source,
+  especially for business use. They are not legal advice.
+- Serving Outputs to your own firewalls, DNS servers and SIEM counts as your own use.
+  Sharing a Feed URL with another organisation, or exposing `/o/` to the internet, passes
+  the data on to others, which many Source licences forbid.
 
 ## Licence
 

@@ -6,9 +6,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from threatcull.clock import ts
 
@@ -28,6 +28,8 @@ class Run:
     error: str | None
     # A Compile's Home Network hits: (value, comma-joined Source ids), capped.
     home_hits: tuple[tuple[str, str], ...] = ()
+    # A Compile's cleanup numbers (``policy.stats.CompileStats.to_json``); {} otherwise.
+    stats: dict[str, Any] = field(default_factory=dict)
 
 
 def start_run(
@@ -49,16 +51,18 @@ def finish_run(
     counts: Mapping[str, int] | None = None,
     error: str | None = None,
     home_hits: Sequence[tuple[str, str]] = (),
+    stats: Mapping[str, Any] | None = None,
 ) -> None:
     conn.execute(
-        "UPDATE runs SET finished_at = ?, status = ?, counts = ?, error = ?, home_hits = ? "
-        "WHERE id = ?",
+        "UPDATE runs SET finished_at = ?, status = ?, counts = ?, error = ?, home_hits = ?, "
+        "stats = ? WHERE id = ?",
         (
             ts(now),
             status,
             json.dumps(dict(counts or {})),
             error,
             json.dumps([list(hit) for hit in home_hits]),
+            json.dumps(dict(stats or {})),
             run_id,
         ),
     )
@@ -75,6 +79,7 @@ def _to_run(row: sqlite3.Row) -> Run:
         counts=json.loads(row["counts"]),
         error=row["error"],
         home_hits=tuple((value, sources) for value, sources in json.loads(row["home_hits"])),
+        stats=json.loads(row["stats"]),
     )
 
 
@@ -149,3 +154,25 @@ def fail_interrupted_runs(conn: sqlite3.Connection, *, now: datetime) -> int:
         "UPDATE runs SET finished_at = ?, status = 'failed', error = ? WHERE status = 'running'",
         (ts(now), INTERRUPTED_ERROR),
     ).rowcount
+
+
+def compile_history(
+    conn: sqlite3.Connection, *, since: str | None = None, limit: int = 2000
+) -> list[Run]:
+    """Finished Compiles that recorded Compile Stats, oldest first: the newest ``limit``,
+    or only those started at or after ``since``."""
+    rows = conn.execute(
+        "SELECT * FROM runs WHERE type = 'compile' AND status IN ('ok', 'blocked') "
+        "AND stats != '{}' AND started_at >= ? ORDER BY started_at DESC, id DESC LIMIT ?",
+        (since or "", limit),
+    )
+    return [_to_run(row) for row in rows][::-1]
+
+
+def recent_fetches(conn: sqlite3.Connection, limit: int = 500) -> list[Run]:
+    """The newest ``limit`` Fetch Runs, newest first."""
+    rows = conn.execute(
+        "SELECT * FROM runs WHERE type = 'fetch' ORDER BY started_at DESC, id DESC LIMIT ?",
+        (limit,),
+    )
+    return [_to_run(row) for row in rows]

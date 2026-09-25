@@ -4,24 +4,8 @@
 <h1>Settings</h1>
 
 <section class="card">
-  <h2>Business Mode</h2>
-  <p>{{ "On" if settings.business_mode else "Off" }}</p>
-  {% if disabled_sources %}
-  <p class="error">
-    Business Mode disabled these Sources (not cleared for business use):
-    {{ disabled_sources | join(", ") }}
-  </p>
-  {% endif %}
-  <form method="post" action="/settings/business-mode">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <input type="hidden" name="on" value="{{ 'false' if settings.business_mode else 'true' }}">
-    <button type="submit">{{ "Turn off" if settings.business_mode else "Turn on" }} Business Mode</button>
-  </form>
-</section>
-
-<section class="card">
-  <h2>Other settings</h2>
-  <p>Read-only for now.</p>
+  <h2>Pipeline settings</h2>
+  <p class="muted">Read-only for now.</p>
   <dl class="stats">
     <dt>Active window (days)</dt><dd>{{ settings.active_window_days }}</dd>
     <dt>Retention (days)</dt><dd>{{ settings.retention_days }}</dd>

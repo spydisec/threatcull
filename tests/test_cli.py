@@ -77,15 +77,10 @@ def test_run_publishes_outputs_and_lookup_explains(
     assert "ip-medium (cap 25000)" in out
 
 
-def test_business_mode_blocks_noncommercial_sources(
+def test_a_noncommercial_source_can_be_enabled(
     cli: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert main([*cli, "sources", "enable", "src-nc"]) == 1
-    assert "business use" in capsys.readouterr().err
-    assert main([*cli, "business-mode", "off"]) == 0
     assert main([*cli, "sources", "enable", "src-nc"]) == 0
-    assert main([*cli, "business-mode", "on"]) == 0
-    assert "src-nc" in capsys.readouterr().out
 
 
 def test_allowlist_commands(
@@ -207,3 +202,28 @@ def test_invalid_catalog_yaml_reports_cleanly(
     args = ["--data-dir", str(tmp_path / "data"), "--catalog", str(bad)]
     assert main([*args, "init"]) == 1
     assert capsys.readouterr().err.startswith("error:")
+
+
+def test_allow_import_file(
+    cli: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    listing = tmp_path / "allow.csv"
+    listing.write_text("value,note\n8.8.8.8,dns\nbad value\n", encoding="utf-8")
+    assert main([*cli, "init"]) == 0
+    capsys.readouterr()
+    assert main([*cli, "allow", "import", str(listing)]) == 0
+    out = capsys.readouterr().out
+    assert "imported 1 new entry, 0 already present" in out
+    assert "line 3: 'bad value'" in out
+    assert main([*cli, "allow", "import", str(tmp_path / "missing.txt")]) == 1
+
+
+def test_compile_reports_outputs_whose_guard_baseline_was_reset(
+    cli: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main([*cli, "init"]) == 0
+    assert main([*cli, "run"]) == 0
+    assert main([*cli, "sources", "disable", "src-a"]) == 0
+    capsys.readouterr()
+    assert main([*cli, "compile"]) == 0
+    assert "baseline reset (a Source that fed it was disabled)" in capsys.readouterr().out

@@ -7,4 +7,4 @@ class NotFoundError(LookupError):
 
 
 class PolicyError(Exception):
-    """An operation would break Business Mode or needs an explicit acknowledgement."""
+    """An operation needs an explicit acknowledgement (a restricted licence)."""

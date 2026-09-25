@@ -142,3 +142,16 @@ def test_detect_public_ip_failure_is_reported(
     captured = capsys.readouterr()
     assert "could not learn the public IP" in captured.err
     assert "45.9.20.1  default gateway (eth0)" in captured.out
+
+
+def test_home_import_file(
+    cli: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    listing = tmp_path / "home.txt"
+    listing.write_text("45.9.20.1\n192.168.1.10\n", encoding="utf-8")
+    assert main([*cli, "init"]) == 0
+    capsys.readouterr()
+    assert main([*cli, "home", "import", str(listing)]) == 0
+    out = capsys.readouterr().out
+    assert "imported 1 new entry, 0 already present" in out
+    assert "line 2: '192.168.1.10'" in out

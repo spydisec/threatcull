@@ -9,6 +9,7 @@ import json
 import re
 import secrets
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
@@ -37,6 +38,9 @@ class OutputSpec:
     format: OutputFormat
     last_count: int | None = None
     last_published_at: str | None = None
+    # Sources that could feed this Output when it was last published (the Shrink
+    # Guard's baseline); None if it was published before this was recorded.
+    last_sources: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
         if not NAME_PATTERN.fullmatch(self.name):
@@ -109,6 +113,9 @@ def _to_spec(row: sqlite3.Row) -> OutputSpec:
         format=row["format"],
         last_count=row["last_count"],
         last_published_at=row["last_published_at"],
+        last_sources=(
+            frozenset(json.loads(row["last_sources"])) if row["last_sources"] is not None else None
+        ),
     )
 
 
@@ -135,8 +142,15 @@ def verify_token(conn: sqlite3.Connection, name: str, token: str) -> bool:
     return row is not None and hmac.compare_digest(row["feed_token_hash"], _hash(token))
 
 
-def record_published(conn: sqlite3.Connection, name: str, count: int, *, now: datetime) -> None:
+def record_published(
+    conn: sqlite3.Connection,
+    name: str,
+    count: int,
+    *,
+    now: datetime,
+    sources: Iterable[str] = (),
+) -> None:
     conn.execute(
-        "UPDATE outputs SET last_count = ?, last_published_at = ? WHERE name = ?",
-        (count, ts(now), name),
+        "UPDATE outputs SET last_count = ?, last_published_at = ?, last_sources = ? WHERE name = ?",
+        (count, ts(now), json.dumps(sorted(sources)), name),
     )

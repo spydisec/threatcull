@@ -5,29 +5,53 @@ from __future__ import annotations
 
 import sqlite3
 from collections import Counter
+from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import ValidationError
 from starlette.responses import RedirectResponse, Response
 
 from threatcull.clock import ts, utcnow
 from threatcull.compiling import stale_source_ids
 from threatcull.home_detect import public_ip_candidate
+from threatcull.listfile import MAX_BYTES, parse_list_file, summary
 from threatcull.lookup import lookup, output_labels
-from threatcull.store.allowlist import add_entry, builtin_entries, operator_entries, remove_entry
+from threatcull.policy.stats import CompileStats
+from threatcull.store.allowlist import (
+    add_entry,
+    builtin_entries,
+    import_entries,
+    operator_entries,
+    remove_entry,
+)
 from threatcull.store.errors import NotFoundError, PolicyError
-from threatcull.store.home import add_home, home_allow_entries, home_entries, remove_home
+from threatcull.store.home import (
+    add_home,
+    home_allow_entries,
+    home_entries,
+    import_home,
+    remove_home,
+)
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
-from threatcull.store.runs import last_run, recent_runs
+from threatcull.store.runs import compile_history, last_run, recent_fetches, recent_runs
 from threatcull.store.settings import load_settings
 from threatcull.store.sources import (
     add_custom_source,
     get_source,
     list_sources,
-    set_business_mode,
 )
 from threatcull.store.sources import set_enabled as store_set_enabled
+from threatcull.web.dashboard import (
+    CATEGORY_LABELS,
+    FUNNEL_WIDTH,
+    chart_data,
+    funnel,
+    health,
+    output_changes,
+    source_changes,
+    source_rows,
+)
 from threatcull.web.deps import (
     check_csrf,
     current_user,
@@ -72,45 +96,74 @@ def _validation_message(exc: ValidationError) -> str:
     )
 
 
+def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
+    now = utcnow()
+    settings = load_settings(conn)
+    sources = list_sources(conn)
+    names = {source.id: source.name for source in sources}
+    blocklists = [s for s in sources if s.enabled and s.role == "blocklist"]
+    stale_ids = stale_source_ids(blocklists, now=now, settings=settings)
+    scheduler: Scheduler | None = getattr(request.app.state, "scheduler", None)
+    next_run = scheduler.next_compile_at() if scheduler is not None else None
+    last_compile = last_run(conn, "compile")
+    # A failed Compile records no Home Network hits; the banner must show the last
+    # Compile that actually finished (ok or blocked), not go dark behind a failure.
+    home_compile = last_run(conn, "compile", statuses=("ok", "blocked"))
+    home_alerts = [
+        (value, ", ".join(names.get(sid, sid) for sid in hit_sources.split(",")))
+        for value, hit_sources in (home_compile.home_hits if home_compile else ())
+    ]
+    history = compile_history(conn, since=ts(now - timedelta(days=30)))
+    stats = CompileStats.from_json(history[-1].stats) if history else None
+    outputs = list_outputs(conn)
+    context: dict[str, Any] = {
+        "enabled_blocklist_count": len(blocklists),
+        "failing_count": sum(1 for s in blocklists if s.last_error),
+        "stale_count": len(stale_ids),
+        "allowlist_count": sum(1 for s in sources if s.role == "allowlist"),
+        "last_compile": last_compile,
+        "health": health(last_compile, blocklists, len(stale_ids)),
+        "home_alerts": home_alerts,
+        "home_hit_count": home_compile.counts.get("home_hits", 0) if home_compile else 0,
+        "outputs": outputs,
+        "output_changes": output_changes(outputs, history),
+        "source_changes": source_changes(recent_fetches(conn), {s.id: s.name for s in blocklists}),
+        "scheduler_on": scheduler is not None,
+        "next_compile_at": ts(next_run) if next_run is not None else None,
+        "refreshed_at": ts(now),
+        "category_labels": CATEGORY_LABELS,
+        "stats": stats,
+        **_run_status(request),
+    }
+    if stats is not None:
+        context.update(
+            {
+                "stats_at": history[-1].finished_at,
+                "funnel": funnel(stats),
+                "funnel_width": FUNNEL_WIDTH,
+                "source_rows": source_rows(stats, names),
+                "chart_data": chart_data(stats, history, now=now),
+            }
+        )
+    return context
+
+
+@router.get("/partials/dashboard")
+def dashboard_fragment(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    return render_fragment(request, "_dashboard_body.html", _dashboard_context(request, conn))
+
+
 @router.get("/")
 def dashboard(
     request: Request,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
-    settings = load_settings(conn)
-    enabled_blocklists = list_sources(conn, enabled_only=True, role="blocklist")
-    stale_ids = stale_source_ids(enabled_blocklists, now=utcnow(), settings=settings)
-    allowlist_sources = list_sources(conn, role="allowlist")
-    scheduler: Scheduler | None = getattr(request.app.state, "scheduler", None)
-    next_run = scheduler.next_compile_at() if scheduler is not None else None
-    next_compile = ts(next_run) if next_run is not None else None
-    last_compile = last_run(conn, "compile")
-    # A failed Compile records no Home Network hits; the banner must show the last
-    # Compile that actually finished (ok or blocked), not go dark behind a failure.
-    home_compile = last_run(conn, "compile", statuses=("ok", "blocked"))
-    source_names = {source.id: source.name for source in list_sources(conn)}
-    home_alerts = [
-        (value, ", ".join(source_names.get(sid, sid) for sid in sources.split(",")))
-        for value, sources in (home_compile.home_hits if home_compile else ())
-    ]
-    return render(
-        request,
-        "dashboard.html",
-        {
-            "business_mode": settings.business_mode,
-            "enabled_blocklist_count": len(enabled_blocklists),
-            "stale_count": len(stale_ids),
-            "allowlist_count": len(allowlist_sources),
-            "last_compile": last_compile,
-            "home_alerts": home_alerts,
-            "home_hit_count": home_compile.counts.get("home_hits", 0) if home_compile else 0,
-            "outputs": list_outputs(conn),
-            "scheduler_on": scheduler is not None,
-            "next_compile_at": next_compile,
-            **_run_status(request),
-        },
-    )
+    return render(request, "dashboard.html", _dashboard_context(request, conn))
 
 
 # htmx stops polling when a response has this status (and still swaps the body).
@@ -244,7 +297,12 @@ def runs_page(
 
 
 def _runs_context(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
-    return {"runs": recent_runs(conn, RUNS_PAGE_LIMIT), **_run_status(request)}
+    last_compile = last_run(conn, "compile")
+    return {
+        "runs": recent_runs(conn, RUNS_PAGE_LIMIT),
+        "last_compile_status": last_compile.status if last_compile else None,
+        **_run_status(request),
+    }
 
 
 @router.post("/runs/now", dependencies=[Depends(check_csrf)])
@@ -356,6 +414,28 @@ def add_allowlist_entry_page(
     return RedirectResponse("/allowlist", status_code=303)
 
 
+def _read_upload(file: UploadFile | None) -> bytes:
+    """The uploaded list's bytes, read at most one byte past the size limit."""
+    if file is None or not file.filename:
+        raise ValueError("Choose a file to import.")
+    return file.file.read(MAX_BYTES + 1)
+
+
+@router.post("/allowlist/import", dependencies=[Depends(check_csrf)])
+def import_allowlist_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    file: Annotated[UploadFile | None, File()] = None,
+) -> Response:
+    try:
+        lines = parse_list_file(_read_upload(file))
+    except ValueError as exc:
+        return _allowlist_error(request, conn, str(exc), value="", note="", status_code=400)
+    flash(request, summary(import_entries(conn, lines, now=utcnow())))
+    return RedirectResponse("/allowlist", status_code=303)
+
+
 @router.post("/allowlist/remove", dependencies=[Depends(check_csrf)])
 def remove_allowlist_entry_page(
     request: Request,
@@ -397,6 +477,21 @@ def _home_error(
     context = _home_context(conn)
     context.update({"error": message, "value": value, "note": note})
     return render(request, "home.html", context, status_code=status_code)
+
+
+@router.post("/home/import", dependencies=[Depends(check_csrf)])
+def import_home_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    file: Annotated[UploadFile | None, File()] = None,
+) -> Response:
+    try:
+        lines = parse_list_file(_read_upload(file))
+    except ValueError as exc:
+        return _home_error(request, conn, str(exc), value="", note="", status_code=400)
+    flash(request, summary(import_home(conn, lines, now=utcnow())))
+    return RedirectResponse("/home", status_code=303)
 
 
 @router.post("/home", dependencies=[Depends(check_csrf)])
@@ -627,22 +722,4 @@ def settings_page(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
-    return render(
-        request, "settings.html", {"settings": load_settings(conn), "disabled_sources": []}
-    )
-
-
-@router.post("/settings/business-mode", dependencies=[Depends(check_csrf)])
-def set_business_mode_page(
-    request: Request,
-    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
-    user: Annotated[str, Depends(require_user)],
-    on: Annotated[bool, Form()] = False,
-) -> Response:
-    disabled = set_business_mode(conn, on)
-    _notify_sources_changed(request)
-    return render(
-        request,
-        "settings.html",
-        {"settings": load_settings(conn), "disabled_sources": disabled},
-    )
+    return render(request, "settings.html", {"settings": load_settings(conn)})

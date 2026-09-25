@@ -45,13 +45,10 @@ def test_pages_redirect_to_login_when_logged_out(client: TestClient, path: str) 
     assert response.headers["location"] == "/login"
 
 
-def test_dashboard_shows_business_mode_and_an_output(
-    client: TestClient, logged_in: str, tmp_path: Path
-) -> None:
+def test_dashboard_shows_an_output(client: TestClient, logged_in: str, tmp_path: Path) -> None:
     _seed(tmp_path)
     response = client.get("/")
     assert response.status_code == 200
-    assert "Business Mode" in response.text
     assert OUTPUT_SPEC.name in response.text
 
 

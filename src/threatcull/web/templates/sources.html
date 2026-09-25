@@ -2,17 +2,27 @@
 {% block title %}Sources · ThreatCull{% endblock %}
 {% block content %}
 <h1>Sources</h1>
+<p class="lead">
+  ThreatCull downloads each Source straight from its publisher, so you are responsible for
+  following each Source's terms. The licence labels summarise those terms but are not legal
+  advice: open the licence link before relying on a Source.
+</p>
 {% if error is defined and error %}
 <p class="error">{{ error }}</p>
 {% endif %}
 <section class="card">
   {% if sources %}
-  <table class="table">
+  <div class="table-tools" data-filter-for="sources-table" hidden>
+    <input type="search" data-filter-text placeholder="Search Sources  ( / )" aria-label="Search Sources">
+    <select data-filter-state aria-label="Show"><option value="">All</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option><option value="failed">Failed</option><option value="blocklist">Blocklists</option><option value="allowlist">Allowlists</option></select>
+    <span class="muted" data-filter-count aria-live="polite"></span>
+  </div>
+  <div class="table-wrap">
+  <table class="table table-sources" id="sources-table">
     <thead>
       <tr>
-        <th>Id</th><th>Name</th><th>Role</th><th>Category</th><th>Enabled</th>
-        <th>Licence</th><th>Business use</th><th>Last success</th><th>Last attempt</th>
-        <th>Last error</th><th>Disabled reason</th><th>Action</th>
+        <th>Source</th><th>Category</th><th>Licence</th><th>Business use</th>
+        <th>Status</th><th class="col-action">Action</th>
       </tr>
     </thead>
     <tbody>
@@ -21,6 +31,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p>No Sources yet.</p>
   {% endif %}

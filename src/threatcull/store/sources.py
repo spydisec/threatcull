@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Sources: Catalog sync, enablement and Business Mode policy."""
+"""Sources: Catalog sync and enablement."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from threatcull.catalog import (
     BusinessUse,
@@ -15,15 +15,12 @@ from threatcull.catalog import (
     Category,
     LicenceClass,
     SourceRole,
-    business_use_permitted,
 )
 from threatcull.indicators import SourceKind
 from threatcull.parsers import SourceFormat
 from threatcull.store.db import transaction
 from threatcull.store.errors import NotFoundError, PolicyError
-from threatcull.store.settings import load_settings, save_settings
 
-BUSINESS_MODE_REASON = "Disabled by Business Mode: not cleared for business use"
 REMOVED_FROM_CATALOG_REASON = "Removed from the Catalog"
 RESTRICTED_TERMS_REASON = "Terms changed to restricted; acknowledge to re-enable"
 _CUSTOM_ID = re.compile(r"^custom-[a-z0-9][a-z0-9-]{0,54}$")
@@ -89,16 +86,13 @@ def _to_source(row: sqlite3.Row) -> Source:
 
 def sync_catalog(conn: sqlite3.Connection, entries: Sequence[CatalogEntry]) -> None:
     """Insert new Catalog Sources and refresh metadata, never overriding operator choices."""
-    business_mode = load_settings(conn).business_mode
     with transaction(conn):
         previous_class = {
             row["id"]: row["licence_class"]
             for row in conn.execute("SELECT id, licence_class FROM sources WHERE custom = 0")
         }
         for entry in entries:
-            enabled = entry.default_enabled and (
-                not business_mode or business_use_permitted(entry.role, entry.business_use)
-            )
+            enabled = entry.default_enabled
             params = entry.model_dump(mode="json", exclude={"default_enabled", "notes"})
             params["json_keys"] = json.dumps(list(entry.json_keys))
             params["enabled"] = int(enabled)
@@ -140,8 +134,6 @@ def sync_catalog(conn: sqlite3.Connection, entries: Sequence[CatalogEntry]) -> N
             "UPDATE sources SET enabled = 0, disabled_reason = ? WHERE id = ? AND enabled = 1",
             [(RESTRICTED_TERMS_REASON, source_id) for source_id in newly_restricted],
         )
-        if business_mode:
-            _disable_non_business(conn)
 
 
 def list_sources(
@@ -173,18 +165,12 @@ def set_enabled(
     acknowledge_restricted: bool = False,
 ) -> Source:
     source = get_source(conn, source_id)
-    if enabled:
-        business_mode = load_settings(conn).business_mode
-        if business_mode and not business_use_permitted(source.role, source.business_use):
-            raise PolicyError(
-                f"{source.name} is not cleared for business use ({source.business_use}); "
-                "turn off Business Mode to enable it"
-            )
-        if source.licence_class is LicenceClass.RESTRICTED and not acknowledge_restricted:
-            raise PolicyError(
-                f"{source.name} has restricted terms ({source.licence}); read "
-                f"{source.licence_url} and acknowledge them to enable it"
-            )
+    restricted = source.licence_class is LicenceClass.RESTRICTED
+    if enabled and restricted and not acknowledge_restricted:
+        raise PolicyError(
+            f"{source.name} has restricted terms ({source.licence}); read "
+            f"{source.licence_url} and acknowledge them to enable it"
+        )
     conn.execute(
         "UPDATE sources SET enabled = ?, disabled_reason = NULL WHERE id = ?",
         (int(enabled), source_id),
@@ -233,25 +219,3 @@ def add_custom_source(
         ),
     )
     return get_source(conn, source_id)
-
-
-def set_business_mode(conn: sqlite3.Connection, on: bool) -> list[str]:
-    """Persist Business Mode; turning it on disables blocklist Sources not cleared for business."""
-    with transaction(conn):
-        save_settings(conn, replace(load_settings(conn), business_mode=on))
-        return _disable_non_business(conn) if on else []
-
-
-def _disable_non_business(conn: sqlite3.Connection) -> list[str]:
-    ids = [
-        row["id"]
-        for row in conn.execute(
-            "SELECT id FROM sources WHERE enabled = 1 AND role = 'blocklist' "
-            "AND business_use != 'allowed' ORDER BY id"
-        )
-    ]
-    conn.executemany(
-        "UPDATE sources SET enabled = 0, disabled_reason = ? WHERE id = ?",
-        [(BUSINESS_MODE_REASON, source_id) for source_id in ids],
-    )
-    return ids

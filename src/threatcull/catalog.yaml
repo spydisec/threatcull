@@ -1,4 +1,4 @@
-# ThreatCull Catalog — Source definitions with licence evidence.
+# ThreatCull Catalog: Source definitions with licence evidence.
 # Licence facts checked 2026-09-24 against each provider's own terms. Not legal advice.
 # business_use: may a business use this Source to protect its own network?
 # family: Sources from the same upstream share a family and count once in scoring.
@@ -145,7 +145,7 @@ sources:
 
   # ------------------------------------------------------------ Domain blocklists
   - id: blocklistproject-malware
-    name: The Block List Project — malware
+    name: The Block List Project (malware)
     family: blocklistproject
     url: https://blocklistproject.github.io/Lists/malware.txt
     format: hosts
@@ -158,7 +158,7 @@ sources:
     refresh_minutes: 1440
 
   - id: blocklistproject-phishing
-    name: The Block List Project — phishing
+    name: The Block List Project (phishing)
     family: blocklistproject
     url: https://blocklistproject.github.io/Lists/phishing.txt
     format: hosts
@@ -172,7 +172,7 @@ sources:
     default_enabled: true
 
   - id: blocklistproject-ransomware
-    name: The Block List Project — ransomware
+    name: The Block List Project (ransomware)
     family: blocklistproject
     url: https://blocklistproject.github.io/Lists/ransomware.txt
     format: hosts
@@ -185,7 +185,7 @@ sources:
     refresh_minutes: 1440
 
   - id: blocklistproject-scam
-    name: The Block List Project — scam
+    name: The Block List Project (scam)
     family: blocklistproject
     url: https://blocklistproject.github.io/Lists/scam.txt
     format: hosts
@@ -198,7 +198,7 @@ sources:
     refresh_minutes: 1440
 
   - id: blocklistproject-ads
-    name: The Block List Project — ads
+    name: The Block List Project (ads)
     family: blocklistproject
     url: https://blocklistproject.github.io/Lists/ads.txt
     format: hosts
@@ -212,7 +212,7 @@ sources:
     default_enabled: true
 
   - id: blocklistproject-tracking
-    name: The Block List Project — tracking
+    name: The Block List Project (tracking)
     family: blocklistproject
     url: https://blocklistproject.github.io/Lists/tracking.txt
     format: hosts

@@ -10,7 +10,6 @@ from threatcull.store.settings import Settings, load_settings, save_settings
 def test_defaults_match_owner_decisions(conn: sqlite3.Connection) -> None:
     settings = load_settings(conn)
     assert settings == Settings()
-    assert settings.business_mode is True
     assert (settings.active_window_days, settings.retention_days) == (7, 30)
     assert settings.stale_after_hours == 72
     assert (settings.tier_high, settings.tier_medium) == (3, 2)
@@ -18,7 +17,7 @@ def test_defaults_match_owner_decisions(conn: sqlite3.Connection) -> None:
 
 
 def test_save_and_load_round_trip(conn: sqlite3.Connection) -> None:
-    changed = replace(Settings(), business_mode=False, tier_high=4)
+    changed = replace(Settings(), tier_high=4)
     save_settings(conn, changed)
     assert load_settings(conn) == changed
 

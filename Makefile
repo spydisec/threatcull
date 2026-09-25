@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup lint format types test security audit prose check
+.PHONY: help setup lint format types test security audit prose ui ui-check check
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-10s %s\n", $$1, $$2}'
@@ -37,4 +37,10 @@ security: audit ## bandit, semgrep, pip-audit, gitleaks
 	uvx semgrep scan --config p/python --config .semgrep.yml --error --metrics off --quiet src
 	uv run pre-commit run gitleaks --all-files
 
-check: lint prose types test security ## Everything CI runs
+ui: ## Rebuild the TypeScript islands bundle (needs Node)
+	cd frontend && npm ci --silent --ignore-scripts && npm run -s typecheck && npm run -s build
+
+ui-check: ui ## Fail if the committed islands bundle is out of date
+	@git diff --quiet -- src/threatcull/web/static/islands.js || { echo "islands.js is out of date: run make ui and stage it"; exit 1; }
+
+check: lint prose types ui-check test security ## Everything CI runs

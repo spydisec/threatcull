@@ -84,7 +84,7 @@ class CatalogEntry(BaseModel):
 
 
 def business_use_permitted(role: SourceRole, business_use: BusinessUse) -> bool:
-    """Business Mode rule: blocklist Sources need business use allowed; allowlist is exempt."""
+    """Curation rule for default-enabled Sources: a blocklist must allow business use."""
     return role == "allowlist" or business_use is BusinessUse.ALLOWED
 
 

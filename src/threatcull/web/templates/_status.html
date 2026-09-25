@@ -8,7 +8,7 @@
 {% else %}
 <div id="run-status" class="run-status">
   {% if last_result %}
-  <p>Idle. Last run from this server: {{ last_result.status }}, finished {{ last_result.finished_at }}.</p>
+  <p>Idle. Last run from this server: {{ last_result.status }}, finished {{ last_result.finished_at | when }}.</p>
   {% else %}
   <p>Idle.</p>
   {% endif %}

@@ -12,7 +12,6 @@ from threatcull.store.db import transaction
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    business_mode: bool = True
     active_window_days: int = 7
     retention_days: int = 30
     stale_after_hours: int = 72

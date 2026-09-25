@@ -1,0 +1,21 @@
+{# Shared UI bits. Colour is never the only signal: every pill carries its text. #}
+{% macro pill(status, id=none) -%}
+{%- set tone = {"ok": "ok", "not_modified": "ok", "running": "warn", "skipped": "off",
+                "blocked": "warn", "stale": "warn", "failed": "bad", "error": "bad"}.get(status, "off") -%}
+<span class="pill pill-{{ tone }}"{% if id %} id="{{ id }}"{% endif %}>{{ status }}</span>
+{%- endmacro %}
+
+{# A Run's counts as compact name/value chips, numbers with thousands separators. #}
+{% macro counts(values) -%}
+{%- if values -%}
+<span class="kvs">{% for name, count in values.items() %}<span class="kv">{{ name }} <b>{{ "{:,}".format(count) if count is number else count }}</b></span>{% endfor %}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{# A read-only field with a Copy button (islands.js); works over plain HTTP too. #}
+{% macro copy_field(id, value, label) -%}
+<span class="copy">
+  <input id="{{ id }}" class="mono" type="text" value="{{ value }}" readonly aria-label="{{ label }}">
+  <button type="button" class="btn-secondary" data-copy="{{ id }}">Copy</button>
+</span>
+{%- endmacro %}

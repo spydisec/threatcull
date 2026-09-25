@@ -6,15 +6,12 @@ import pytest
 from tests.factories import make_entry
 from threatcull.catalog import BusinessUse
 from threatcull.store.errors import NotFoundError, PolicyError
-from threatcull.store.settings import load_settings
 from threatcull.store.sources import (
-    BUSINESS_MODE_REASON,
     REMOVED_FROM_CATALOG_REASON,
     RESTRICTED_TERMS_REASON,
     add_custom_source,
     get_source,
     list_sources,
-    set_business_mode,
     set_enabled,
     sync_catalog,
 )
@@ -64,15 +61,8 @@ def test_sources_dropped_from_catalog_are_disabled_with_reason(conn: sqlite3.Con
     assert (source.enabled, source.disabled_reason) == (False, REMOVED_FROM_CATALOG_REASON)
 
 
-def test_business_mode_blocks_enabling_forbidden_sources(conn: sqlite3.Connection) -> None:
+def test_any_source_can_be_enabled_whatever_its_business_use(conn: sqlite3.Connection) -> None:
     sync_catalog(conn, [NONCOMMERCIAL])
-    with pytest.raises(PolicyError, match="business use"):
-        set_enabled(conn, "nc-list", True)
-
-
-def test_without_business_mode_forbidden_sources_can_be_enabled(conn: sqlite3.Connection) -> None:
-    sync_catalog(conn, [NONCOMMERCIAL])
-    set_business_mode(conn, False)
     assert set_enabled(conn, "nc-list", True).enabled
 
 
@@ -83,21 +73,12 @@ def test_restricted_sources_need_acknowledgement(conn: sqlite3.Connection) -> No
     assert set_enabled(conn, "restricted-list", True, acknowledge_restricted=True).enabled
 
 
-def test_turning_business_mode_on_disables_non_business_sources(conn: sqlite3.Connection) -> None:
-    sync_catalog(conn, [ALLOWED, NONCOMMERCIAL, ALLOW_SOURCE])
-    set_business_mode(conn, False)
-    set_enabled(conn, "nc-list", True)
-    assert set_business_mode(conn, True) == ["nc-list"]
-    assert load_settings(conn).business_mode is True
-    source = get_source(conn, "nc-list")
-    assert (source.enabled, source.disabled_reason) == (False, BUSINESS_MODE_REASON)
-    assert get_source(conn, "cdn-ranges").enabled
-
-
-def test_catalog_reclassification_is_enforced_on_sync(conn: sqlite3.Connection) -> None:
+def test_business_use_reclassification_keeps_the_operator_choice(conn: sqlite3.Connection) -> None:
     sync_catalog(conn, [ALLOWED])
     sync_catalog(conn, [make_entry(id="allowed-list", business_use="forbidden")])
-    assert get_source(conn, "allowed-list").enabled is False
+    source = get_source(conn, "allowed-list")
+    assert source.enabled is True
+    assert source.business_use == "forbidden"
 
 
 def test_catalog_reclassification_to_restricted_disables_the_source(
