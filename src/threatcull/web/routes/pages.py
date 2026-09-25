@@ -16,6 +16,7 @@ from threatcull.compiling import stale_source_ids
 from threatcull.home_detect import public_ip_candidate
 from threatcull.listfile import MAX_BYTES, parse_list_file, summary
 from threatcull.lookup import lookup, output_labels
+from threatcull.policy.stats import CompileStats
 from threatcull.store.allowlist import (
     add_entry,
     builtin_entries,
@@ -32,7 +33,7 @@ from threatcull.store.home import (
     remove_home,
 )
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
-from threatcull.store.runs import last_run, recent_runs
+from threatcull.store.runs import compile_history, last_run, recent_runs
 from threatcull.store.settings import load_settings
 from threatcull.store.sources import (
     add_custom_source,
@@ -41,6 +42,7 @@ from threatcull.store.sources import (
     set_business_mode,
 )
 from threatcull.store.sources import set_enabled as store_set_enabled
+from threatcull.web.dashboard import FUNNEL_WIDTH, funnel, source_rows, tier_bar, trend
 from threatcull.web.deps import (
     check_csrf,
     current_user,
@@ -85,6 +87,33 @@ def _validation_message(exc: ValidationError) -> str:
     )
 
 
+def _stats_context(conn: sqlite3.Connection) -> dict[str, Any]:
+    """The cleanup section: the newest Compile Stats and the Compile trend."""
+    history = compile_history(conn)
+    stats = CompileStats.from_json(history[-1].stats) if history else None
+    if stats is None:
+        return {"stats": None}
+    names = {source.id: source.name for source in list_sources(conn)}
+    return {
+        "stats": stats,
+        "stats_at": history[-1].finished_at,
+        "funnel": funnel(stats),
+        "tiers": tier_bar(stats),
+        "source_rows": source_rows(stats, names),
+        "trend": trend(history),
+        "funnel_width": FUNNEL_WIDTH,
+    }
+
+
+@router.get("/partials/stats")
+def stats_fragment(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    return render_fragment(request, "_stats.html", _stats_context(conn))
+
+
 @router.get("/")
 def dashboard(
     request: Request,
@@ -122,6 +151,7 @@ def dashboard(
             "scheduler_on": scheduler is not None,
             "next_compile_at": next_compile,
             **_run_status(request),
+            **_stats_context(conn),
         },
     )
 

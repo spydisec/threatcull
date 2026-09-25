@@ -1,0 +1,116 @@
+{# The dashboard's cleanup section. htmx refreshes it every minute, so a finished
+   Compile shows up without a reload. Charts are SVG with geometry attributes only
+   (the CSP forbids inline styles); colours come from app.css classes. #}
+<section id="cleanup" class="cleanup" hx-get="/partials/stats" hx-trigger="every 60s" hx-swap="outerHTML">
+{% if not stats %}
+  <div class="card">
+    <h2>Cleanup</h2>
+    <p class="muted">No Compile has recorded cleanup numbers yet. They appear after the next Compile: use <a href="/runs">Run now</a> or wait for the scheduler.</p>
+  </div>
+{% else %}
+  {%- set received = stats.listed + stats.rejected -%}
+  {%- macro pct(value) -%}{{ "{:.1%}".format(value / received) if received else "0%" }}{%- endmacro -%}
+  <div class="tiles">
+    <div class="tile tile-keep">
+      <p class="tile-label">Unique Indicators kept</p>
+      <p class="tile-value">{{ "{:,}".format(stats.published) }}</p>
+      <p class="tile-note">from {{ "{:,}".format(received) }} entries received</p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Duplicates merged</p>
+      <p class="tile-value">{{ "{:,}".format(stats.duplicates) }}</p>
+      <p class="tile-note">{{ pct(stats.duplicates) }} listed by more than one Source</p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Rejected as invalid</p>
+      <p class="tile-value">{{ "{:,}".format(stats.rejected) }}</p>
+      <p class="tile-note">{{ pct(stats.rejected) }} junk, private or too-broad entries</p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Kept out on purpose</p>
+      <p class="tile-value">{{ "{:,}".format(stats.allowlisted + stats.home) }}</p>
+      <p class="tile-note">{{ "{:,}".format(stats.allowlisted) }} Allowlist, {{ "{:,}".format(stats.home) }} Home Network</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h2>Cleanup funnel</h2><span class="muted">Compile {{ stats_at | when }}</span></div>
+      <div class="funnel">
+        {% for step in funnel %}
+        <div class="funnel-label">{{ step.label }}<span class="sub">{{ step.note }}</span></div>
+        <svg class="funnel-bar" viewBox="0 0 {{ funnel_width }} 14" preserveAspectRatio="none" aria-hidden="true">
+          <rect class="track" x="0" y="0" width="{{ funnel_width }}" height="14" rx="3"></rect>
+          <rect class="bar-{{ step.tone }}" x="0" y="0" width="{{ step.width }}" height="14" rx="3"></rect>
+        </svg>
+        <div class="funnel-value num">{{ "{:,}".format(step.value) }}</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Confidence Tiers</h2><span class="muted">of the Indicators kept</span></div>
+      <svg class="tier-bar" viewBox="0 0 {{ funnel_width }} 22" preserveAspectRatio="none" role="img"
+           aria-label="{% for s in tiers %}{{ s.tier }} {{ s.value }}{% if not loop.last %}, {% endif %}{% endfor %}">
+        <rect class="track" x="0" y="0" width="{{ funnel_width }}" height="22" rx="4"></rect>
+        {% for s in tiers %}{% if s.width %}<rect class="tier-{{ s.tier }}" x="{{ s.x }}" y="0" width="{{ s.width }}" height="22"><title>{{ s.tier }}: {{ "{:,}".format(s.value) }}</title></rect>{% endif %}{% endfor %}
+      </svg>
+      <ul class="legend">
+        {% for s in tiers %}
+        <li><span class="swatch tier-{{ s.tier }}"></span><strong>{{ s.tier }}</strong> {{ "{:,}".format(s.value) }}
+          <span class="muted">{{ "{:.0%}".format(s.value / stats.published) if stats.published else "0%" }}</span></li>
+        {% endfor %}
+      </ul>
+      <p class="hint">High means at least three independent Sources list the Indicator; low means one.</p>
+    </div>
+  </div>
+
+  {% if trend %}
+  <div class="card">
+    <div class="card-head"><h2>Over time</h2><span class="muted">last {{ trend.series[0].dots | length }} Compiles</span></div>
+    <svg class="trend" viewBox="0 0 {{ trend.width }} {{ trend.height }}" role="img" aria-label="Indicators kept, duplicates merged and removed per Compile">
+      {% for y, label in trend.y_ticks %}
+      <line class="grid" x1="56" x2="{{ trend.width - 12 }}" y1="{{ y }}" y2="{{ y }}"></line>
+      <text class="axis" x="50" y="{{ y + 4 }}" text-anchor="end">{{ label }}</text>
+      {% endfor %}
+      {% for series in trend.series %}
+      <polyline class="line-{{ series.tone }}" points="{{ series.points }}"></polyline>
+      {% for dot in series.dots %}<circle class="dot-{{ series.tone }}" cx="{{ dot.x }}" cy="{{ dot.y }}" r="3.5"><title>{{ dot.title }}</title></circle>{% endfor %}
+      {% endfor %}
+      <text class="axis" x="56" y="{{ trend.height - 6 }}">{{ trend.first_label }}</text>
+      <text class="axis" x="{{ trend.width - 12 }}" y="{{ trend.height - 6 }}" text-anchor="end">{{ trend.last_label }}</text>
+    </svg>
+    <ul class="legend">
+      {% for series in trend.series %}<li><span class="swatch line-{{ series.tone }}"></span>{{ series.name }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-head"><h2>Source overlap</h2><span class="muted">how much each Source adds that no other Source lists</span></div>
+    <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Source</th><th class="num">Entries</th><th class="num">Only this Source</th><th class="col-bar"></th></tr>
+      </thead>
+      <tbody>
+        {% for row in source_rows %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td class="num">{{ "{:,}".format(row.entries) }}</td>
+          <td class="num">{{ "{:,}".format(row.unique) }} <span class="muted">{{ "{:.0%}".format(row.unique_share) }}</span></td>
+          <td class="col-bar">
+            <svg class="overlap-bar" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="bar-shared" x="0" y="0" width="{{ row.width }}" height="10" rx="2"></rect>
+              <rect class="bar-keep" x="0" y="0" width="{{ row.unique_width }}" height="10" rx="2"></rect>
+            </svg>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <ul class="legend"><li><span class="swatch bar-keep"></span>only this Source</li><li><span class="swatch bar-shared"></span>also listed elsewhere</li></ul>
+  </div>
+{% endif %}
+</section>

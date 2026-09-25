@@ -18,6 +18,7 @@ from threatcull.clock import ts
 from threatcull.outputs.stream import StagedOutput, home_hits, mark_allowlisted, stage_output
 from threatcull.policy.allowlist import Allowlist
 from threatcull.policy.scoring import create_scored_table, drop_scored_table
+from threatcull.policy.stats import CompileStats, compile_stats
 from threatcull.store.allowlist import builtin_entries, operator_entries
 from threatcull.store.home import home_allow_entries
 from threatcull.store.outputs import list_outputs, record_published
@@ -37,6 +38,7 @@ class CompileReport:
     # Scored Indicators a Home Network entry excluded: a Source lists our own network.
     home_hit_count: int = 0
     home_hits: tuple[tuple[str, str], ...] = ()  # (value, Source ids), first HOME_HITS_CAP
+    stats: CompileStats | None = None
 
 
 HOME_HITS_CAP = 100
@@ -98,6 +100,7 @@ def compile_outputs(
         counts=counts,
         error="; ".join(report.reasons) or None,
         home_hits=report.home_hits,
+        stats=report.stats.to_json() if report.stats else None,
     )
     return report
 
@@ -121,6 +124,7 @@ def _compile(
         # `excluded` counts every excluded row, Home Network included; the Allowlist
         # count operators see (CLI, dashboard) must name only Allowlist exclusions.
         allowlisted = excluded - hit_count
+        stats = compile_stats(conn, settings)
         sources = {source.id: source for source in list_sources(conn)}
         specs = list_outputs(conn)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -140,12 +144,14 @@ def _compile(
         )
         if reasons and not force:
             return CompileReport(
-                "blocked", counts, tuple(reasons), allowlisted, stale, hit_count, hits
+                "blocked", counts, tuple(reasons), allowlisted, stale, hit_count, hits, stats
             )
         for output in staged:
             output.tmp.replace(output.path)
             record_published(conn, output.name, output.count, now=now)
-        return CompileReport("ok", counts, tuple(reasons), allowlisted, stale, hit_count, hits)
+        return CompileReport(
+            "ok", counts, tuple(reasons), allowlisted, stale, hit_count, hits, stats
+        )
     finally:
         # Blocked or failed: nothing is published. Published temp files are already gone.
         for output in staged:

@@ -22,28 +22,7 @@
 </section>
 {% endif %}
 
-<div class="tiles">
-  <div class="tile">
-    <p class="tile-label">Enabled blocklist Sources</p>
-    <p class="tile-value">{{ enabled_blocklist_count }}</p>
-    <p class="tile-note"><a href="/sources">Manage Sources</a></p>
-  </div>
-  <div class="tile{% if stale_count %} is-warn{% endif %}">
-    <p class="tile-label">Stale Sources</p>
-    <p class="tile-value">{{ stale_count }}</p>
-    <p class="tile-note">{{ "No fresh data" if stale_count else "All fresh" }}</p>
-  </div>
-  <div class="tile">
-    <p class="tile-label">Allowlist Sources</p>
-    <p class="tile-value">{{ allowlist_count }}</p>
-    <p class="tile-note"><a href="/allowlist">Allowlist</a></p>
-  </div>
-  <div class="tile">
-    <p class="tile-label">Business Mode</p>
-    <p class="tile-value">{{ "On" if business_mode else "Off" }}</p>
-    <p class="tile-note"><a href="/settings">Settings</a></p>
-  </div>
-</div>
+{% include "_stats.html" %}
 
 <div class="grid-2">
   <section class="card">
@@ -74,6 +53,29 @@
     <p>No Compile has run yet.</p>
     {% endif %}
   </section>
+</div>
+
+<div class="tiles tiles-small">
+  <div class="tile">
+    <p class="tile-label">Enabled blocklist Sources</p>
+    <p class="tile-value">{{ enabled_blocklist_count }}</p>
+    <p class="tile-note"><a href="/sources">Manage Sources</a></p>
+  </div>
+  <div class="tile{% if stale_count %} is-warn{% endif %}">
+    <p class="tile-label">Stale Sources</p>
+    <p class="tile-value">{{ stale_count }}</p>
+    <p class="tile-note">{{ "No fresh data" if stale_count else "All fresh" }}</p>
+  </div>
+  <div class="tile">
+    <p class="tile-label">Allowlist Sources</p>
+    <p class="tile-value">{{ allowlist_count }}</p>
+    <p class="tile-note"><a href="/allowlist">Allowlist</a></p>
+  </div>
+  <div class="tile">
+    <p class="tile-label">Business Mode</p>
+    <p class="tile-value">{{ "On" if business_mode else "Off" }}</p>
+    <p class="tile-note"><a href="/settings">Settings</a></p>
+  </div>
 </div>
 
 <section class="card">

@@ -113,6 +113,10 @@ _MIGRATIONS: tuple[str, ...] = (
     ALTER TABLE runs ADD COLUMN home_hits TEXT NOT NULL DEFAULT '[]';
     PRAGMA user_version = 4;
     """,
+    """
+    ALTER TABLE runs ADD COLUMN stats TEXT NOT NULL DEFAULT '{}';
+    PRAGMA user_version = 5;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)

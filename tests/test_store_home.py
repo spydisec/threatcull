@@ -19,7 +19,7 @@ from threatcull.store.home import (
 
 
 def test_schema_has_the_home_network_table(conn: sqlite3.Connection) -> None:
-    assert SCHEMA_VERSION == 4
+    assert SCHEMA_VERSION >= 4  # the migration that added home_network
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(home_network)")}
     assert columns == {"id", "value", "kind", "note", "origin", "created_at"}
     assert "home_hits" in {row["name"] for row in conn.execute("PRAGMA table_info(runs)")}
