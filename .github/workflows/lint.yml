@@ -52,7 +52,9 @@ jobs:
         run: git diff --exit-code -- src/threatcull/web/static/islands.js
 
   commitlint:
-    if: github.event_name == 'pull_request'
+    # Dependabot copies release notes into its commit bodies; their long lines break
+    # body-max-line-length, and Dependabot's message format cannot be configured.
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
