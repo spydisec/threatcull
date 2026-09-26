@@ -8,6 +8,26 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-26
+
+The web UI can show times in your own timezone, and the README shows what ThreatCull looks like.
+
+**Upgrading from 1.3.x**
+
+| If you | Now |
+|---|---|
+| Want times in your own timezone | Set `TZ` to an IANA name such as `Australia/Melbourne` in `docker-compose.yaml`. |
+| Leave `TZ` unset | Nothing changes. Times stay in UTC. |
+
+### Added
+
+- 🕒 **Local times in the web UI.** Set `TZ` to an IANA timezone name such as `Australia/Melbourne`
+  and the web UI shows every time in that zone, with its abbreviation (`AEST`). Hovering a time
+  shows its UTC value. ThreatCull still stores and schedules in UTC, and `serve` refuses to start on a
+  name it does not know. Unset `TZ` keeps UTC.
+- 🖼️ **README screenshots and settings table.** The README shows the dashboard, Sources and lookup
+  pages in light and dark themes, and lists every environment variable, `TZ` included.
+
 ## [1.3.0] - 2026-09-26
 
 The Catalog of Sources can now be updated between releases, and the container image is scanned for
@@ -149,7 +169,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/spydisec/threatcull/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/spydisec/threatcull/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/spydisec/threatcull/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/spydisec/threatcull/compare/v1.0.1...v1.1.0

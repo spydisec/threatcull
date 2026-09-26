@@ -11,6 +11,7 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import get_args
+from zoneinfo import ZoneInfoNotFoundError
 
 import uvicorn
 import yaml
@@ -23,7 +24,7 @@ from threatcull.catalog_update import (
     apply_update,
     download_catalog,
 )
-from threatcull.clock import utcnow
+from threatcull.clock import TZ_ENV_VAR, display_zone, utcnow
 from threatcull.compiling import compile_outputs
 from threatcull.datadir import DataDirError, ensure_data_dir
 from threatcull.fetcher import FetchError, HttpFetcher
@@ -511,6 +512,15 @@ def _user_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
 
 
 def _serve(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    try:
+        display_zone()
+    except (ZoneInfoNotFoundError, ValueError):
+        print(
+            f"error: {TZ_ENV_VAR}={os.environ[TZ_ENV_VAR]} is not a timezone name. "
+            "Use an IANA name such as Australia/Melbourne, or leave it unset for UTC.",
+            file=sys.stderr,
+        )
+        return EXIT_ERROR
     if count_users(conn) == 0:
         source, password = ADMIN_ENV_VAR, os.environ.get(ADMIN_ENV_VAR)
         if password_file := os.environ.get(ADMIN_FILE_ENV_VAR):

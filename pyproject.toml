@@ -1,6 +1,6 @@
 [project]
 name = "threatcull"
-version = "1.3.0"
+version = "1.4.0"
 description = "Self-hosted threat-feed compiler: cull the noise, block the threats."
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2.9",
     "python-multipart>=0.0.32",
     "pyyaml>=6.0.2",
+    "tzdata>=2025.2",
     "uvicorn>=0.53.0",
 ]
 
