@@ -12,6 +12,10 @@ Self-hosted threat-feed compiler. ThreatCull downloads public blocklists, drops 
 ranges and your own infrastructure, scores each indicator by how many independent sources list it, and
 serves the result to your firewalls, DNS servers and SIEM.
 
+```text
+sources ──> drop duplicates, private ranges, your allowlist ──> score by source agreement ──> feed URLs
+```
+
 - Catalog of blocklist sources with licence details, plus your own sources (URL or local file)
 - Built-in CDN allowlists, your own entries and your own allowlist URLs; mark your own network to
   get an alert when a source lists it
@@ -19,6 +23,25 @@ serves the result to your firewalls, DNS servers and SIEM.
 - Outputs as plain, hosts, AdGuard, RPZ, CSV or JSON, each at its own URL with a Feed Token
 - Web UI with a dashboard, lookup, run history and a built-in scheduler
 - Works offline and on a bare LAN IP
+
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <a href="docs/images/dashboard-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.webp"><img alt="Dashboard with indicator counts, confidence tiers and domain categories" src="docs/images/dashboard-light.webp"></picture></a>
+      <br><sub><b>Dashboard</b></sub>
+    </td>
+    <td width="33%" align="center">
+      <a href="docs/images/sources-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/sources-dark.webp"><img alt="Sources page listing each blocklist with its licence and status" src="docs/images/sources-light.webp"></picture></a>
+      <br><sub><b>Sources and licences</b></sub>
+    </td>
+    <td width="33%" align="center">
+      <a href="docs/images/lookup-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/lookup-dark.webp"><img alt="Lookup page showing the score and sightings for one IP" src="docs/images/lookup-light.webp"></picture></a>
+      <br><sub><b>Lookup</b></sub>
+    </td>
+  </tr>
+</table>
+
+<sub>Click a screenshot to open it full size.</sub>
 
 ## Quick start
 
@@ -49,6 +72,19 @@ start only; you can clear it from the file afterwards. Data lives on the `threat
 ```bash
 curl http://<server-ip>:6969/o/ip-high/<feed-token>
 ```
+
+## Settings
+
+Set these under `environment:` in `docker-compose.yaml`.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `THREATCULL_ADMIN_PASSWORD` | none | Creates the `admin` user on the first start (12 or more characters) |
+| `THREATCULL_ADMIN_PASSWORD_FILE` | none | Same, read from a file such as a Docker secret; wins over the above |
+| `TZ` | `UTC` | Timezone for times in the web UI, as an IANA name such as `Australia/Melbourne` |
+
+ThreatCull stores and schedules everything in UTC, so you can change `TZ` at any time. Hover a time
+in the web UI to see its UTC value.
 
 ## Upgrade
 

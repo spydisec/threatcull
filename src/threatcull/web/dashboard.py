@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
+from threatcull.clock import local
 from threatcull.policy.stats import TIERS, CompileStats
 from threatcull.store.outputs import OutputSpec
 from threatcull.store.runs import Run
@@ -186,7 +187,7 @@ def _series(points: Sequence[tuple[Run, CompileStats]], label: str) -> dict[str,
 
 
 def label_for(stamp: str, style: str) -> str:
-    moment = datetime.fromisoformat(stamp)
+    moment = local(stamp)
     return moment.strftime("%H:%M") if style == "time" else moment.strftime("%b %d")
 
 
@@ -197,7 +198,7 @@ def chart_data(stats: CompileStats, history: Sequence[Run], *, now: datetime) ->
     last_24h = [(run, s) for run, s in points if run.started_at >= day_start]
     by_day: dict[str, tuple[Run, CompileStats]] = {}
     for run, s in points:
-        by_day[run.started_at[:10]] = (run, s)  # the day's last Compile wins
+        by_day[local(run.started_at).date().isoformat()] = (run, s)  # the day's last Compile wins
     domain_categories = stats.categories.get("domain", {})
     categories = domain_categories or stats.categories.get("ip", {})
     ordered = sorted(categories.items(), key=lambda item: -item[1])

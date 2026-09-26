@@ -8,6 +8,13 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Added
+
+- **Local times in the web UI.** Set `TZ` to an IANA timezone name such as `Australia/Melbourne`
+  and the web UI shows every time in that zone, with its abbreviation (`AEST`). Hovering a time
+  shows its UTC value. ThreatCull still stores and schedules in UTC, and `serve` refuses to start on a
+  name it does not know. Unset `TZ` keeps UTC.
+
 ## [1.3.0] - 2026-09-26
 
 The Catalog of Sources can now be updated between releases, and the container image is scanned for

@@ -45,6 +45,18 @@ def test_serve_defaults_to_loopback_on_port_6969(
     assert captured_run["log_level"] == "info"
 
 
+def test_serve_refuses_an_unknown_tz(
+    tmp_path: Path,
+    captured_run: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("TZ", "Melbourne")
+    assert cli.main(["--data-dir", str(tmp_path), "serve"]) == cli.EXIT_ERROR
+    assert "Australia/Melbourne" in capsys.readouterr().err
+    assert "app" not in captured_run
+
+
 def test_serve_passes_through_an_explicit_host_and_port(
     tmp_path: Path, captured_run: dict[str, Any]
 ) -> None:

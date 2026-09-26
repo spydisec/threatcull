@@ -10,6 +10,12 @@ from tests.fixture_server import FixtureServer
 from threatcull.store.db import connect
 
 
+@pytest.fixture(autouse=True)
+def _utc_display(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests expect UTC display unless they set ``TZ`` themselves."""
+    monkeypatch.delenv("TZ", raising=False)
+
+
 @pytest.fixture
 def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     connection = connect(tmp_path / "test.db")

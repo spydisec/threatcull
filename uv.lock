@@ -1111,6 +1111,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-multipart" },
     { name = "pyyaml" },
+    { name = "tzdata" },
     { name = "uvicorn" },
 ]
 
@@ -1136,6 +1137,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.9" },
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "tzdata", specifier = ">=2025.2" },
     { name = "uvicorn", specifier = ">=0.53.0" },
 ]
 
