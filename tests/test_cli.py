@@ -2,8 +2,9 @@
 from pathlib import Path
 
 import pytest
-import yaml
 
+from tests.factories import dump_yaml
+from threatcull.catalog import shipped_catalog
 from threatcull.cli import main
 
 
@@ -46,7 +47,7 @@ def _catalog(tmp_path: Path) -> Path:
         }
     )
     path = tmp_path / "catalog.yaml"
-    path.write_text(yaml.safe_dump({"sources": sources}), encoding="utf-8")
+    path.write_text(dump_yaml({"sources": sources}), encoding="utf-8")
     return path
 
 
@@ -238,3 +239,27 @@ def test_custom_allowlist_source_without_an_id(
     assert main([*cli, "sources", "list"]) == 0
     listed = next(line for line in capsys.readouterr().out.splitlines() if "custom-my-wl" in line)
     assert "allowlist" in listed
+
+
+def test_catalog_show_and_update_from_a_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = ["--data-dir", str(tmp_path / "data")]
+    assert main([*data, "catalog", "show"]) == 0
+    assert "shipped with ThreatCull" in capsys.readouterr().out
+    shipped = shipped_catalog()
+    sources = [e.model_dump(mode="json") for e in shipped.entries]
+    extra = {**sources[0], "id": "fresh-list", "family": "fresh-list", "default_enabled": True}
+    update = tmp_path / "catalog.yaml"
+    update.write_text(dump_yaml({"revision": shipped.revision + 1, "sources": [*sources, extra]}))
+    assert main([*data, "catalog", "update", "--file", str(update)]) == 0
+    out = capsys.readouterr().out
+    assert "1 new Source (disabled)" in out
+    assert "  new: fresh-list" in out
+    assert main([*data, "catalog", "show"]) == 0
+    assert "saved by an update" in capsys.readouterr().out
+    assert main([*data, "sources", "list"]) == 0
+    listed = next(line for line in capsys.readouterr().out.splitlines() if "fresh-list" in line)
+    assert listed.startswith("off")
+    assert main([*data, "catalog", "update", "--url", "http://feeds.example/c.yaml"]) == 1
+    assert "https" in capsys.readouterr().err

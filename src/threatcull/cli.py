@@ -16,10 +16,17 @@ import uvicorn
 import yaml
 
 from threatcull.catalog import BusinessUse, Category, SourceRole, load_catalog
+from threatcull.catalog_update import (
+    DEFAULT_CATALOG_URL,
+    MAX_CATALOG_BYTES,
+    active_catalog,
+    apply_update,
+    download_catalog,
+)
 from threatcull.clock import utcnow
 from threatcull.compiling import compile_outputs
 from threatcull.datadir import DataDirError, ensure_data_dir
-from threatcull.fetcher import HttpFetcher
+from threatcull.fetcher import FetchError, HttpFetcher
 from threatcull.fetching import fetch_all
 from threatcull.home_detect import detect_candidates, public_ip_candidate, public_ip_fetcher
 from threatcull.indicators import SourceKind
@@ -61,44 +68,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--data-dir", type=Path, default=Path(os.environ.get("THREATCULL_DATA_DIR", "data"))
     )
     parser.add_argument(
-        "--catalog", type=Path, default=None, help="Catalog YAML to use instead of the shipped one"
+        "--catalog",
+        type=Path,
+        default=None,
+        help="Catalog YAML to use instead of the active one (see `catalog show`)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init", help="Create the database, sync the Catalog, create default Outputs")
 
-    sources = sub.add_parser("sources", help="List, enable, disable or add Sources")
-    src = sources.add_subparsers(dest="action", required=True)
-    src_list = src.add_parser("list")
-    src_list.add_argument("--enabled", action="store_true")
-    enable = src.add_parser("enable")
-    enable.add_argument("source_id")
-    enable.add_argument("--acknowledge-restricted", action="store_true")
-    src.add_parser("disable").add_argument("source_id")
-    custom = src.add_parser("add-custom")
-    custom.add_argument("--name", required=True)
-    custom.add_argument("--url", required=True)
-    custom.add_argument("--kind", required=True, choices=get_args(SourceKind))
-    custom.add_argument(
-        "--allowlist",
-        action="store_true",
-        help="feed the Allowlist instead of the blocklists (its values never appear in Outputs)",
-    )
-    custom.add_argument(
-        "--id", dest="source_id", help="custom-<name>; made from --name when left out"
-    )
-    custom.add_argument("--format", dest="fmt", default="plain", choices=get_args(SourceFormat))
-    custom.add_argument(
-        "--category",
-        default="malicious",
-        choices=get_args(Category),
-        help="blocklists only (default: malicious)",
-    )
-    custom.add_argument("--csv-column", type=int, default=0)
-    custom.add_argument("--json-key", dest="json_keys", action="append", default=[])
-    custom.add_argument(
-        "--business-use", choices=[b.value for b in BusinessUse], default=BusinessUse.UNKNOWN.value
-    )
+    _add_sources_parser(sub)
 
     allow = sub.add_parser("allow", help="Manage the operator Allowlist")
     allow_sub = allow.add_subparsers(dest="action", required=True)
@@ -148,6 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_serve_parser(sub)
     _add_api_token_parser(sub)
     _add_config_parser(sub)
+    _add_catalog_parser(sub)
     return parser
 
 
@@ -201,6 +181,55 @@ def _add_config_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
     ).add_argument("file", help="the YAML file, or - to read it from stdin")
 
 
+def _add_sources_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    sources = sub.add_parser("sources", help="List, enable, disable or add Sources")
+    src = sources.add_subparsers(dest="action", required=True)
+    src_list = src.add_parser("list")
+    src_list.add_argument("--enabled", action="store_true")
+    enable = src.add_parser("enable")
+    enable.add_argument("source_id")
+    enable.add_argument("--acknowledge-restricted", action="store_true")
+    src.add_parser("disable").add_argument("source_id")
+    custom = src.add_parser("add-custom")
+    custom.add_argument("--name", required=True)
+    custom.add_argument("--url", required=True)
+    custom.add_argument("--kind", required=True, choices=get_args(SourceKind))
+    custom.add_argument(
+        "--allowlist",
+        action="store_true",
+        help="feed the Allowlist instead of the blocklists (its values never appear in Outputs)",
+    )
+    custom.add_argument(
+        "--id", dest="source_id", help="custom-<name>; made from --name when left out"
+    )
+    custom.add_argument("--format", dest="fmt", default="plain", choices=get_args(SourceFormat))
+    custom.add_argument(
+        "--category",
+        default="malicious",
+        choices=get_args(Category),
+        help="blocklists only (default: malicious)",
+    )
+    custom.add_argument("--csv-column", type=int, default=0)
+    custom.add_argument("--json-key", dest="json_keys", action="append", default=[])
+    custom.add_argument(
+        "--business-use", choices=[b.value for b in BusinessUse], default=BusinessUse.UNKNOWN.value
+    )
+
+
+def _add_catalog_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    catalog = sub.add_parser("catalog", help="Show or update the Catalog of Sources")
+    catalog_sub = catalog.add_subparsers(dest="action", required=True)
+    catalog_sub.add_parser("show", help="Show the Catalog revision in use")
+    update = catalog_sub.add_parser(
+        "update", help="Apply a newer Catalog (new Sources arrive disabled)"
+    )
+    where = update.add_mutually_exclusive_group()
+    where.add_argument("--file", type=Path, help="a Catalog YAML file (for offline installs)")
+    where.add_argument(
+        "--url", default=DEFAULT_CATALOG_URL, help="where to download it (https only)"
+    )
+
+
 def _add_api_token_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     api_token = sub.add_parser("api-token", help="Manage API tokens for scripts")
     token_sub = api_token.add_subparsers(dest="action", required=True)
@@ -228,7 +257,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_ERROR
     conn = connect(args.data_dir / DB_NAME)
     try:
-        sync_catalog(conn, load_catalog(args.catalog))
+        entries = (
+            load_catalog(args.catalog)
+            if args.catalog
+            else active_catalog(args.data_dir).catalog.entries
+        )
+        sync_catalog(conn, entries)
         created = ensure_default_outputs(conn)
         if args.command == "serve":
             # serve's output ends up in journald / container logs: no tokens there.
@@ -242,7 +276,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _print_token(name, token)
         handler = _HANDLERS[(args.command, getattr(args, "action", None))]
         return handler(conn, args)
-    except (PolicyError, NotFoundError, ValueError, OSError, yaml.YAMLError) as exc:
+    except (
+        PolicyError,
+        NotFoundError,
+        ValueError,
+        OSError,
+        yaml.YAMLError,
+        FetchError,
+    ) as exc:
         # ValueError covers CatalogError and pydantic's ValidationError; OSError covers a
         # missing/unreadable --catalog file; yaml.YAMLError covers malformed Catalog YAML.
         print(f"error: {exc}", file=sys.stderr)
@@ -539,6 +580,36 @@ def _config_import(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _catalog_show(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    if args.catalog:
+        print(f"using {args.catalog} (--catalog)")
+        return EXIT_OK
+    active = active_catalog(args.data_dir)
+    where = "shipped with ThreatCull" if active.origin == "shipped" else "saved by an update"
+    count = len(active.catalog.entries)
+    print(f"Catalog revision {active.catalog.revision}, {where}, {count} Sources")
+    return EXIT_OK
+
+
+def _catalog_update(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    if args.file is not None:
+        with args.file.open("rb") as handle:
+            data = handle.read(MAX_CATALOG_BYTES + 1)
+        text = data.decode("utf-8-sig")
+    else:
+        text = download_catalog(args.url)
+    report = apply_update(conn, args.data_dir, text)
+    print(report.summary())
+    for label, ids in (("new", report.added), ("updated", report.changed)):
+        for source_id in ids:
+            print(f"  {label}: {source_id}")
+    for source_id in report.removed:
+        print(f"  removed: {source_id} (disabled if it was enabled)")
+    if report.added:
+        print("Enable new Sources with `threatcull sources enable <id>`.")
+    return EXIT_OK
+
+
 def _api_token_create(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     token = create_api_token(conn, args.name, args.user, now=utcnow())
     print(f"API token '{args.name}' for user {args.user} (shown once, store it safely): {token}")
@@ -582,6 +653,8 @@ _HANDLERS: dict[tuple[str, str | None], Handler] = {
     ("user", "list"): _user_list,
     ("serve", None): _serve,
     ("api-token", "create"): _api_token_create,
+    ("catalog", "show"): _catalog_show,
+    ("catalog", "update"): _catalog_update,
     ("config", "export"): _config_export,
     ("config", "import"): _config_import,
     ("api-token", "list"): _api_token_list,

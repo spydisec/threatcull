@@ -105,4 +105,33 @@
     <button type="submit">Add and enable</button>
   </form>
 </details>
+
+<section class="card" id="catalog">
+  <div class="card-head">
+    <h2>Catalog</h2>
+    <span class="muted">revision {{ catalog.catalog.revision }}, {{ "shipped with ThreatCull" if catalog.origin == "shipped" else "saved by an update" }}</span>
+  </div>
+  <p class="hint">An update adds new Sources (disabled until you enable them), refreshes the
+    details of existing ones and disables Sources the Catalog no longer lists.</p>
+  {% if catalog_error is defined and catalog_error %}
+  <p class="error" role="alert">{{ catalog_error }}</p>
+  {% endif %}
+  <div class="grid-2 detect">
+    <div>
+      <p>Download the newest Catalog from the ThreatCull repository on GitHub.</p>
+      <form method="post" action="/sources/catalog/update">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" class="btn-secondary">Check for updates</button>
+      </form>
+    </div>
+    <div>
+      <p>No internet access? Upload a <code>catalog.yaml</code> copied from a newer release.</p>
+      <form class="form-row" method="post" action="/sources/catalog/upload" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="file" name="file" accept=".yaml,.yml,text/yaml" required aria-label="Catalog file">
+        <button type="submit" class="btn-secondary">Upload</button>
+      </form>
+    </div>
+  </div>
+</section>
 {% endblock %}

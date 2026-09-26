@@ -3,6 +3,8 @@
 
 from typing import Any
 
+import yaml
+
 from threatcull.catalog import CatalogEntry
 
 
@@ -22,3 +24,13 @@ def make_entry(**overrides: Any) -> CatalogEntry:
     }
     base.update(overrides)
     return CatalogEntry.model_validate(base)
+
+
+class _NoAliasDumper(yaml.SafeDumper):
+    def ignore_aliases(self, data: Any) -> bool:
+        return True
+
+
+def dump_yaml(data: Any) -> str:
+    """YAML without anchors or aliases (a Catalog update refuses them)."""
+    return yaml.dump(data, Dumper=_NoAliasDumper, sort_keys=False)
