@@ -18,3 +18,5 @@ configs?
 hostnames?
 [Hh]omelab
 Portainer
+semgrep
+gitleaks

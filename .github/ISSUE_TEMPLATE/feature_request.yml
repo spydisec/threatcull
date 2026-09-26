@@ -1,0 +1,14 @@
+name: Feature request
+description: Suggest a change or a new feature.
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do that ThreatCull can't do today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How would you like it to work?

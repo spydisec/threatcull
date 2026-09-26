@@ -33,6 +33,16 @@ jobs:
         run: docker build --build-arg VERSION=ci -t threatcull:ci .
       - name: Smoke test (no internet needed)
         run: scripts/docker-smoke.sh threatcull:ci
+      # Fails the pull request on a high or critical CVE that already has a fix
+      # (a base-image digest bump or a dependency update usually clears it).
+      - name: Scan the image for known vulnerabilities (Grype)
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: threatcull:ci
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+          output-format: table
 
   # Releases publish arm64 too (Raspberry Pis): build it here so an arm64 problem
   # shows on the pull request, not on the release tag. Build only; no push, no run.

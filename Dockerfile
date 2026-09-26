@@ -3,12 +3,12 @@
 # ThreatCull: one container, data on the /data volume. The image holds the software
 # and the Catalog only: no threat data, database, session secret or configuration.
 
-ARG PYTHON_IMAGE=python:3.13-slim-bookworm@sha256:2325bb286ec344af3e5898cc224b5844e2707ac6e26b1632516fd3edc84a5e26
+ARG PYTHON_IMAGE=python:3.13-slim-trixie@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b
 
 FROM ghcr.io/astral-sh/uv:0.12.19@sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424 AS uv
 
 FROM ${PYTHON_IMAGE} AS build
-COPY --from=uv /uv /usr/local/bin/uv
+COPY --link --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
@@ -35,7 +35,9 @@ RUN groupadd --system --gid 10001 threatcull \
     && mkdir /data \
     && chown 10001:10001 /data \
     && chmod 0700 /data
-COPY --from=build /app/.venv /app/.venv
+# Root owns the code: the app user can read it but not change it.
+COPY --link --from=build /app/.venv /app/.venv
+WORKDIR /app
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1

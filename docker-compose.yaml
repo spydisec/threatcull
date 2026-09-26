@@ -12,6 +12,10 @@ services:
       # Password for the 'admin' user (12+ characters). Used on the first start only.
       - THREATCULL_ADMIN_PASSWORD=
     restart: unless-stopped
+    # ThreatCull runs as a non-root user on an unprivileged port: it needs no
+    # Linux capabilities and never gains privileges.
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
 
 volumes:
   threatcull-data: {}

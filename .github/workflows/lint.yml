@@ -33,7 +33,7 @@ jobs:
       - name: Vale (prose in pushed Markdown)
         run: |
           uvx vale sync
-          uvx vale README.md .github
+          uvx vale README.md SECURITY.md CONTRIBUTING.md .github
 
   islands:
     runs-on: ubuntu-latest
