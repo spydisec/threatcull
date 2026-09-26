@@ -84,15 +84,21 @@ def _to_source(row: sqlite3.Row) -> Source:
     )
 
 
-def sync_catalog(conn: sqlite3.Connection, entries: Sequence[CatalogEntry]) -> None:
-    """Insert new Catalog Sources and refresh metadata, never overriding operator choices."""
+def sync_catalog(
+    conn: sqlite3.Connection, entries: Sequence[CatalogEntry], *, enable_new: bool = True
+) -> None:
+    """Insert new Catalog Sources and refresh metadata, never overriding operator choices.
+
+    ``enable_new=False`` (a Catalog update) adds new Sources disabled even when the
+    Catalog marks them ``default_enabled``: the operator decides.
+    """
     with transaction(conn):
         previous_class = {
             row["id"]: row["licence_class"]
             for row in conn.execute("SELECT id, licence_class FROM sources WHERE custom = 0")
         }
         for entry in entries:
-            enabled = entry.default_enabled
+            enabled = entry.default_enabled and enable_new
             params = entry.model_dump(mode="json", exclude={"default_enabled", "notes"})
             params["json_keys"] = json.dumps(list(entry.json_keys))
             params["enabled"] = int(enabled)

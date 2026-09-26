@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,7 @@ from threatcull.catalog import (
     CatalogError,
     business_use_permitted,
     load_catalog,
+    shipped_catalog,
 )
 
 
@@ -98,3 +101,18 @@ def test_load_catalog_rejects_wrong_shape(tmp_path: Path) -> None:
     bad.write_text("- just a list\n", encoding="utf-8")
     with pytest.raises(CatalogError, match="sources"):
         load_catalog(bad)
+
+
+# The Sources of the shipped Catalog, hashed per revision. Installs only replace their
+# Catalog with a higher revision, so a change to the Sources must raise the revision.
+SOURCES_SHA256 = {1: "539af5640aeeb9c97f23bd5e9615db55223f050ba50c09b86924f94957f4bf43"}
+
+
+def test_changing_catalog_sources_raises_the_revision() -> None:
+    catalog = shipped_catalog()
+    entries = [entry.model_dump(mode="json") for entry in catalog.entries]
+    digest = hashlib.sha256(json.dumps(entries, sort_keys=True).encode()).hexdigest()
+    assert SOURCES_SHA256.get(catalog.revision) == digest, (
+        f"catalog.yaml Sources changed: raise 'revision' above {catalog.revision} and add "
+        f'{catalog.revision + 1}: "{digest}" to SOURCES_SHA256 (see CONTRIBUTING.md)'
+    )

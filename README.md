@@ -51,6 +51,10 @@ docker compose pull && docker compose up -d
 The `:1` tag follows 1.x releases. Pin a version such as `:1.0.0` to upgrade by hand. Sources you
 disabled stay disabled.
 
+**Catalog only:** to pick up new or corrected sources between releases, use **Check for updates**
+on the Sources page, or run `threatcull catalog update`. New sources arrive disabled. Without
+internet access, upload a newer `catalog.yaml` there, or run `threatcull catalog update --file`.
+
 ## Back up and restore
 
 ```bash

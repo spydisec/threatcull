@@ -23,6 +23,10 @@ passwords, hostnames and addresses from your own network.
 A new Source needs its licence or terms of use: name, link and whether business use is allowed.
 Sources without published terms stay out of the Catalog. Add them as a custom Source instead.
 
+Every change to `src/threatcull/catalog.yaml` raises its `revision` by one: installs pick up the
+change with **Check for updates**, and only a higher revision replaces the Catalog they use. Raise
+`requires` when the change needs a newer ThreatCull.
+
 ## Licence
 
 By contributing you agree that your contribution is licensed under the
