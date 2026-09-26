@@ -3,7 +3,7 @@
 {% block title %}Outputs · ThreatCull{% endblock %}
 {% block content %}
 <h1>Outputs</h1>
-<p class="lead">Rotate the token to get a new one. A Feed Token is shown only once, when it is created or rotated.</p>
+<p class="lead">Each Output has a feed URL for your firewall or DNS server. Rotate its token to get a working URL; the token shows once.</p>
 
 {% if error is defined and error %}
 <p class="error">{{ error }}</p>
@@ -34,23 +34,24 @@
   <table class="table">
     <thead>
       <tr>
-        <th>Name</th><th>Min Tier</th><th class="num">Cap</th>
-        <th class="num">Last count</th><th>Last published</th><th>URL</th><th class="col-action">Action</th>
+        <th>Output</th><th>Min Tier</th><th class="num">Cap</th>
+        <th class="num">Entries</th><th>Last published</th><th class="col-action"></th>
       </tr>
     </thead>
     <tbody>
       {% for output in outputs %}
       <tr>
-        <td class="nowrap"><strong>{{ output.name }}</strong><div class="sub">{{ output.kind }} · {{ output.format }}</div></td>
+        <td><strong>{{ output.name }}</strong> <span class="sub-inline">{{ output.kind }} · {{ output.format }}</span>
+          <div class="sub mono feed-url">{{ base_url }}o/{{ output.name }}?token=&lt;feed-token&gt;</div></td>
         <td>{{ output.min_tier }}</td>
         <td class="num nowrap">{{ "{:,}".format(output.max_entries) if output.max_entries else "no cap" }}</td>
         <td class="num">{{ "{:,}".format(output.last_count) if output.last_count is not none else "never" }}</td>
         <td class="nowrap">{{ output.last_published_at | when }}</td>
-        <td>{{ copy_field("url-" ~ loop.index, base_url ~ "o/" ~ output.name ~ "?token=<your Feed Token>", "Feed URL for " ~ output.name) }}</td>
         <td class="actions">
+          {% if output.last_published_at %}<a class="button btn-secondary btn-small" href="/outputs/{{ output.name }}/download" download>Download</a>{% endif %}
           <form method="post" action="/outputs/{{ output.name }}/rotate">
             <input type="hidden" name="csrf" value="{{ csrf }}">
-            <button type="submit">Rotate token</button>
+            <button type="submit" class="btn-small">Rotate token</button>
           </form>
         </td>
       </tr>

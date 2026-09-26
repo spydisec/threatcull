@@ -38,7 +38,6 @@ from threatcull.store.sources import (
 )
 from threatcull.store.sources import set_enabled as store_set_enabled
 from threatcull.web.dashboard import (
-    CATEGORY_LABELS,
     FUNNEL_WIDTH,
     chart_data,
     funnel,
@@ -126,7 +125,6 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
         "scheduler_on": scheduler is not None,
         "next_compile_at": ts(next_run) if next_run is not None else None,
         "refreshed_at": ts(now),
-        "category_labels": CATEGORY_LABELS,
         "stats": stats,
         **_run_status(request),
     }
