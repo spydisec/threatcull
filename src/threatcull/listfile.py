@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Uploaded list files (txt or csv) for bulk-adding Allowlist and Home Network entries.
+"""Uploaded list files (txt or csv) for bulk-adding Allowlist entries.
 
 A line is either ``value`` with an optional ``# note``, or csv ``value,note``. Blank
 lines and lines starting with ``#`` are skipped, and so is a first ``value`` header row.

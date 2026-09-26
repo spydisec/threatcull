@@ -10,7 +10,6 @@ from threatcull.compiling import compile_outputs
 from threatcull.policy.stats import CompileStats, SourceShare
 from threatcull.store.allowlist import add_entry
 from threatcull.store.db import SCHEMA_VERSION
-from threatcull.store.home import add_home
 from threatcull.store.runs import finish_run, last_run, start_run
 
 
@@ -28,7 +27,7 @@ def test_compile_records_the_cleanup_funnel(
     _fetch_run(conn, "a", 3, now)  # the newest Fetch of a Source counts
     _fetch_run(conn, "b", 1, now)
     add_entry(conn, "45.9.20.8/29", "partner", now=now)  # 45.9.20.8-10 (.8 is in the /29)
-    add_home(conn, "45.9.20.7", "office", now=now)
+    add_entry(conn, "45.9.20.7", "office", mine=True, now=now)
 
     report = compile_outputs(conn, tmp_path, now=now)
 

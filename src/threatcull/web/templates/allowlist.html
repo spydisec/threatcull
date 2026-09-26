@@ -1,37 +1,45 @@
 {% extends "base.html" %}
 {% block title %}Allowlist · ThreatCull{% endblock %}
-{% from "_ui.html" import pill %}
 {% block content %}
 <h1>Allowlist</h1>
+<p class="lead">Values on the allowlist never appear in any Output. Private and special-purpose
+  addresses (10.0.0.0/8, 192.168.0.0/16 and similar) are dropped already and need no entry.</p>
 {% if error is defined and error %}
-<p class="error">{{ error }}</p>
+<p class="error" role="alert">{{ error }}</p>
 {% endif %}
 
 <section class="card">
-  <h2>Operator entries</h2>
+  <div class="card-head"><h2>Your entries</h2><span class="muted">{{ operator_entries | length }} total</span></div>
   {% if operator_entries %}
-{% if operator_entries|length > 5 %}
+  {% if operator_entries | length > 5 %}
   <div class="table-tools" data-filter-for="allowlist-table" hidden>
     <input type="search" data-filter-text placeholder="Search entries  ( / )" aria-label="Search entries">
+    <select data-filter-state aria-label="Show"><option value="">All</option><option value="mine">My network</option></select>
     <span class="muted" data-filter-count aria-live="polite"></span>
   </div>
-{% endif %}
+  {% endif %}
   <div class="table-wrap">
   <table class="table" id="allowlist-table">
     <thead>
-      <tr><th>Value</th><th>Kind</th><th>Note</th><th class="col-action">Action</th></tr>
+      <tr><th>Value</th><th>Kind</th><th>Note</th><th class="col-action"></th></tr>
     </thead>
     <tbody>
       {% for entry in operator_entries %}
-      <tr>
-        <td class="mono">{{ entry.value }}</td>
+      <tr data-state="{{ 'mine' if entry.mine else '' }}">
+        <td><span class="mono">{{ entry.value }}</span>{% if entry.mine %} <span class="pill pill-warn" title="Alerts you when a Source lists it">my network</span>{% endif %}</td>
         <td>{{ entry.kind }}</td>
         <td>{{ entry.note }}</td>
         <td class="actions">
+          <form method="post" action="/allowlist/mine">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="value" value="{{ entry.value }}">
+            <input type="hidden" name="mine" value="{{ 'false' if entry.mine else 'true' }}">
+            <button type="submit" class="btn-secondary btn-small">{{ "Not my network" if entry.mine else "My network" }}</button>
+          </form>
           <form method="post" action="/allowlist/remove">
             <input type="hidden" name="csrf" value="{{ csrf }}">
             <input type="hidden" name="value" value="{{ entry.value }}">
-            <button type="submit">Remove</button>
+            <button type="submit" class="btn-small">Remove</button>
           </form>
         </td>
       </tr>
@@ -40,42 +48,96 @@
   </table>
   </div>
   {% else %}
-  <p>No operator Allowlist entries yet.</p>
+  <p class="muted">No entries yet.</p>
   {% endif %}
 </section>
 
 <section class="card">
-  <h2>Add an entry</h2>
+  <h2>Add</h2>
   <form class="form-row" method="post" action="/allowlist">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label>Value
-      <input type="text" name="value" placeholder="1.2.3.4, 10.0.0.0/8 or example.com"
+      <input type="text" name="value" placeholder="8.8.8.8, 45.9.20.0/24 or example.com"
              value="{{ value if value is defined else '' }}" required>
     </label>
     <label>Note
       <input type="text" name="note" value="{{ note if note is defined else '' }}">
     </label>
-    <button type="submit">Add entry</button>
+    <label class="check"><input type="checkbox" name="mine" value="true"> My network</label>
+    <button type="submit">Add</button>
   </form>
+  <p class="hint"><strong>My network:</strong> your own public addresses or domains. ThreatCull also warns you on the dashboard when a Source lists one.</p>
   <h3>Import from a file</h3>
   <form class="form-row" method="post" action="/allowlist/import" enctype="multipart/form-data">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label>A .txt or .csv file, up to 1 MiB and 10,000 entries
       <input type="file" name="file" accept=".txt,.csv,text/plain,text/csv" required>
     </label>
+    <label class="check"><input type="checkbox" name="mine" value="true"> My network</label>
     <button type="submit" class="btn-secondary">Import</button>
   </form>
-  <p class="hint">One value per line, with an optional <code># note</code>, or csv <code>value,note</code>.
-    Lines starting with <code>#</code> are skipped. Values already on the Allowlist keep their note.</p>
+  <p class="hint">One value per line with an optional <code># note</code>, or csv <code>value,note</code>.
+    Values already on the allowlist keep their note.</p>
 </section>
 
 <section class="card">
-  <h2>Built-in Allowlist Sources</h2>
+  <h2>Find your own addresses</h2>
+  <div class="grid-2 detect">
+    <div>
+      <p>Read this host's addresses, gateway and DNS resolvers. Nothing leaves the network.</p>
+      <form method="post" action="/allowlist/detect">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" class="btn-secondary">Detect</button>
+      </form>
+    </div>
+    <div>
+      <p>Ask api.ipify.org which public address your requests come from.</p>
+      <form method="post" action="/allowlist/detect-public">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" class="btn-secondary">Detect my public IP</button>
+      </form>
+    </div>
+  </div>
+  {% if public_ip_failed is defined and public_ip_failed %}
+  <p class="error">Could not learn the public IP from api.ipify.org.</p>
+  {% endif %}
+  {% if candidates is not none %}
+  {% if candidates %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Candidate</th><th>Found in</th><th class="col-action"></th></tr></thead>
+    <tbody>
+      {% for candidate in candidates %}
+      <tr>
+        <td class="mono">{{ candidate.value }}</td>
+        <td>{{ candidate.reason }}</td>
+        <td class="actions">
+          <form method="post" action="/allowlist">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="value" value="{{ candidate.value }}">
+            <input type="hidden" name="note" value="{{ candidate.reason }}">
+            <input type="hidden" name="mine" value="true">
+            <button type="submit" class="btn-small">Add as my network</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No new candidates: every public address found is already on the allowlist.</p>
+  {% endif %}
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Built-in allowlists</h2>
   {% if allowlist_sources %}
   <div class="table-wrap">
   <table class="table">
     <thead>
-      <tr><th>Source</th><th>Status</th><th class="num">Built-in entries</th></tr>
+      <tr><th>Source</th><th>Status</th><th class="num">Entries</th></tr>
     </thead>
     <tbody>
       {% for source in allowlist_sources %}
@@ -89,7 +151,7 @@
   </table>
   </div>
   {% else %}
-  <p>No allowlist Sources configured.</p>
+  <p class="muted">No allowlist Sources configured.</p>
   {% endif %}
 </section>
 {% endblock %}

@@ -99,7 +99,7 @@ def create_app(
     # One runner per app: "Run now", force Compile and the scheduler share its
     # lock, so only one pipeline run happens at a time.
     app.state.runner = PipelineRunner(data_dir)
-    # Home Network "Detect" reads local files only; the public-IP Fetcher is
+    # The Allowlist "Detect" button reads local files only; the public-IP Fetcher is
     # built (and api.ipify.org contacted) only when an operator presses its button.
     app.state.home_detector = detect_candidates
     app.state.public_ip_fetcher_factory = public_ip_fetcher

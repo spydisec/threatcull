@@ -20,7 +20,6 @@ from threatcull.clock import utcnow
 from threatcull.home_detect import Candidate
 from threatcull.store.allowlist import add_entry
 from threatcull.store.api_tokens import create_api_token
-from threatcull.store.home import add_home
 from threatcull.store.outputs import ensure_default_outputs
 from threatcull.store.sources import sync_catalog
 from threatcull.web.deps import open_db
@@ -33,9 +32,7 @@ API_WRITES: list[tuple[str, str, dict[str, Any]]] = [
     ("POST", "/api/v1/outputs/ip-high/rotate", {}),
     ("POST", "/api/v1/allowlist", {"json": {"value": "1.2.3.4", "note": ""}}),
     ("DELETE", "/api/v1/allowlist", {"params": {"value": "5.6.7.8"}}),
-    ("POST", "/api/v1/home", {"json": {"value": "9.9.9.9", "note": ""}}),
-    ("DELETE", "/api/v1/home", {"params": {"value": "8.8.4.4"}}),
-    ("POST", "/api/v1/home/detect", {}),
+    ("POST", "/api/v1/allowlist/detect", {}),
 ]
 _IDS = [f"{method} {path}" for method, path, _ in API_WRITES]
 
@@ -46,13 +43,12 @@ def _no_candidates(**_: object) -> list[Candidate]:
 
 @pytest.fixture
 def seeded(client: TestClient, admin: str, tmp_path: Path) -> TestClient:
-    """The ``admin`` user, a Source, default Outputs and one Allowlist + Home entry to delete."""
+    """The ``admin`` user, a Source, default Outputs and one Allowlist entry to delete."""
     conn = open_db(tmp_path)
     try:
         sync_catalog(conn, [SOURCE])
         ensure_default_outputs(conn)
         add_entry(conn, "5.6.7.8", "", now=utcnow())
-        add_home(conn, "8.8.4.4", "", origin="manual", now=utcnow())
     finally:
         conn.close()
     client.app.state.home_detector = _no_candidates  # type: ignore[attr-defined]

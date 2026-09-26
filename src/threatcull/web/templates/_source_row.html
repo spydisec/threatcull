@@ -6,7 +6,7 @@
     <div class="sub mono">{{ source.id }}</div>
   </td>
   <td>
-    {{ source.category }}
+    {{ category_labels.get(source.category, source.category) }}
     <div class="sub">{{ source.role }} · {{ source.kind }}</div>
   </td>
   <td>

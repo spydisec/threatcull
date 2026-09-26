@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""HTML pages: dashboard, Sources, Outputs, Allowlist, Home Network, Runs, Lookup, Settings."""
+"""HTML pages: dashboard, Sources, Outputs, Allowlist, Runs, Lookup, Settings."""
 
 from __future__ import annotations
 
@@ -24,16 +24,10 @@ from threatcull.store.allowlist import (
     import_entries,
     operator_entries,
     remove_entry,
+    set_mine,
 )
 from threatcull.store.config import apply_config, dump_config, parse_config
 from threatcull.store.errors import NotFoundError, PolicyError
-from threatcull.store.home import (
-    add_home,
-    home_allow_entries,
-    home_entries,
-    import_home,
-    remove_home,
-)
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
 from threatcull.store.runs import compile_history, last_run, recent_fetches, recent_runs
 from threatcull.store.settings import load_settings
@@ -44,7 +38,6 @@ from threatcull.store.sources import (
 )
 from threatcull.store.sources import set_enabled as store_set_enabled
 from threatcull.web.dashboard import (
-    CATEGORY_LABELS,
     FUNNEL_WIDTH,
     chart_data,
     funnel,
@@ -65,7 +58,7 @@ from threatcull.web.deps import (
 )
 from threatcull.web.jobs import PipelineRunner
 from threatcull.web.scheduler import Scheduler
-from threatcull.web.schemas import AllowlistEntryIn, CustomSourceIn, HomeEntryIn, OutputCreateIn
+from threatcull.web.schemas import AllowlistEntryIn, CustomSourceIn, OutputCreateIn
 from threatcull.web.templating import flash, render, render_fragment
 
 router = APIRouter()
@@ -107,7 +100,7 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
     scheduler: Scheduler | None = getattr(request.app.state, "scheduler", None)
     next_run = scheduler.next_compile_at() if scheduler is not None else None
     last_compile = last_run(conn, "compile")
-    # A failed Compile records no Home Network hits; the banner must show the last
+    # A failed Compile records no own-network hits; the alert must show the last
     # Compile that actually finished (ok or blocked), not go dark behind a failure.
     home_compile = last_run(conn, "compile", statuses=("ok", "blocked"))
     home_alerts = [
@@ -132,7 +125,6 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
         "scheduler_on": scheduler is not None,
         "next_compile_at": ts(next_run) if next_run is not None else None,
         "refreshed_at": ts(now),
-        "category_labels": CATEGORY_LABELS,
         "stats": stats,
         **_run_status(request),
     }
@@ -362,6 +354,7 @@ def _allowlist_context(conn: sqlite3.Connection) -> dict[str, Any]:
         "operator_entries": operator_entries(conn),
         "allowlist_sources": list_sources(conn, role="allowlist"),
         "builtin_counts": builtin_counts,
+        "candidates": None,
     }
 
 
@@ -393,21 +386,23 @@ def add_allowlist_entry_page(
     request: Request,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
+    *,
     # Defaults to "" (not required): FastAPI treats an empty *required* Form
     # field as missing (a 422), which would bypass our own inline 400 for an
     # empty value; letting it through and relying on AllowlistEntryIn's own
     # min_length=1 check keeps the 400 path reachable.
     value: Annotated[str, Form()] = "",
     note: Annotated[str, Form()] = "",
+    mine: Annotated[bool, Form()] = False,
 ) -> Response:
     try:
-        payload = AllowlistEntryIn(value=value, note=note)
+        payload = AllowlistEntryIn(value=value, note=note, mine=mine)
     except ValidationError as exc:
         return _allowlist_error(
             request, conn, _validation_message(exc), value=value, note=note, status_code=400
         )
     try:
-        add_entry(conn, payload.value, payload.note, now=utcnow())
+        add_entry(conn, payload.value, payload.note, mine=payload.mine, now=utcnow())
     except ValueError as exc:
         return _allowlist_error(
             request, conn, str(exc), value=payload.value, note=payload.note, status_code=400
@@ -428,12 +423,13 @@ def import_allowlist_page(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
     file: Annotated[UploadFile | None, File()] = None,
+    mine: Annotated[bool, Form()] = False,
 ) -> Response:
     try:
         lines = parse_list_file(_read_upload(file))
     except ValueError as exc:
         return _allowlist_error(request, conn, str(exc), value="", note="", status_code=400)
-    flash(request, summary(import_entries(conn, lines, now=utcnow())))
+    flash(request, summary(import_entries(conn, lines, mine=mine, now=utcnow())))
     return RedirectResponse("/allowlist", status_code=303)
 
 
@@ -453,118 +449,52 @@ def remove_allowlist_entry_page(
     return RedirectResponse("/allowlist", status_code=303)
 
 
-def _home_context(conn: sqlite3.Connection) -> dict[str, Any]:
-    return {"entries": home_entries(conn), "candidates": None}
-
-
-@router.get("/home")
-def home_page(
-    request: Request,
-    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
-    user: Annotated[str, Depends(require_user)],
-) -> Response:
-    return render(request, "home.html", _home_context(conn))
-
-
-def _home_error(
-    request: Request,
-    conn: sqlite3.Connection,
-    message: str,
-    *,
-    value: str,
-    note: str,
-    status_code: int,
-) -> Response:
-    context = _home_context(conn)
-    context.update({"error": message, "value": value, "note": note})
-    return render(request, "home.html", context, status_code=status_code)
-
-
-@router.post("/home/import", dependencies=[Depends(check_csrf)])
-def import_home_page(
-    request: Request,
-    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
-    user: Annotated[str, Depends(require_user)],
-    file: Annotated[UploadFile | None, File()] = None,
-) -> Response:
-    try:
-        lines = parse_list_file(_read_upload(file))
-    except ValueError as exc:
-        return _home_error(request, conn, str(exc), value="", note="", status_code=400)
-    flash(request, summary(import_home(conn, lines, now=utcnow())))
-    return RedirectResponse("/home", status_code=303)
-
-
-@router.post("/home", dependencies=[Depends(check_csrf)])
-def add_home_entry_page(
-    request: Request,
-    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
-    user: Annotated[str, Depends(require_user)],
-    *,
-    # Defaulted to "" for the same reason as the Allowlist form: keep the inline 400.
-    value: Annotated[str, Form()] = "",
-    note: Annotated[str, Form()] = "",
-    origin: Annotated[str, Form()] = "manual",
-) -> Response:
-    try:
-        payload = HomeEntryIn(value=value, note=note, origin=origin)
-    except ValidationError as exc:
-        return _home_error(
-            request, conn, _validation_message(exc), value=value, note=note, status_code=400
-        )
-    try:
-        add_home(conn, payload.value, payload.note, origin=payload.origin, now=utcnow())
-    except ValueError as exc:
-        return _home_error(
-            request, conn, str(exc), value=payload.value, note=payload.note, status_code=400
-        )
-    return RedirectResponse("/home", status_code=303)
-
-
-@router.post("/home/remove", dependencies=[Depends(check_csrf)])
-def remove_home_entry_page(
+@router.post("/allowlist/mine", dependencies=[Depends(check_csrf)])
+def set_mine_page(
     request: Request,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
     value: Annotated[str, Form()] = "",
+    mine: Annotated[bool, Form()] = False,
 ) -> Response:
+    """Flag an entry as your own network (or clear the flag)."""
     try:
-        remove_home(conn, value)
+        set_mine(conn, value, mine)
     except ValueError as exc:
-        return _home_error(request, conn, str(exc), value=value, note="", status_code=400)
+        return _allowlist_error(request, conn, str(exc), value=value, note="", status_code=400)
     except NotFoundError as exc:
-        return _home_error(request, conn, str(exc), value=value, note="", status_code=404)
-    return RedirectResponse("/home", status_code=303)
+        return _allowlist_error(request, conn, str(exc), value=value, note="", status_code=404)
+    return RedirectResponse("/allowlist", status_code=303)
 
 
-@router.post("/home/detect", dependencies=[Depends(check_csrf)])
-def detect_home_page(
+@router.post("/allowlist/detect", dependencies=[Depends(check_csrf)])
+def detect_mine_page(
     request: Request,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
-    """Show local candidates, each with its own Add button; never adds anything itself."""
-    context = _home_context(conn)
+    """Show this host's public addresses as candidates; never adds anything itself."""
+    context = _allowlist_context(conn)
     context["candidates"] = home_detector(request)(
-        existing=home_allow_entries(conn), extra_hosts=_request_hosts(request)
+        existing=operator_entries(conn), extra_hosts=_request_hosts(request)
     )
-    return render(request, "home.html", context)
+    return render(request, "allowlist.html", context)
 
 
-@router.post("/home/detect-public", dependencies=[Depends(check_csrf)])
+@router.post("/allowlist/detect-public", dependencies=[Depends(check_csrf)])
 def detect_public_ip_page(
     request: Request,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
     """Ask api.ipify.org for the public IP: only ever on this explicit request."""
-    context = _home_context(conn)
+    context = _allowlist_context(conn)
     public, candidate = public_ip_candidate(
-        public_ip_fetcher_factory(request)(), existing=home_allow_entries(conn)
+        public_ip_fetcher_factory(request)(), existing=operator_entries(conn)
     )
     context["candidates"] = [candidate] if candidate is not None else []
     context["public_ip_failed"] = public is None
-    return render(request, "home.html", context)
+    return render(request, "allowlist.html", context)
 
 
 def _request_hosts(request: Request) -> list[str]:

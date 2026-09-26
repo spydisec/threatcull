@@ -46,7 +46,7 @@ def funnel(stats: CompileStats) -> list[FunnelStep]:
         step("Rejected as invalid", stats.rejected, "out", share(stats.rejected)),
         step("Duplicates merged", stats.duplicates, "out", share(stats.duplicates)),
         step("Allowlisted", stats.allowlisted, "out", share(stats.allowlisted)),
-        step("Home Network", stats.home, "out", share(stats.home)),
+        step("My network", stats.home, "out", share(stats.home)),
         step("Unique Indicators kept", stats.published, "keep", share(stats.published)),
     ]
 

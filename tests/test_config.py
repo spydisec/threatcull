@@ -23,7 +23,6 @@ from threatcull.store.config import (
     parse_config,
 )
 from threatcull.store.db import connect
-from threatcull.store.home import add_home
 from threatcull.store.outputs import OutputSpec, create_output
 from threatcull.store.sources import add_custom_source, set_enabled, sync_catalog
 from threatcull.store.users import create_user
@@ -50,7 +49,7 @@ def _seed(conn: sqlite3.Connection, now: datetime) -> dict[str, str]:
     )
     add_entry(conn, "pay.example.com", "payment provider", now=now)
     add_entry(conn, "8.8.8.8", "dns", now=now)
-    add_home(conn, "45.9.20.1", "office", now=now)
+    add_entry(conn, "45.9.20.1", "office", mine=True, now=now)
     tokens = {
         "zz-ips": create_output(
             conn, OutputSpec("zz-ips", "ip", frozenset({"malicious"}), "high", 500, "csv")
@@ -75,7 +74,6 @@ def test_export_has_every_section_in_order_with_database_values(
         "catalog_sources",
         "custom_sources",
         "allowlist",
-        "home_network",
         "outputs",
     ]
     assert doc["threatcull_config"] == CONFIG_VERSION == 1
@@ -96,10 +94,10 @@ def test_export_has_every_section_in_order_with_database_values(
         }
     ]
     assert doc["allowlist"] == [
-        {"value": "8.8.8.8", "note": "dns"},
-        {"value": "pay.example.com", "note": "payment provider"},
+        {"value": "45.9.20.1", "note": "office", "mine": True},
+        {"value": "8.8.8.8", "note": "dns", "mine": False},
+        {"value": "pay.example.com", "note": "payment provider", "mine": False},
     ]
-    assert doc["home_network"] == [{"value": "45.9.20.1", "note": "office", "origin": "manual"}]
     assert [o["name"] for o in doc["outputs"]] == ["aa-domains", "zz-ips"]
     assert doc["outputs"][0] == {
         "name": "aa-domains",
@@ -241,7 +239,7 @@ def test_import_skips_what_it_cannot_apply_and_applies_the_rest(
     assert "ips: exists with a different definition" in skipped
     exported = export_config(conn, now=now)
     assert exported["catalog_sources"] == {"cat-a": False}
-    assert exported["allowlist"] == [{"value": "8.8.8.8", "note": "dns"}]
+    assert exported["allowlist"] == [{"value": "8.8.8.8", "note": "dns", "mine": False}]
 
 
 def test_import_updates_an_existing_custom_source(conn: sqlite3.Connection, now: datetime) -> None:
@@ -426,3 +424,21 @@ def test_cli_import_reads_at_most_the_size_limit(
     assert main(["--data-dir", str(tmp_path / "d"), "config", "import", "-"]) == 1
     assert "larger than 1 MiB" in capsys.readouterr().err
     assert stream.tell() <= MAX_CONFIG_BYTES + 1
+
+
+def test_a_pre_v1_1_home_network_section_imports_as_my_network(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
+    doc = parse_config(
+        b"threatcull_config: 1\n"
+        b"allowlist:\n  - {value: 45.9.20.1, note: office}\n"
+        b"home_network:\n"
+        b"  - {value: 45.9.20.1, note: office, origin: manual}\n"
+        b"  - {value: shop.example.com, note: shop, origin: auto}\n"
+    )
+    result = apply_config(conn, doc, now=now)
+    assert "added My network entry shop.example.com" in result.applied
+    assert export_config(conn, now=now)["allowlist"] == [
+        {"value": "45.9.20.1", "note": "office", "mine": True},
+        {"value": "shop.example.com", "note": "shop", "mine": True},
+    ]
