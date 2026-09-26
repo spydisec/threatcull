@@ -51,6 +51,7 @@ def test_funnel_scales_every_step_against_what_was_received() -> None:
         ("Duplicates merged", 300),
         ("Allowlisted", 40),
         ("My network", 10),
+        ("Ranges left out", 0),
         ("Unique Indicators kept", 550),
     ]
     assert steps[0].width == FUNNEL_WIDTH

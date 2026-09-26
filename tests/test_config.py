@@ -84,6 +84,7 @@ def test_export_has_every_section_in_order_with_database_values(
             "id": "custom-mine",
             "name": "My feed",
             "url": "https://feeds.example/mine.txt",
+            "role": "blocklist",
             "format": "plain",
             "kind": "domain",
             "category": "phishing",
@@ -442,3 +443,18 @@ def test_a_pre_v1_1_home_network_section_imports_as_my_network(
         {"value": "45.9.20.1", "note": "office", "mine": True},
         {"value": "shop.example.com", "note": "shop", "mine": True},
     ]
+
+
+def test_custom_allowlist_source_round_trips(conn: sqlite3.Connection, now: datetime) -> None:
+    apply_config(
+        conn,
+        parse_config(
+            b"threatcull_config: 1\n"
+            b"custom_sources:\n"
+            b"  - {id: custom-wl, name: WL, url: 'https://feeds.example/wl.txt', role: allowlist,\n"
+            b"     format: plain, kind: ip, category: infrastructure, enabled: true}\n"
+        ),
+        now=now,
+    )
+    (wl,) = export_config(conn, now=now)["custom_sources"]
+    assert (wl["role"], wl["enabled"]) == ("allowlist", True)

@@ -23,6 +23,7 @@
     <h2><span class="mono">{{ result.value }}</span> <span class="badge">{{ result.kind }}</span></h2>
     {% if result.allowlisted_by %}<span class="pill pill-ok">Allowlisted</span>
     {% elif labels %}<span class="pill pill-bad">Published in {{ labels | length }} Output{{ "s" if labels | length != 1 }}</span>
+    {% elif result.kind == "cidr" and result.score %}<span class="pill pill-warn">Range, left out of Outputs</span>
     {% elif result.score %}<span class="pill pill-warn">Listed, in no Output</span>
     {% else %}<span class="pill pill-off">Not listed</span>{% endif %}
   </div>
@@ -38,6 +39,9 @@
     <dt>Outputs</dt>
     <dd>{{ labels|join(", ") if labels else "none" }}</dd>
   </dl>
+  {% if result.kind == "cidr" %}
+  <p class="muted">Outputs list single addresses only: a blocklisted range could block many innocent hosts. Look up an address inside it to see that address.</p>
+  {% endif %}
   {% if labels %}
   <p class="muted">An Output with a cap may still leave this Indicator out during Compile.</p>
   {% endif %}

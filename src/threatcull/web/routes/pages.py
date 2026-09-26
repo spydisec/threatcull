@@ -27,6 +27,7 @@ from threatcull.store.allowlist import (
     set_mine,
 )
 from threatcull.store.config import apply_config, dump_config, parse_config
+from threatcull.store.db import transaction
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
 from threatcull.store.runs import compile_history, last_run, recent_fetches, recent_runs
@@ -35,6 +36,7 @@ from threatcull.store.sources import (
     add_custom_source,
     get_source,
     list_sources,
+    new_custom_id,
 )
 from threatcull.store.sources import set_enabled as store_set_enabled
 from threatcull.web.dashboard import (
@@ -183,8 +185,10 @@ def sources_page(
     request: Request,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
+    add: bool = False,
 ) -> Response:
-    return render(request, "sources.html", {"sources": list_sources(conn)})
+    """``?add=1`` opens the "Add your own list" form (linked from the Allowlist page)."""
+    return render(request, "sources.html", {"sources": list_sources(conn), "open_add": add})
 
 
 def _outputs_context(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
@@ -585,12 +589,13 @@ def add_custom_source_page(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
     *,
-    id: Annotated[str, Form()],
     name: Annotated[str, Form()],
     url: Annotated[str, Form()],
-    format: Annotated[str, Form()],
     kind: Annotated[str, Form()],
-    category: Annotated[str, Form()],
+    id: Annotated[str, Form()] = "",
+    role: Annotated[str, Form()] = "blocklist",
+    format: Annotated[str, Form()] = "plain",
+    category: Annotated[str, Form()] = "malicious",
     csv_column: Annotated[int, Form()] = 0,
     json_keys: Annotated[str, Form()] = "",
     business_use: Annotated[str, Form()] = "unknown",
@@ -599,8 +604,9 @@ def add_custom_source_page(
     try:
         payload = CustomSourceIn(
             id=id,
-            name=name,
-            url=url,
+            name=name.strip(),
+            url=url.strip(),
+            role=role,
             format=format,
             kind=kind,
             category=category,
@@ -623,19 +629,31 @@ def add_custom_source_page(
             {"sources": list_sources(conn), "custom_error": refusal},
             status_code=400,
         )
-    try:
-        add_custom_source(
-            conn,
-            source_id=payload.id,
-            name=payload.name,
-            url=payload.url,
-            fmt=payload.format,
-            kind=payload.kind,
-            category=payload.category,
-            csv_column=payload.csv_column,
-            json_keys=payload.json_keys,
-            business_use=payload.business_use,
+    source_id = payload.id or new_custom_id(conn, payload.name)
+    if payload.id and _source_exists(conn, source_id):
+        return render(
+            request,
+            "sources.html",
+            {"sources": list_sources(conn), "custom_error": f"{source_id} is already taken"},
+            status_code=400,
         )
+    try:
+        with transaction(conn):
+            add_custom_source(
+                conn,
+                source_id=source_id,
+                name=payload.name,
+                url=payload.url,
+                fmt=payload.format,
+                kind=payload.kind,
+                # A category only matters for blocklists; allowlist Sources file as infrastructure.
+                category=payload.category if payload.role == "blocklist" else "infrastructure",
+                csv_column=payload.csv_column,
+                json_keys=payload.json_keys,
+                business_use=payload.business_use,
+                role=payload.role,
+            )
+            store_set_enabled(conn, source_id, True)
     except ValueError as exc:
         return render(
             request,
@@ -644,7 +662,17 @@ def add_custom_source_page(
             status_code=400,
         )
     _notify_sources_changed(request)
+    list_name = "Allowlist" if payload.role == "allowlist" else "blocklist"
+    flash(request, f"Added {payload.name} as a {list_name} Source. The next fetch downloads it.")
     return RedirectResponse("/sources", status_code=303)
+
+
+def _source_exists(conn: sqlite3.Connection, source_id: str) -> bool:
+    try:
+        get_source(conn, source_id)
+    except NotFoundError:
+        return False
+    return True
 
 
 @router.get("/settings")

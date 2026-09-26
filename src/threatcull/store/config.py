@@ -18,7 +18,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from threatcull.catalog import BusinessUse, Category
+from threatcull.catalog import BusinessUse, Category, SourceRole
 from threatcull.clock import ts
 from threatcull.indicators import SourceKind
 from threatcull.parsers import SourceFormat
@@ -57,6 +57,7 @@ def export_config(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
                 "id": s.id,
                 "name": s.name,
                 "url": s.url,
+                "role": s.role,
                 "format": str(s.format),
                 "kind": str(s.kind),
                 "category": s.category,
@@ -120,6 +121,7 @@ class _CustomSourceIn(_Strict):
     id: str
     name: str
     url: str
+    role: SourceRole = "blocklist"
     format: SourceFormat
     kind: SourceKind
     category: Category
@@ -289,6 +291,7 @@ def _apply_sources(
                 csv_column=custom.csv_column,
                 json_keys=tuple(custom.json_keys),
                 business_use=custom.business_use,
+                role=custom.role,
             )
         except ValueError as exc:
             result.skipped.append(f"skipped custom Source {custom.id}: {exc}")

@@ -190,15 +190,17 @@ def add_custom_source(
     csv_column: int = 0,
     json_keys: tuple[str, ...] = (),
     business_use: BusinessUse = BusinessUse.UNKNOWN,
+    role: SourceRole = "blocklist",
 ) -> Source:
+    """Add a custom Source, disabled. An allowlist Source feeds the Allowlist;
+    a blocklist Source is scored like any Catalog blocklist."""
     _check_custom(source_id, name, url)
     conn.execute(
         """
         INSERT INTO sources (id, name, family, url, format, kind, role, category, licence_class,
             business_use, licence, licence_url, refresh_minutes, csv_column, json_keys, custom,
             enabled)
-        VALUES (?, ?, ?, ?, ?, ?, 'blocklist', ?, 'unknown', ?, 'Operator-supplied', '', 60, ?, ?,
-            1, 0)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unknown', ?, 'Operator-supplied', '', 60, ?, ?, 1, 0)
         """,
         (
             source_id,
@@ -207,6 +209,7 @@ def add_custom_source(
             url,
             fmt,
             kind,
+            role,
             category,
             str(business_use),
             csv_column,
@@ -216,9 +219,21 @@ def add_custom_source(
     return get_source(conn, source_id)
 
 
+def new_custom_id(conn: sqlite3.Connection, name: str) -> str:
+    """A free ``custom-<slug>`` id made from ``name``, with ``-2``, ``-3``... on a clash."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:48].strip("-") or "source"
+    candidate, n = f"custom-{slug}", 1
+    while conn.execute("SELECT 1 FROM sources WHERE id = ?", (candidate,)).fetchone():
+        n += 1
+        candidate = f"custom-{slug}-{n}"
+    return candidate
+
+
 def _check_custom(source_id: str, name: str, url: str) -> None:
     if not _CUSTOM_ID.fullmatch(source_id):
-        raise ValueError("custom Source ids look like custom-<name> (lowercase, digits, dashes)")
+        raise ValueError(
+            "custom Source ids look like custom-my-feed: lowercase letters, digits and dashes"
+        )
     if _CONTROL_CHARS.search(name):
         raise ValueError("custom Source names cannot contain control characters")
     if not url.startswith(_CUSTOM_SCHEMES):
@@ -239,17 +254,19 @@ def update_custom_source(
     csv_column: int = 0,
     json_keys: tuple[str, ...] = (),
     business_use: BusinessUse = BusinessUse.UNKNOWN,
+    role: SourceRole = "blocklist",
 ) -> Source:
     """Replace the definition of an existing custom Source (its enabled state stays)."""
     _check_custom(source_id, name, url)
     updated = conn.execute(
-        "UPDATE sources SET name = ?, url = ?, format = ?, kind = ?, category = ?, "
+        "UPDATE sources SET name = ?, url = ?, format = ?, kind = ?, role = ?, category = ?, "
         "business_use = ?, csv_column = ?, json_keys = ? WHERE id = ? AND custom = 1",
         (
             name,
             url,
             fmt,
             kind,
+            role,
             category,
             str(business_use),
             csv_column,

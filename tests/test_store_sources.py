@@ -5,13 +5,18 @@ import pytest
 
 from tests.factories import make_entry
 from threatcull.catalog import BusinessUse
+from threatcull.clock import utcnow
+from threatcull.indicators import Indicator
+from threatcull.store.allowlist import builtin_entries
 from threatcull.store.errors import NotFoundError, PolicyError
+from threatcull.store.sightings import record_fetch_success
 from threatcull.store.sources import (
     REMOVED_FROM_CATALOG_REASON,
     RESTRICTED_TERMS_REASON,
     add_custom_source,
     get_source,
     list_sources,
+    new_custom_id,
     set_enabled,
     sync_catalog,
 )
@@ -163,3 +168,39 @@ def test_custom_source_urls_cannot_contain_control_characters(
             kind="ip",
             category="malicious",
         )
+
+
+def test_new_custom_id_slugs_the_name_and_avoids_clashes(conn: sqlite3.Connection) -> None:
+    assert new_custom_id(conn, "My Feed!") == "custom-my-feed"
+    assert new_custom_id(conn, "!!!") == "custom-source"
+    assert len(new_custom_id(conn, "x" * 200)) <= len("custom-") + 48
+    add_custom_source(
+        conn,
+        source_id="custom-my-feed",
+        name="My Feed",
+        url="https://example.com/a.txt",
+        fmt="plain",
+        kind="ip",
+        category="malicious",
+    )
+    assert new_custom_id(conn, "my feed") == "custom-my-feed-2"
+
+
+def test_custom_allowlist_source_feeds_the_allowlist(conn: sqlite3.Connection) -> None:
+    source = add_custom_source(
+        conn,
+        source_id="custom-wl",
+        name="My whitelist",
+        url="https://example.com/wl.txt",
+        fmt="plain",
+        kind="ip",
+        category="infrastructure",
+        role="allowlist",
+    )
+    assert source.role == "allowlist"
+    set_enabled(conn, "custom-wl", True)
+    now = utcnow()
+    record_fetch_success(
+        conn, "custom-wl", {Indicator("45.9.20.1", "ip")}, now=now, etag=None, last_modified=None
+    )
+    assert [(e.value, e.origin) for e in builtin_entries(conn)] == [("45.9.20.1", "custom-wl")]
