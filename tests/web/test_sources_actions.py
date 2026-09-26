@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -260,7 +261,55 @@ def test_custom_source_happy_path(client: TestClient, logged_in: str, tmp_path: 
     finally:
         conn.close()
     assert source.custom is True
-    assert source.enabled is False
+    assert source.enabled is True  # "Add and enable": the next fetch downloads it
+    assert source.role == "blocklist"
+    assert "Added Our honeypot as a blocklist Source" in client.get("/sources").text
+
+
+def test_custom_allowlist_with_only_the_required_fields(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    form = {
+        "csrf": logged_in,
+        "name": "  My Whitelist (CDN) ",
+        "url": "https://example.com/wl.txt",
+        "kind": "ip",
+        "role": "allowlist",
+    }
+    assert client.post("/sources/custom", data=form, follow_redirects=False).status_code == 303
+    assert client.post("/sources/custom", data=form, follow_redirects=False).status_code == 303
+    assert _custom_ids(tmp_path) == ["custom-my-whitelist-cdn", "custom-my-whitelist-cdn-2"]
+    conn = open_db(tmp_path)
+    try:
+        source = get_source(conn, "custom-my-whitelist-cdn")
+    finally:
+        conn.close()
+    assert (source.name, source.role, source.format, source.category, source.enabled) == (
+        "My Whitelist (CDN)",
+        "allowlist",
+        "plain",
+        "infrastructure",
+        True,
+    )
+    page = client.get("/allowlist").text
+    assert "My Whitelist (CDN)" in page
+    assert 'href="/sources?add=1#add-custom"' in page
+
+
+def test_add_link_opens_the_form(client: TestClient, logged_in: str) -> None:
+    assert '<details class="card" id="add-custom">' in client.get("/sources").text
+    assert '<details class="card" id="add-custom" open>' in client.get("/sources?add=1").text
+
+
+def test_custom_source_taken_id_is_refused(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    form = _custom_form(logged_in, "https://example.com/x.txt")
+    assert client.post("/sources/custom", data=form, follow_redirects=False).status_code == 303
+    again = client.post("/sources/custom", data=form, follow_redirects=False)
+    assert again.status_code == 400
+    assert "custom-honeypot is already taken" in again.text
+    assert _custom_ids(tmp_path) == ["custom-honeypot"]
 
 
 def test_custom_source_invalid_id_is_rejected(
@@ -283,6 +332,8 @@ def test_custom_source_invalid_id_is_rejected(
         follow_redirects=False,
     )
     assert response.status_code == 400
+    assert "ids look like custom-my-feed" in response.text
+    assert "should match pattern" not in response.text
     conn = open_db(tmp_path)
     try:
         rows = conn.execute("SELECT id FROM sources").fetchall()
@@ -447,3 +498,21 @@ def test_source_actions_call_the_on_sources_changed_hook(
     client.app.state.on_sources_changed = lambda: calls.append(None)  # type: ignore[attr-defined]
     client.post("/sources/allowed-list/enable", data={"csrf": logged_in}, follow_redirects=False)
     assert calls == [None]
+
+
+def test_a_locked_database_is_a_503_not_a_500(
+    client: TestClient, logged_in: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A large Fetch holds the write lock; a save that waits it out gets a retry page."""
+
+    def locked(*args: object, **kwargs: object) -> None:
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr("threatcull.web.routes.pages.add_custom_source", locked)
+    response = client.post(
+        "/sources/custom", data=_custom_form(logged_in, "https://example.com/x.txt")
+    )
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "30"
+    assert "Busy saving a fetch" in response.text
+    assert _custom_ids(tmp_path) == []

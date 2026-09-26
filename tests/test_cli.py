@@ -227,3 +227,14 @@ def test_compile_reports_outputs_whose_guard_baseline_was_reset(
     capsys.readouterr()
     assert main([*cli, "compile"]) == 0
     assert "baseline reset (a Source that fed it was disabled)" in capsys.readouterr().out
+
+
+def test_custom_allowlist_source_without_an_id(
+    cli: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["sources", "add-custom", "--name", "My WL", "--url", "https://example.com/wl.txt"]
+    assert main([*cli, *args, "--kind", "domain", "--allowlist"]) == 0
+    assert "added custom-my-wl" in capsys.readouterr().out
+    assert main([*cli, "sources", "list"]) == 0
+    listed = next(line for line in capsys.readouterr().out.splitlines() if "custom-my-wl" in line)
+    assert "allowlist" in listed

@@ -16,7 +16,7 @@ from threatcull.outputs.files import output_path
 from threatcull.outputs.render import Attribution, RenderContext, entry, head, tail
 from threatcull.policy.allowlist import Allowlist
 from threatcull.policy.scoring import ScoredIndicator, min_score, to_scored
-from threatcull.store.outputs import OutputSpec
+from threatcull.store.outputs import OUTPUT_INDICATOR_KINDS, OutputSpec
 from threatcull.store.settings import Settings
 from threatcull.store.sources import Source
 
@@ -132,7 +132,7 @@ def _selected(
 ) -> Iterator[ScoredIndicator]:
     params = {
         "min_score": min_score(spec.min_tier, settings),
-        "kinds": json.dumps(["ip", "cidr"] if spec.kind == "ip" else ["domain"]),
+        "kinds": json.dumps(OUTPUT_INDICATOR_KINDS[spec.kind]),
         "categories": json.dumps(sorted(spec.categories)),
         "limit": spec.max_entries or -1,
     }

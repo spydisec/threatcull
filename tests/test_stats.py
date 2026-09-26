@@ -7,10 +7,12 @@ from pathlib import Path
 
 from tests.test_compiling import _setup
 from threatcull.compiling import compile_outputs
+from threatcull.indicators import Indicator
 from threatcull.policy.stats import CompileStats, SourceShare
 from threatcull.store.allowlist import add_entry
 from threatcull.store.db import SCHEMA_VERSION
 from threatcull.store.runs import finish_run, last_run, start_run
+from threatcull.store.sightings import record_fetch_success
 
 
 def _fetch_run(conn: sqlite3.Connection, source_id: str, invalid: int, now: datetime) -> None:
@@ -84,3 +86,29 @@ def test_stats_from_before_the_kind_split_still_read_back() -> None:
     assert stats is not None
     assert stats.kinds == {}
     assert stats.kept("domain") == 0
+
+
+def test_blocklisted_ranges_are_counted_and_left_out_of_every_output(
+    conn: sqlite3.Connection, now: datetime, tmp_path: Path
+) -> None:
+    _setup(conn, now)
+    record_fetch_success(
+        conn,
+        "b",
+        {Indicator("45.9.20.1", "ip"), Indicator("45.9.21.0/24", "cidr")},
+        now=now,
+        etag=None,
+        last_modified=None,
+    )
+    stats = compile_outputs(conn, tmp_path, now=now).stats
+    assert stats is not None
+    assert stats.ranges == 1
+    assert stats.published == 10
+    assert CompileStats.from_json(stats.to_json()) == stats
+    older = {key: value for key, value in stats.to_json().items() if key != "ranges"}
+    restored = CompileStats.from_json(older)  # a Run recorded before this field
+    assert restored is not None
+    assert restored.ranges == 0
+    published = (tmp_path / "ips.txt").read_text()
+    assert "45.9.20.1\n" in published
+    assert "45.9.21.0/24" not in published

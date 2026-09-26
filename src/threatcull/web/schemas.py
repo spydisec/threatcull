@@ -10,9 +10,11 @@ enforces the allow-listed values, for both the HTML form handlers in
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+import re
 
-from threatcull.catalog import BusinessUse, Category
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from threatcull.catalog import BusinessUse, Category, SourceRole
 from threatcull.indicators import SourceKind
 from threatcull.parsers import SourceFormat
 from threatcull.policy.scoring import Tier
@@ -33,19 +35,34 @@ class SourceEnableIn(BaseModel):
 
 
 class CustomSourceIn(BaseModel):
-    """A custom Source as submitted through the Sources page form."""
+    """A custom Source as submitted through the Sources page form.
+
+    An empty ``id`` means "make one from the name"; the route picks a free one.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(pattern=_CUSTOM_ID_PATTERN)
+    id: str = ""
     name: str = Field(min_length=1)
-    url: str
-    format: SourceFormat
+    url: str = Field(min_length=1)
+    role: SourceRole = "blocklist"
+    format: SourceFormat = "plain"
     kind: SourceKind
-    category: Category
+    category: Category = "malicious"
     csv_column: int = Field(default=0, ge=0)
     json_keys: tuple[str, ...] = ()
     business_use: BusinessUse = BusinessUse.UNKNOWN
+
+    @field_validator("id")
+    @classmethod
+    def _id_shape(cls, value: str) -> str:
+        value = value.strip()
+        if value and not re.fullmatch(_CUSTOM_ID_PATTERN, value):
+            raise ValueError(
+                "ids look like custom-my-feed: lowercase letters, digits and dashes. "
+                "Leave it empty to make one from the name"
+            )
+        return value
 
 
 class AllowlistEntryIn(BaseModel):
