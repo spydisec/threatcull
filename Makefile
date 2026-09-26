@@ -15,7 +15,7 @@ lint: ## Ruff lint and format check
 
 prose: ## Vale prose lint on pushed Markdown
 	uvx vale sync >/dev/null
-	uvx vale README.md .github
+	uvx vale README.md SECURITY.md .github
 
 format: ## Apply Ruff formatting and safe fixes
 	uv run ruff format .
