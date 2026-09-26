@@ -36,9 +36,10 @@ class CompileStats:
     rejected: int  # lines the newest Fetch of each Source refused as invalid
     allowlisted: int
     home: int
+    ranges: int = 0  # CIDR ranges left out of every Output
     tiers: dict[str, int] = field(default_factory=dict)
     sources: dict[str, SourceShare] = field(default_factory=dict)
-    # Kept Indicators per kind ("ip" covers CIDRs) and Tier, and per kind and category
+    # Kept Indicators per kind and Tier, and per kind and category
     # (an Indicator in two categories counts in both). Empty for older Runs.
     kinds: dict[str, dict[str, int]] = field(default_factory=dict)
     categories: dict[str, dict[str, int]] = field(default_factory=dict)
@@ -62,6 +63,7 @@ class CompileStats:
             "rejected": self.rejected,
             "allowlisted": self.allowlisted,
             "home": self.home,
+            "ranges": self.ranges,
             "tiers": dict(self.tiers),
             "sources": {sid: [s.entries, s.unique] for sid, s in self.sources.items()},
             "kinds": self.kinds,
@@ -79,6 +81,7 @@ class CompileStats:
             rejected=data["rejected"],
             allowlisted=data["allowlisted"],
             home=data["home"],
+            ranges=data.get("ranges", 0),
             tiers=dict(data["tiers"]),
             sources={sid: SourceShare(*pair) for sid, pair in data["sources"].items()},
             kinds={kind: dict(tiers) for kind, tiers in data.get("kinds", {}).items()},
@@ -87,7 +90,7 @@ class CompileStats:
 
 
 def compile_stats(conn: sqlite3.Connection, settings: Settings) -> CompileStats:
-    listed = unique = allowlisted = home = 0
+    listed = unique = allowlisted = home = ranges = 0
     tiers: Counter[str] = Counter(dict.fromkeys(TIERS, 0))
     kinds = {kind: Counter(dict.fromkeys(TIERS, 0)) for kind in KINDS}
     categories: dict[str, Counter[str]] = {kind: Counter() for kind in KINDS}
@@ -104,8 +107,10 @@ def compile_stats(conn: sqlite3.Connection, settings: Settings) -> CompileStats:
             home += 1
         elif row["allowlisted"]:
             allowlisted += 1
+        elif row["kind"] == "cidr":
+            ranges += 1
         elif (tier := tier_for(row["score"], settings)) is not None:
-            kind = "domain" if row["kind"] == "domain" else "ip"
+            kind = row["kind"]
             tiers[tier] += 1
             kinds[kind][tier] += 1
             categories[kind].update(row["categories"].split(","))
@@ -115,6 +120,7 @@ def compile_stats(conn: sqlite3.Connection, settings: Settings) -> CompileStats:
         rejected=_rejected(conn),
         allowlisted=allowlisted,
         home=home,
+        ranges=ranges,
         tiers=dict(tiers),
         sources={sid: SourceShare(entries[sid], only[sid]) for sid in sorted(entries)},
         kinds={kind: dict(counts) for kind, counts in kinds.items()},

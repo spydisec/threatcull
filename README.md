@@ -5,8 +5,8 @@ ranges and your own infrastructure, scores each indicator by how many independen
 serves the result to your firewalls, DNS servers and SIEM.
 
 - Catalog of blocklist sources with licence details, plus your own sources (URL or local file)
-- Built-in CDN allowlists and your own entries; mark your own network to get an alert when a
-  source lists it
+- Built-in CDN allowlists, your own entries and your own allowlist URLs; mark your own network to
+  get an alert when a source lists it
 - Confidence tiers (high, medium, low) from source agreement
 - Outputs as plain, hosts, AdGuard, RPZ, CSV or JSON, each at its own URL with a Feed Token
 - Web UI with a dashboard, lookup, run history and a built-in scheduler
@@ -78,6 +78,9 @@ uv run threatcull serve --host <lan-ip> --port 6969
 
 - **Offline networks:** add a custom source with a `file://` URL. Sources added in the web UI must
   point to files in `data/imports/`.
+- **Ranges:** outputs list single IP addresses and domains. A source that lists a CIDR range counts on
+  the dashboard as "Ranges left out", because one range can block many unrelated hosts. Ranges on
+  the allowlist still cover every address inside them.
 - **Your network:** add your public addresses to the allowlist with **My network** ticked (or run
   `threatcull allow detect`). ThreatCull keeps them out of every output and warns you when a source
   lists one.

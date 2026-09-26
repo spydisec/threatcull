@@ -6,11 +6,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from threatcull.policy.scoring import TIER_RANK, ScoredIndicator
-from threatcull.store.outputs import OutputSpec
+from threatcull.store.outputs import OUTPUT_INDICATOR_KINDS, OutputSpec
 
 
 def select(scored: Sequence[ScoredIndicator], spec: OutputSpec) -> list[ScoredIndicator]:
-    kinds = {"ip", "cidr"} if spec.kind == "ip" else {"domain"}
+    kinds = OUTPUT_INDICATOR_KINDS[spec.kind]
     floor = TIER_RANK[spec.min_tier]
     chosen = [
         item

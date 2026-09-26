@@ -47,6 +47,7 @@ def funnel(stats: CompileStats) -> list[FunnelStep]:
         step("Duplicates merged", stats.duplicates, "out", share(stats.duplicates)),
         step("Allowlisted", stats.allowlisted, "out", share(stats.allowlisted)),
         step("My network", stats.home, "out", share(stats.home)),
+        step("Ranges left out", stats.ranges, "out", share(stats.ranges)),
         step("Unique Indicators kept", stats.published, "keep", share(stats.published)),
     ]
 

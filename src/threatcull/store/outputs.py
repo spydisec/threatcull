@@ -15,12 +15,19 @@ from datetime import datetime
 from typing import Literal
 
 from threatcull.clock import ts
-from threatcull.indicators import SourceKind
+from threatcull.indicators import IndicatorKind, SourceKind
 from threatcull.policy.scoring import Tier
 from threatcull.store.errors import NotFoundError
 
 OutputFormat = Literal["plain", "hosts", "adguard", "rpz", "csv", "json"]
 DOMAIN_ONLY_FORMATS: frozenset[str] = frozenset({"hosts", "adguard", "rpz"})
+# Indicator kinds each Output kind publishes. Blocklisted CIDR ranges are left out:
+# one listed /16 would block 65,536 addresses, most of them innocent. Allowlist
+# ranges still apply to every address inside them.
+OUTPUT_INDICATOR_KINDS: dict[str, tuple[IndicatorKind, ...]] = {
+    "ip": ("ip",),
+    "domain": ("domain",),
+}
 # Public so callers that must validate a name before it becomes an OutputSpec
 # (e.g. the web layer's /o/{name} route, before it ever touches the
 # database) can reuse this exact pattern instead of duplicating it.

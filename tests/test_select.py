@@ -37,7 +37,8 @@ ITEMS = [
 
 def test_filters_by_kind_tier_and_category_and_ranks() -> None:
     spec = OutputSpec("ip-medium", "ip", frozenset({"malicious", "c2"}), "medium", None, "plain")
-    assert [s.value for s in select(ITEMS, spec)] == ["3.3.3.3", "2.2.2.2", "4.4.4.0/24"]
+    # 4.4.4.0/24 qualifies by Tier and category, but ranges never reach an Output.
+    assert [s.value for s in select(ITEMS, spec)] == ["3.3.3.3", "2.2.2.2"]
 
 
 def test_cap_keeps_the_strongest() -> None:
