@@ -122,7 +122,7 @@ def test_output_changes_compare_the_last_two_compiles() -> None:
 def test_dashboard_shows_the_cleanup_funnel_after_a_compile(
     client: TestClient, logged_in: str, tmp_path: Path
 ) -> None:
-    assert "No Compile has recorded cleanup numbers yet" in client.get("/").text
+    assert "No Compile has run yet" in client.get("/").text
     conn = open_db(tmp_path)
     try:
         _setup(conn, utcnow())
@@ -166,3 +166,28 @@ def test_a_blocked_compile_explains_itself_and_links_to_force_compile(
     assert "Outputs not updated" in page
     assert "/runs#force-compile" in page
     assert 'id="force-compile" open' in client.get("/runs").text
+
+
+def test_a_fresh_install_offers_run_now_for_the_first_compile(
+    client: TestClient, logged_in: str
+) -> None:
+    page = client.get("/").text
+    assert "first Compile" in page
+    assert 'action="/runs/now"' in page
+    assert 'data-chart="day"' not in page
+
+
+def test_one_compile_already_draws_the_trend_charts(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    conn = open_db(tmp_path)
+    try:
+        _setup(conn, utcnow())
+        compile_outputs(conn, tmp_path / "outputs", now=utcnow())
+    finally:
+        conn.close()
+    page = client.get("/").text
+    assert 'data-chart="day"' in page
+    assert 'data-chart="month"' in page
+    assert "fills in as Compiles run" in page
+    assert "Needs two Compiles" not in page
