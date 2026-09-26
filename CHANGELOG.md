@@ -8,8 +8,17 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-26
+
 The Catalog of Sources can now be updated between releases, and the container image is scanned for
 known vulnerabilities on every change.
+
+**Upgrading from 1.2.x**
+
+| If you | Now |
+|---|---|
+| Run the image with `docker compose pull && docker compose up -d` | Nothing else to do. The Sources page gains a Catalog card. |
+| Keep your own copy of `docker-compose.yaml` | Optionally add `cap_drop: [ALL]` and `security_opt: [no-new-privileges:true]` from the new file. |
 
 ### Added
 
@@ -32,6 +41,9 @@ known vulnerabilities on every change.
 - 🔐 **Hardened compose file.** `docker-compose.yaml` drops all Linux capabilities and blocks
   privilege escalation. ThreatCull runs as a non-root user on an unprivileged port and needs
   neither.
+
+- 🐰 **Focused CodeRabbit reviews.** Pull request reviews cover security and correctness in the
+  application, workflows and container, and skip tests, lock files and generated files.
 
 ### Security
 
@@ -137,7 +149,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/spydisec/threatcull/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/spydisec/threatcull/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/spydisec/threatcull/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/spydisec/threatcull/compare/v1.0.0...v1.0.1
