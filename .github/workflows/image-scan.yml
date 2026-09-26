@@ -1,0 +1,37 @@
+name: Image scan
+
+# New CVEs appear after a release ships: scan the published image every week so a
+# fixable one shows up here instead of waiting for the next pull request.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      # For .grype.yaml: the same ignore rules as the pull-request scan.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Scan ghcr.io/spydisec/threatcull:latest (Grype)
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ghcr.io/spydisec/threatcull:latest
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+          output-format: table

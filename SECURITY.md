@@ -1,21 +1,20 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Only the latest release gets security fixes. Upgrade with `docker compose pull && docker compose up -d`.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+## Reporting a vulnerability
 
-## Reporting a Vulnerability
+Report it privately through **Security > Report a vulnerability** on this repository. Please don't
+open a public issue. Include the version, what an attacker can do and the steps to reproduce it.
 
-Use this section to tell people how to report a vulnerability.
+You get a reply within a week. Once a fix is released, the advisory credits you unless you ask
+otherwise.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+## Scope
+
+In scope: the ThreatCull web UI, API, CLI, the container image and the Outputs it publishes.
+
+Out of scope: the content of upstream Sources (report wrong listings to their publishers) and
+problems that need an attacker who already has the admin password or shell access to the host.

@@ -1,0 +1,47 @@
+name: Bug report
+description: Something in ThreatCull doesn't work as documented.
+labels: ["bug", "needs-triage"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >-
+        Run `docker inspect threatcull --format '{{ index .Config.Labels "org.opencontainers.image.version" }}'`,
+        or give the version in pyproject.toml when you run without Docker.
+      placeholder: "1.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run it?
+      options:
+        - Docker Compose
+        - Portainer stack
+        - Without Docker (uv)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Sources
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        Output of `docker compose logs threatcull`. Remove Feed Tokens, passwords, hostnames and
+        addresses from your own network first.
+      render: text

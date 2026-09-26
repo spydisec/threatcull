@@ -1,0 +1,30 @@
+name: Add a Source to the Catalog
+description: Suggest a public blocklist or allowlist for the built-in Catalog.
+labels: ["catalog", "needs-triage"]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: Feed URL
+    validations:
+      required: true
+  - type: input
+    id: licence
+    attributes:
+      label: Licence or terms of use (link)
+      description: The Catalog only lists Sources with published terms. Link them here.
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: List type
+      options:
+        - Blocklist
+        - Allowlist
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What does it cover, and how often is it updated?
