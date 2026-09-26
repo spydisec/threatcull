@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.test_compiling import _setup
@@ -96,6 +97,17 @@ def test_chart_data_splits_kinds_and_buckets_the_trends() -> None:
     assert data["day"]["ip"] == [6, 6]
     assert data["day"]["delta"] == {"ip": 0, "high": 0}
     assert data["month"]["labels"] == ["Sep 20", "Sep 25"]
+
+
+def test_chart_labels_and_days_follow_tz(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TZ", "Australia/Melbourne")  # UTC+10 in September
+    history = [
+        _run("2026-09-24T15:00:00+00:00", STATS),  # Sep 25 01:00 in Melbourne
+        _run("2026-09-25T09:00:00+00:00", STATS),  # Sep 25 19:00 in Melbourne
+    ]
+    data = chart_data(STATS, history, now=datetime(2026, 9, 25, 12, 0, tzinfo=UTC))
+    assert data["day"]["labels"] == ["01:00", "19:00"]
+    assert data["month"]["labels"] == ["Sep 25"]  # one local day, one point
 
 
 def test_health_reports_the_worst_problem_first() -> None:

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from starlette.responses import HTMLResponse, Response
 
+from threatcull.clock import local
 from threatcull.web.dashboard import CATEGORY_LABELS
 from threatcull.web.deps import session_user
 from threatcull.web.security import ensure_csrf_token
@@ -28,16 +28,16 @@ _env = jinja2.Environment(
 
 
 def _when(value: str | None, missing: str = "never") -> Markup:
-    """Show a stored ISO-8601 UTC timestamp as ``2026-09-24 21:53 UTC``; the
-    full value stays in the tooltip."""
+    """Show a stored ISO-8601 UTC timestamp in the ``TZ`` zone, as
+    ``2026-09-25 07:53 AEST``; the stored UTC value stays in the tooltip."""
     if not value:
         return Markup("{}").format(missing)
     try:
-        parsed = datetime.fromisoformat(value)
+        moment = local(value)
     except ValueError:
         return Markup("{}").format(value)
-    return Markup('<time datetime="{}" title="{}">{} UTC</time>').format(
-        value, value, parsed.strftime("%Y-%m-%d %H:%M")
+    return Markup('<time datetime="{}" title="{}">{}</time>').format(
+        value, value, moment.strftime("%Y-%m-%d %H:%M %Z")
     )
 
 
