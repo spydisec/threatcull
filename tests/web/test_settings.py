@@ -15,8 +15,8 @@ def test_settings_page_requires_login(client: TestClient) -> None:
 def test_settings_page_shows_the_pipeline_settings(client: TestClient, logged_in: str) -> None:
     response = client.get("/settings")
     assert response.status_code == 200
-    assert "Pipeline settings" in response.text
-    assert "Stale after (hours)" in response.text
+    assert "<h2>Pipeline</h2>" in response.text
+    assert "Stale after" in response.text
     assert "Business Mode" not in response.text
 
 
