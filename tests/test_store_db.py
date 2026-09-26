@@ -70,8 +70,10 @@ def test_migration_4_adds_home_network_to_a_version_3_database(tmp_path: Path) -
     upgraded = db.connect(path)
     try:
         assert upgraded.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION >= 4
-        columns = [r["name"] for r in upgraded.execute("PRAGMA table_info(home_network)")]
-        assert columns == ["id", "value", "kind", "note", "origin", "created_at"]
+        # Migration 4 created home_network; migration 8 merged it into the allowlist.
+        tables = {r[0] for r in upgraded.execute("SELECT name FROM sqlite_master")}
+        assert "home_network" not in tables
+        assert "mine" in [r["name"] for r in upgraded.execute("PRAGMA table_info(allowlist)")]
         run = upgraded.execute("SELECT status, home_hits FROM runs").fetchone()
         assert (run["status"], run["home_hits"]) == ("ok", "[]")
     finally:
@@ -89,11 +91,35 @@ def test_migration_drops_business_mode_and_its_disabled_reason(tmp_path: Path) -
         "'https://x/l', 60, 0, '[]', 0, 0, "
         "'Disabled by Business Mode: not cleared for business use')"
     )
-    conn.execute("PRAGMA user_version = 6")
-    migrate(conn)
+    conn.executescript(db._MIGRATIONS[6])  # migration 7: Business Mode removed
     assert (
         conn.execute("SELECT COUNT(*) FROM settings WHERE key = 'business_mode'").fetchone()[0] == 0
     )
     row = conn.execute("SELECT enabled, disabled_reason FROM sources WHERE id = 'nc'").fetchone()
     conn.close()
     assert (row["enabled"], row["disabled_reason"]) == (0, None)
+
+
+def test_migration_moves_home_network_entries_into_the_allowlist(tmp_path: Path) -> None:
+    conn = connect(tmp_path / "old.db")
+    conn.execute("PRAGMA user_version = 7")
+    conn.executescript(
+        "ALTER TABLE allowlist DROP COLUMN mine; "
+        "CREATE TABLE home_network (id INTEGER PRIMARY KEY, value TEXT NOT NULL UNIQUE, "
+        "kind TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', origin TEXT NOT NULL, "
+        "created_at TEXT NOT NULL);"
+        "INSERT INTO home_network (value, kind, note, origin, created_at) VALUES "
+        "('45.9.20.1', 'ip', 'office', 'manual', '2026-09-01T00:00:00+00:00'),"
+        "('pay.example.com', 'domain', 'shop', 'auto', '2026-09-01T00:00:00+00:00');"
+        "INSERT INTO allowlist (value, kind, note, created_at) VALUES "
+        "('pay.example.com', 'domain', 'payments', '2026-09-01T00:00:00+00:00');"
+    )
+    migrate(conn)
+    rows = conn.execute("SELECT value, note, mine FROM allowlist ORDER BY value").fetchall()
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    conn.close()
+    assert [tuple(r) for r in rows] == [
+        ("45.9.20.1", "office", 1),
+        ("pay.example.com", "payments", 1),
+    ]
+    assert "home_network" not in tables

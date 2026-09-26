@@ -22,7 +22,7 @@
     <aside class="sidebar">
       <a class="brand" href="/">{{ logo }}ThreatCull</a>
       <nav class="nav" aria-label="Main">
-        {% for href, label in [("/", "Dashboard"), ("/sources", "Sources"), ("/allowlist", "Allowlist"), ("/home", "Home Network"), ("/outputs", "Outputs"), ("/runs", "Runs"), ("/lookup", "Lookup"), ("/settings", "Settings")] %}
+        {% for href, label in [("/", "Dashboard"), ("/sources", "Sources"), ("/allowlist", "Allowlist"), ("/outputs", "Outputs"), ("/runs", "Runs"), ("/lookup", "Lookup"), ("/settings", "Settings")] %}
         <a href="{{ href }}"{% if path == href or (href != "/" and path.startswith(href ~ "/")) %} aria-current="page"{% endif %}>{{ label }}</a>
         {% endfor %}
       </nav>

@@ -462,3 +462,7 @@ tr[hidden] { display: none; }
 .settings-list dd { margin: 0; }
 .settings-list .sub { display: block; }
 @media (max-width: 600px) { .settings-list { grid-template-columns: 1fr; gap: 0.2rem; } .settings-list dd { margin-bottom: 0.6rem; } }
+.btn-small { min-height: 1.9rem; padding: 0.2rem 0.65rem; font-size: 0.85em; }
+.actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+td.actions { display: table-cell; }
+td.actions form + form { margin-left: 0.4rem; }

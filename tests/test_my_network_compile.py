@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Home Network entries are excluded from every Output and raise listing alerts."""
+"""Allowlist entries flagged as your network: never published, and listed hits are reported."""
 
 import csv
 import io
@@ -13,7 +13,6 @@ from threatcull.compiling import HOME_HITS_CAP, compile_outputs
 from threatcull.indicators import Indicator
 from threatcull.lookup import lookup
 from threatcull.store.allowlist import add_entry
-from threatcull.store.home import add_home
 from threatcull.store.outputs import OutputFormat, OutputSpec, create_output
 from threatcull.store.runs import last_run
 from threatcull.store.sightings import record_fetch_success
@@ -68,11 +67,11 @@ def test_home_entries_are_excluded_from_every_output(
     conn: sqlite3.Connection, now: datetime, tmp_path: Path
 ) -> None:
     _setup(conn, now)
-    add_home(conn, "45.9.20.3", "office", now=now)
-    add_home(conn, "home.example.com", now=now)
+    add_entry(conn, "45.9.20.3", "office", mine=True, now=now)
+    add_entry(conn, "home.example.com", mine=True, now=now)
     report = compile_outputs(conn, tmp_path / "out", now=now)
     published = _published(tmp_path / "out")
-    assert "45.9.20.3" not in published  # the Home Network IP itself
+    assert "45.9.20.3" not in published  # your network's IP itself
     assert "45.9.0.0/16" not in published  # a CIDR overlapping it
     assert "example.com" not in published  # a parent domain
     assert "a.home.example.com" not in published  # a subdomain
@@ -92,7 +91,7 @@ def test_home_hits_are_recorded_on_the_run(
     conn: sqlite3.Connection, now: datetime, tmp_path: Path
 ) -> None:
     _setup(conn, now)
-    add_home(conn, "45.9.20.3", now=now)
+    add_entry(conn, "45.9.20.3", mine=True, now=now)
     compile_outputs(conn, tmp_path / "out", now=now)
     run = last_run(conn, "compile")
     assert run is not None
@@ -119,7 +118,7 @@ def test_home_hits_are_capped(conn: sqlite3.Connection, now: datetime, tmp_path:
     _setup(conn, now)
     many = {Indicator(f"45.9.{i // 200}.{i % 200 + 1}", "ip") for i in range(150)}
     record_fetch_success(conn, "a", many, now=now, etag=None, last_modified=None)
-    add_home(conn, "45.9.0.0/16", now=now)
+    add_entry(conn, "45.9.0.0/16", mine=True, now=now)
     report = compile_outputs(conn, tmp_path / "out", now=now)
     assert report.home_hit_count == 152  # 150 IPs, the /16 itself and 45.9.20.3 from b
     assert len(report.home_hits) == HOME_HITS_CAP == 100
@@ -165,10 +164,10 @@ def _rpz_values(text: str) -> set[str]:
 def test_home_exclusion_holds_across_all_six_formats(
     conn: sqlite3.Connection, now: datetime, tmp_path: Path
 ) -> None:
-    """The Home Network is excluded whichever Format an Output publishes in."""
+    """Your network is excluded whichever Format an Output publishes in."""
     _setup(conn, now)
-    add_home(conn, "45.9.20.3", "office", now=now)
-    add_home(conn, "home.example.com", now=now)
+    add_entry(conn, "45.9.20.3", "office", mine=True, now=now)
+    add_entry(conn, "home.example.com", mine=True, now=now)
     malicious = frozenset({"malicious"})
     ip_formats: tuple[OutputFormat, ...] = ("plain", "csv", "json")
     domain_formats: tuple[OutputFormat, ...] = ("hosts", "adguard", "rpz")
@@ -194,12 +193,12 @@ def test_home_exclusion_holds_across_all_six_formats(
         assert "bad.example.net" in values, name
 
 
-def test_lookup_names_the_home_network(conn: sqlite3.Connection, now: datetime) -> None:
+def test_lookup_names_my_network(conn: sqlite3.Connection, now: datetime) -> None:
     _setup(conn, now)
     add_entry(conn, "45.9.20.0/24", "partner", now=now)
-    add_home(conn, "45.9.20.3", "office", now=now)
+    add_entry(conn, "45.9.20.3", "office", mine=True, now=now)
     result = lookup(conn, "45.9.20.3", now=now)
     assert result is not None
     assert result.allowlisted_by is not None
-    assert result.allowlisted_by.note == "Home Network: office"
+    assert result.allowlisted_by.note == "My network: office"
     assert result.eligible_outputs == ()

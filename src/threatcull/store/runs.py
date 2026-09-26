@@ -26,7 +26,7 @@ class Run:
     status: RunStatus
     counts: dict[str, int]
     error: str | None
-    # A Compile's Home Network hits: (value, comma-joined Source ids), capped.
+    # A Compile's hits on the operator's own network: (value, comma-joined Source ids), capped.
     home_hits: tuple[tuple[str, str], ...] = ()
     # A Compile's cleanup numbers (``policy.stats.CompileStats.to_json``); {} otherwise.
     stats: dict[str, Any] = field(default_factory=dict)
@@ -98,7 +98,7 @@ def last_run(
     cadence): the ``WHERE type = ?`` runs in SQL, not over a capped window.
 
     ``statuses``, when given, restricts the match to Runs that finished with one of
-    those statuses (e.g. the dashboard's Home Network banner must skip a failed
+    those statuses (e.g. the dashboard's own-network alert must skip a failed
     Compile and fall back to the last one that actually finished).
     """
     if statuses is None:
