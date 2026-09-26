@@ -159,7 +159,7 @@ function line(label: string, values: (number | null)[], color: string, axis: str
     backgroundColor: translucent(color, 0.08),
     fill: true,
     tension: 0.28,
-    pointRadius: points ? 2.5 : 0,
+    pointRadius: points ? 3.5 : 0,
     spanGaps: true,
   };
 }
@@ -172,8 +172,9 @@ function dayChart(series: Series): ChartConfiguration<"line"> {
     data: {
       labels: series.labels,
       datasets: [
-        line("Total IPs", series.ip, green, "y", false),
-        line("High Tier", series.high, red, "y1", false),
+        // Show the points until there are enough of them to read as a line.
+        line("Total IPs", series.ip, green, "y", series.labels.length < 3),
+        line("High Tier", series.high, red, "y1", series.labels.length < 3),
       ],
     },
     options: {
