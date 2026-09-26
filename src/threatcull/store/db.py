@@ -145,13 +145,19 @@ _MIGRATIONS: tuple[str, ...] = (
 SCHEMA_VERSION = len(_MIGRATIONS)
 
 
+# How long a write waits for another connection's write to finish. Saving a large
+# Source (a million-entry domain list) holds the lock for several seconds.
+BUSY_TIMEOUT_S = 30.0
+
+
 def connect(path: Path | str) -> sqlite3.Connection:
     """Open (and migrate) the ThreatCull database in autocommit mode."""
-    conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+    conn = sqlite3.connect(
+        path, timeout=BUSY_TIMEOUT_S, isolation_level=None, check_same_thread=False
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 5000")
     migrate(conn)
     return conn
 

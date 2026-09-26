@@ -37,62 +37,72 @@
   {% endif %}
 </section>
 
-<details class="card"{% if custom_error is defined and custom_error %} open{% endif %}>
-  <summary>Add a custom Source</summary>
+<details class="card" id="add-custom"{% if (custom_error is defined and custom_error) or (open_add is defined and open_add) %} open{% endif %}>
+  <summary>Add your own list</summary>
+  <p class="hint">Any text list reachable by URL: one IP, CIDR or domain per line, <code>#</code> comments allowed.
+    Choose <strong>Allowlist</strong> for values that must never appear in an Output.</p>
   {% if custom_error is defined and custom_error %}
-  <p class="error">{{ custom_error }}</p>
+  <p class="error" role="alert">{{ custom_error }}</p>
   {% endif %}
   <form class="inline-form" method="post" action="/sources/custom">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label>Id
-      <input type="text" name="id" placeholder="custom-my-feed" required>
-    </label>
     <label>Name
-      <input type="text" name="name" required>
+      <input type="text" name="name" placeholder="My blocklist" required>
     </label>
     <label>URL
-      <input type="text" name="url" placeholder="https://, http:// or file://" required>
+      <input type="text" name="url" placeholder="https://example.com/list.txt" required>
     </label>
-    <label>Format
-      <select name="format">
-        <option value="plain">plain</option>
-        <option value="hosts">hosts</option>
-        <option value="adblock">adblock</option>
-        <option value="csv">csv</option>
-        <option value="json">json</option>
+    <label>Use as
+      <select name="role">
+        <option value="blocklist">Blocklist</option>
+        <option value="allowlist">Allowlist</option>
       </select>
     </label>
-    <label>Kind
+    <label>Contains
       <select name="kind">
-        <option value="ip">ip</option>
-        <option value="domain">domain</option>
+        <option value="ip">IPs and CIDRs</option>
+        <option value="domain">Domains</option>
       </select>
     </label>
-    <label>Category
+    <label>Category (blocklists only)
       <select name="category">
-        <option value="malicious">malicious</option>
-        <option value="c2">c2</option>
-        <option value="scanner">scanner</option>
-        <option value="phishing">phishing</option>
-        <option value="spam">spam</option>
-        <option value="ads_tracking">ads_tracking</option>
-        <option value="infrastructure">infrastructure</option>
+        {% for value, label in category_labels.items() %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
       </select>
     </label>
-    <label>CSV column (for csv format)
-      <input type="number" name="csv_column" value="0" min="0">
-    </label>
-    <label>JSON keys (for json format, comma-separated)
-      <input type="text" name="json_keys" value="">
-    </label>
-    <label>Business use
-      <select name="business_use">
-        <option value="unknown">unknown</option>
-        <option value="allowed">allowed</option>
-        <option value="forbidden">forbidden</option>
-      </select>
-    </label>
-    <button type="submit">Add Source</button>
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <div class="advanced-fields">
+      <label>Format
+        <select name="format">
+          <option value="plain">plain (one value per line)</option>
+          <option value="hosts">hosts</option>
+          <option value="adblock">adblock</option>
+          <option value="csv">csv</option>
+          <option value="json">json</option>
+        </select>
+      </label>
+      <label>CSV column (csv format)
+        <input type="number" name="csv_column" value="0" min="0">
+      </label>
+      <label>JSON keys (json format, comma-separated)
+        <input type="text" name="json_keys" value="">
+      </label>
+      <label>Id (made from the name when empty)
+        <input type="text" name="id" placeholder="custom-my-blocklist">
+      </label>
+      <label>Business use
+        <select name="business_use">
+          <option value="unknown">unknown</option>
+          <option value="allowed">allowed</option>
+          <option value="forbidden">forbidden</option>
+        </select>
+      </label>
+      <p class="hint">A <code>file://</code> URL must point inside the data directory's <code>imports/</code> folder.</p>
+      </div>
+    </details>
+    <button type="submit">Add and enable</button>
   </form>
 </details>
 {% endblock %}

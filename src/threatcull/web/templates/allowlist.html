@@ -132,7 +132,8 @@
 </section>
 
 <section class="card">
-  <h2>Built-in allowlists</h2>
+  <div class="card-head"><h2>Allowlist Sources</h2><a href="/sources?add=1#add-custom">Add your own list</a></div>
+  <p class="hint">Lists fetched from a URL. Every value on an enabled one is kept out of all Outputs.</p>
   {% if allowlist_sources %}
   <div class="table-wrap">
   <table class="table">
@@ -142,7 +143,7 @@
     <tbody>
       {% for source in allowlist_sources %}
       <tr>
-        <td>{{ source.name }}</td>
+        <td>{{ source.name }}{% if source.custom %} <span class="badge">custom</span>{% endif %}</td>
         <td>{% if source.enabled %}<span class="pill pill-ok">enabled</span>{% else %}<span class="pill pill-off">disabled</span>{% endif %}</td>
         <td class="num">{{ "{:,}".format(builtin_counts.get(source.id, 0)) }}</td>
       </tr>

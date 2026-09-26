@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from threatcull.datadir import ensure_data_dir
 from threatcull.home_detect import detect_candidates, public_ip_fetcher
@@ -36,11 +37,24 @@ __all__ = ["DB_NAME", "SESSION_COOKIE", "SESSION_MAX_AGE", "create_app", "open_d
 
 SESSION_COOKIE = "threatcull_session"
 SESSION_MAX_AGE = 12 * 60 * 60  # seconds
+BUSY_RETRY_AFTER = 30  # seconds; a locked write already waited store.db.BUSY_TIMEOUT_S
 
 
 async def _csrf_expired_response(request: Request, exc: Exception) -> Response:
     del exc  # nothing request-specific belongs in this page
     return render(request, "csrf_expired.html", status_code=403)
+
+
+async def _database_busy_response(request: Request, exc: Exception) -> Response:
+    """A write that waited out the busy timeout: 503 with a retry hint, not a 500."""
+    if not isinstance(exc, sqlite3.OperationalError) or "locked" not in str(exc):
+        return await unhandled_exception_response(request, exc)
+    headers = {"Retry-After": str(BUSY_RETRY_AFTER)}
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            {"detail": "database busy; try again shortly"}, status_code=503, headers=headers
+        )
+    return render(request, "busy.html", status_code=503, headers=headers)
 
 
 def _no_op() -> None:
@@ -109,6 +123,7 @@ def create_app(
     app.add_exception_handler(Exception, unhandled_exception_response)
     app.add_exception_handler(LoginRequiredError, login_required_response)
     app.add_exception_handler(CsrfError, _csrf_expired_response)
+    app.add_exception_handler(sqlite3.OperationalError, _database_busy_response)
     # Homelab first: plain HTTP on a bare IP works, so no Secure flag unless
     # `serve --secure-cookies` asks for it.
     app.add_middleware(

@@ -15,7 +15,7 @@ from typing import get_args
 import uvicorn
 import yaml
 
-from threatcull.catalog import BusinessUse, Category, load_catalog
+from threatcull.catalog import BusinessUse, Category, SourceRole, load_catalog
 from threatcull.clock import utcnow
 from threatcull.compiling import compile_outputs
 from threatcull.datadir import DataDirError, ensure_data_dir
@@ -36,6 +36,7 @@ from threatcull.store.runs import fail_interrupted_runs
 from threatcull.store.sources import (
     add_custom_source,
     list_sources,
+    new_custom_id,
     set_enabled,
     sync_catalog,
 )
@@ -75,12 +76,24 @@ def build_parser() -> argparse.ArgumentParser:
     enable.add_argument("--acknowledge-restricted", action="store_true")
     src.add_parser("disable").add_argument("source_id")
     custom = src.add_parser("add-custom")
-    custom.add_argument("--id", dest="source_id", required=True)
     custom.add_argument("--name", required=True)
     custom.add_argument("--url", required=True)
-    custom.add_argument("--format", dest="fmt", required=True, choices=get_args(SourceFormat))
     custom.add_argument("--kind", required=True, choices=get_args(SourceKind))
-    custom.add_argument("--category", required=True, choices=get_args(Category))
+    custom.add_argument(
+        "--allowlist",
+        action="store_true",
+        help="feed the Allowlist instead of the blocklists (its values never appear in Outputs)",
+    )
+    custom.add_argument(
+        "--id", dest="source_id", help="custom-<name>; made from --name when left out"
+    )
+    custom.add_argument("--format", dest="fmt", default="plain", choices=get_args(SourceFormat))
+    custom.add_argument(
+        "--category",
+        default="malicious",
+        choices=get_args(Category),
+        help="blocklists only (default: malicious)",
+    )
     custom.add_argument("--csv-column", type=int, default=0)
     custom.add_argument("--json-key", dest="json_keys", action="append", default=[])
     custom.add_argument(
@@ -275,17 +288,19 @@ def _sources_disable(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
 
 
 def _sources_add_custom(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    role: SourceRole = "allowlist" if args.allowlist else "blocklist"
     source = add_custom_source(
         conn,
-        source_id=args.source_id,
+        source_id=args.source_id or new_custom_id(conn, args.name),
         name=args.name,
         url=args.url,
         fmt=args.fmt,
         kind=args.kind,
-        category=args.category,
+        category=args.category if role == "blocklist" else "infrastructure",
         csv_column=args.csv_column,
         json_keys=tuple(args.json_keys),
         business_use=BusinessUse(args.business_use),
+        role=role,
     )
     print(f"added {source.id} (disabled; enable it with `threatcull sources enable {source.id}`)")
     return EXIT_OK
