@@ -86,8 +86,9 @@ uv run threatcull serve --host <lan-ip> --port 6969
   lists one.
 - **Scripts:** create an API token with `threatcull api-token create <name> --user admin` and send it
   as `Authorization: Bearer <token>` to `/api/v1/`.
-- **Hardening:** the container runs as a non-root user and also works with `read_only: true`,
-  `tmpfs: [/tmp]` and `cap_drop: [ALL]` in the compose file.
+- **Hardening:** the container runs as a non-root user, and the compose file drops all Linux
+  capabilities and blocks privilege escalation. It also works with `read_only: true` and
+  `tmpfs: [/tmp]`.
 - **Reverse proxy with TLS:** start `serve` with `--secure-cookies` and `--trusted-proxy <proxy-ip>`.
 - **Scheduling:** `serve` runs fetches and compiles itself. Don't also run `threatcull run` from `cron`
   on the same data directory.
@@ -105,6 +106,9 @@ organisation passes the data on, which many licences forbid.
 make setup   # dependencies and git hooks
 make check   # lint, types, tests and security checks, as in CI
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for issues and pull requests, and [SECURITY.md](SECURITY.md)
+to report a vulnerability.
 
 ## Licence
 

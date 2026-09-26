@@ -1,0 +1,9 @@
+# Grype ignore rules. Every entry names the CVE, the package and why ThreatCull is
+# not affected. Remove an entry once the base image ships the fix.
+ignore:
+  # CPython tarfile extraction filters (hard link to a symlink). ThreatCull never
+  # extracts archives: no tarfile, zipfile or shutil.unpack_archive in src/.
+  # Fixed upstream for 3.13; drop this when python:3.13-slim carries the patch.
+  - vulnerability: CVE-2026-82049
+    package:
+      name: python
