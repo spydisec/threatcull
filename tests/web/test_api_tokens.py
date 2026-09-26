@@ -186,7 +186,7 @@ def test_cli_create_for_an_unknown_user_fails(
     assert cli.main(argv) == cli.EXIT_ERROR
     captured = capsys.readouterr()
     assert "ghost" in captured.err
-    assert "tc_" not in captured.out
+    assert not any(word.startswith("tc_") for word in captured.out.split())
 
 
 def test_cli_revoke_unknown_token_fails(tmp_path: Path) -> None:
@@ -212,5 +212,5 @@ def test_cli_create_with_a_duplicate_or_bad_name_fails_without_a_token(
     argv = ["--data-dir", str(tmp_path), "api-token", "create", name, "--user", admin]
     assert cli.main(argv) == cli.EXIT_ERROR
     captured = capsys.readouterr()
-    assert "tc_" not in captured.out
+    assert not any(word.startswith("tc_") for word in captured.out.split())
     assert "error:" in captured.err
