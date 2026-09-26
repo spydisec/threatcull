@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections import Counter
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Annotated, Any
 
@@ -12,8 +13,11 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import ValidationError
 from starlette.responses import RedirectResponse, Response
 
+from threatcull.catalog import CatalogError
+from threatcull.catalog_update import MAX_CATALOG_BYTES, active_catalog, apply_update
 from threatcull.clock import ts, utcnow
 from threatcull.compiling import stale_source_ids
+from threatcull.fetcher import FetchError
 from threatcull.home_detect import public_ip_candidate
 from threatcull.listfile import MAX_BYTES, parse_list_file, summary
 from threatcull.lookup import lookup, output_labels
@@ -188,7 +192,20 @@ def sources_page(
     add: bool = False,
 ) -> Response:
     """``?add=1`` opens the "Add your own list" form (linked from the Allowlist page)."""
-    return render(request, "sources.html", {"sources": list_sources(conn), "open_add": add})
+    return _render_sources(request, conn, {"open_add": add})
+
+
+def _render_sources(
+    request: Request,
+    conn: sqlite3.Connection,
+    context: dict[str, Any],
+    *,
+    status_code: int = 200,
+) -> Response:
+    """The Sources page, with the Catalog in use shown in its Catalog card."""
+    page = {"sources": list_sources(conn), "catalog": active_catalog(request.app.state.data_dir)}
+    page.update(context)
+    return render(request, "sources.html", page, status_code=status_code)
 
 
 def _outputs_context(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
@@ -535,10 +552,10 @@ def _apply_enabled_change(
             return render_fragment(
                 request, "_source_row_missing.html", {"source_id": source_id, "error": str(exc)}
             )
-        return render(
+        return _render_sources(
             request,
-            "sources.html",
-            {"sources": list_sources(conn), "error": str(exc)},
+            conn,
+            {"error": str(exc)},
             status_code=404,
         )
     except PolicyError as exc:
@@ -548,10 +565,10 @@ def _apply_enabled_change(
                 "_source_row.html",
                 {"source": get_source(conn, source_id), "row_error": str(exc)},
             )
-        return render(
+        return _render_sources(
             request,
-            "sources.html",
-            {"sources": list_sources(conn), "error": str(exc)},
+            conn,
+            {"error": str(exc)},
             status_code=400,
         )
     _notify_sources_changed(request)
@@ -581,6 +598,62 @@ def disable_source(
     source_id: str,
 ) -> Response:
     return _apply_enabled_change(request, conn, source_id, False, acknowledge_restricted=False)
+
+
+@router.post("/sources/catalog/update", dependencies=[Depends(check_csrf)])
+def update_catalog_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+) -> Response:
+    """Download the newest Catalog from the ThreatCull repository and apply it."""
+    download: Callable[[], str] = request.app.state.catalog_downloader
+    try:
+        text = download()
+    except (FetchError, CatalogError) as exc:
+        return _catalog_error(request, conn, f"Could not download the Catalog: {exc}")
+    return _apply_catalog(request, conn, text)
+
+
+@router.post("/sources/catalog/upload", dependencies=[Depends(check_csrf)])
+def upload_catalog_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    file: Annotated[UploadFile | None, File()] = None,
+) -> Response:
+    """Apply a Catalog file copied in by hand (for installs without internet access)."""
+    if file is None or not file.filename:
+        return _catalog_error(request, conn, "Choose a Catalog file.")
+    data = file.file.read(MAX_CATALOG_BYTES + 1)
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return _catalog_error(request, conn, "The Catalog file is not UTF-8 text.")
+    return _apply_catalog(request, conn, text)
+
+
+def _apply_catalog(request: Request, conn: sqlite3.Connection, text: str) -> Response:
+    try:
+        report = apply_update(conn, request.app.state.data_dir, text)
+    except ValueError as exc:  # CatalogError and pydantic's ValidationError
+        return _catalog_error(request, conn, _catalog_problem(exc))
+    if not report.up_to_date:
+        _notify_sources_changed(request)
+    flash(request, report.summary())
+    return RedirectResponse("/sources", status_code=303)
+
+
+def _catalog_problem(exc: ValueError) -> str:
+    if isinstance(exc, ValidationError):
+        first = exc.errors()[0]
+        where = ".".join(str(part) for part in first["loc"])
+        return f"The Catalog has an invalid Source ({where}: {first['msg']})."
+    return f"The Catalog was not applied: {exc}."
+
+
+def _catalog_error(request: Request, conn: sqlite3.Connection, message: str) -> Response:
+    return _render_sources(request, conn, {"catalog_error": message}, status_code=400)
 
 
 @router.post("/sources/custom", dependencies=[Depends(check_csrf)])
@@ -615,26 +688,26 @@ def add_custom_source_page(
             business_use=business_use,
         )
     except ValidationError as exc:
-        return render(
+        return _render_sources(
             request,
-            "sources.html",
-            {"sources": list_sources(conn), "custom_error": _validation_message(exc)},
+            conn,
+            {"custom_error": _validation_message(exc)},
             status_code=400,
         )
     refusal = web_file_url_error(payload.url, request.app.state.data_dir)
     if refusal is not None:
-        return render(
+        return _render_sources(
             request,
-            "sources.html",
-            {"sources": list_sources(conn), "custom_error": refusal},
+            conn,
+            {"custom_error": refusal},
             status_code=400,
         )
     source_id = payload.id or new_custom_id(conn, payload.name)
     if payload.id and _source_exists(conn, source_id):
-        return render(
+        return _render_sources(
             request,
-            "sources.html",
-            {"sources": list_sources(conn), "custom_error": f"{source_id} is already taken"},
+            conn,
+            {"custom_error": f"{source_id} is already taken"},
             status_code=400,
         )
     try:
@@ -655,10 +728,10 @@ def add_custom_source_page(
             )
             store_set_enabled(conn, source_id, True)
     except ValueError as exc:
-        return render(
+        return _render_sources(
             request,
-            "sources.html",
-            {"sources": list_sources(conn), "custom_error": str(exc)},
+            conn,
+            {"custom_error": str(exc)},
             status_code=400,
         )
     _notify_sources_changed(request)

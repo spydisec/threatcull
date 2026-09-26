@@ -2,6 +2,11 @@
 # Licence facts checked 2026-09-24 against each provider's own terms. Not legal advice.
 # business_use: may a business use this Source to protect its own network?
 # family: Sources from the same upstream share a family and count once in scoring.
+# revision: raise it by one with every change. ThreatCull uses the newest revision
+# it has: the one it shipped with, or one saved by `threatcull catalog update`.
+# requires: the oldest ThreatCull version that understands this file.
+revision: 1
+requires: "1.2.0"
 sources:
   # ---------------------------------------------------------------- IP blocklists
   - id: feodotracker-ipblocklist
