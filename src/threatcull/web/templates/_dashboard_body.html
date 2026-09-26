@@ -35,7 +35,7 @@
 
 {% if home_alerts %}
 <section class="alert-banner" role="alert">
-  <h2>Your Home Network appears in upstream feeds</h2>
+  <h2>Your own network appears in upstream feeds</h2>
   <p>
     The last Compile kept these values out of every Output. Check why the Sources list
     them (Lookup explains each one).
@@ -52,9 +52,18 @@
 {% endif %}
 
 {% if not stats %}
-<section id="cleanup" class="card">
-  <h2>Cleanup</h2>
-  <p class="muted">No Compile has recorded cleanup numbers yet. They appear after the next Compile: use <a href="/runs">Run now</a> or wait for the scheduler.</p>
+<section id="cleanup" class="card first-run">
+  <h2 class="caps">Getting started</h2>
+  {% if scheduler_on and next_compile_at %}
+  <p>The first Compile runs at {{ next_compile_at | when }}. The numbers and charts appear once it finishes, or start it now.</p>
+  {% else %}
+  <p>Run the first Compile to fetch your Sources and build the Outputs. The numbers and charts appear once it finishes.</p>
+  {% endif %}
+  <form method="post" action="/runs/now">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit">Run now</button>
+  </form>
+  <p class="hint">Pick the lists you want on <a href="/sources">Sources</a> first.</p>
 </section>
 {% else %}
 {%- set received = stats.listed + stats.rejected -%}
@@ -166,17 +175,19 @@
 <div class="grid-2">
   <section class="card">
     <h2 class="caps">24h trend</h2>
-    {% if chart_data.day.labels | length > 1 %}
+    {% if chart_data.day.labels %}
     {%- set d = chart_data.day.delta -%}
-    <p class="hint">IPs delta: {% if d.ip is none %}n/a{% else %}{{ "+" if d.ip >= 0 }}{{ "{:,}".format(d.ip) }}{% endif %} | High delta: {% if d.high is none %}n/a{% else %}{{ "+" if d.high >= 0 }}{{ "{:,}".format(d.high) }}{% endif %}</p>
+    {% if chart_data.day.labels | length > 1 %}<p class="hint">IPs delta: {% if d.ip is none %}n/a{% else %}{{ "+" if d.ip >= 0 }}{{ "{:,}".format(d.ip) }}{% endif %} | High delta: {% if d.high is none %}n/a{% else %}{{ "+" if d.high >= 0 }}{{ "{:,}".format(d.high) }}{% endif %}</p>{% endif %}
     <div class="chart chart-line"><canvas data-chart="day" aria-label="Kept IPs and domains over the last 24 hours" role="img"></canvas></div>
-    {% else %}<p class="muted">Needs two Compiles in the last 24 hours.</p>{% endif %}
+    {% if chart_data.day.labels | length == 1 %}<p class="hint">The trend fills in as Compiles run, hourly{% if next_compile_at %}; next at {{ next_compile_at | when }}{% endif %}.</p>{% endif %}
+    {% else %}<p class="muted">No Compile in the last 24 hours.</p>{% endif %}
   </section>
   <section class="card">
     <h2 class="caps">30d trend</h2>
-    {% if chart_data.month.labels | length > 1 %}
+    {% if chart_data.month.labels %}
     <div class="chart chart-line"><canvas data-chart="month" aria-label="Kept IPs and domains over the last 30 days" role="img"></canvas></div>
-    {% else %}<p class="muted">Needs Compiles on two different days.</p>{% endif %}
+    {% if chart_data.month.labels | length == 1 %}<p class="hint">The trend fills in as Compiles run, one point per day.</p>{% endif %}
+    {% else %}<p class="muted">No Compile in the last 30 days.</p>{% endif %}
   </section>
 </div>
 

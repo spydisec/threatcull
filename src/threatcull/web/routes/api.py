@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""JSON API: Sources, Outputs, Allowlist, Home Network, Runs, Settings, Lookup, ``/me``.
+"""JSON API: Sources, Outputs, Allowlist, Runs, Settings, Lookup, ``/me``.
 
 Each resource has its own small dict-building function below: an explicit
 allow-list of fields, not a generic dataclass dump. A new field added to
@@ -21,13 +21,6 @@ from threatcull.lookup import LookupResult, lookup
 from threatcull.store.allowlist import AllowlistEntry, add_entry, builtin_entries, operator_entries
 from threatcull.store.allowlist import remove_entry as store_remove_entry
 from threatcull.store.errors import NotFoundError, PolicyError
-from threatcull.store.home import (
-    HomeEntry,
-    add_home,
-    home_allow_entries,
-    home_entries,
-    remove_home,
-)
 from threatcull.store.outputs import OutputSpec, list_outputs
 from threatcull.store.outputs import rotate_token as store_rotate_token
 from threatcull.store.runs import Run, recent_runs
@@ -42,7 +35,7 @@ from threatcull.web.deps import (
     public_ip_fetcher_factory,
     require_api_user,
 )
-from threatcull.web.schemas import AllowlistEntryIn, HomeEntryIn, SourceEnableIn
+from threatcull.web.schemas import AllowlistEntryIn, SourceEnableIn
 
 router = APIRouter(prefix="/api/v1")
 
@@ -94,11 +87,8 @@ def _allowlist_json(entry: AllowlistEntry) -> dict[str, Any]:
         "kind": entry.kind,
         "note": entry.note,
         "origin": entry.origin,
+        "mine": entry.mine,
     }
-
-
-def _home_json(entry: HomeEntry) -> dict[str, Any]:
-    return {"value": entry.value, "kind": entry.kind, "note": entry.note, "origin": entry.origin}
 
 
 def _candidate_json(candidate: Candidate) -> dict[str, Any]:
@@ -232,7 +222,7 @@ def api_add_allowlist_entry(
     user: Annotated[str, Depends(require_api_user)],
 ) -> dict[str, Any]:
     try:
-        entry = add_entry(conn, body.value, body.note, now=utcnow())
+        entry = add_entry(conn, body.value, body.note, mine=body.mine, now=utcnow())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _allowlist_json(entry)
@@ -253,51 +243,15 @@ def api_remove_allowlist_entry(
     return {"value": value, "removed": True}
 
 
-@router.get("/home")
-def api_home(
-    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
-    user: Annotated[str, Depends(require_api_user)],
-) -> list[dict[str, Any]]:
-    return [_home_json(entry) for entry in home_entries(conn)]
-
-
-@router.post("/home", dependencies=[Depends(check_csrf)])
-def api_add_home_entry(
-    body: HomeEntryIn,
-    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
-    user: Annotated[str, Depends(require_api_user)],
-) -> dict[str, Any]:
-    try:
-        entry = add_home(conn, body.value, body.note, origin=body.origin, now=utcnow())
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _home_json(entry)
-
-
-@router.delete("/home", dependencies=[Depends(check_csrf)])
-def api_remove_home_entry(
-    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
-    user: Annotated[str, Depends(require_api_user)],
-    value: Annotated[str, Query()],
-) -> dict[str, Any]:
-    try:
-        remove_home(conn, value)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except NotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return {"value": value, "removed": True}
-
-
-@router.post("/home/detect", dependencies=[Depends(check_csrf)])
-def api_detect_home(
+@router.post("/allowlist/detect", dependencies=[Depends(check_csrf)])
+def api_detect_mine(
     request: Request,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_api_user)],
     public_ip: bool = False,
 ) -> dict[str, Any]:
-    """Suggest Home Network entries; adds nothing. ``public_ip=true`` asks api.ipify.org."""
-    existing = home_allow_entries(conn)
+    """Suggest your own public addresses; adds nothing. ``public_ip=true`` asks api.ipify.org."""
+    existing = operator_entries(conn)
     hosts = [request.url.hostname] if request.url.hostname else []
     candidates = home_detector(request)(existing=existing, extra_hosts=hosts)
     if public_ip:

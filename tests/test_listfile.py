@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Parsing an uploaded txt/csv list and importing it into the Allowlist or Home Network."""
+"""Parsing an uploaded txt/csv list and importing it into the Allowlist."""
 
 import sqlite3
 from datetime import datetime
@@ -8,7 +8,6 @@ import pytest
 
 from threatcull.listfile import MAX_BYTES, MAX_ENTRIES, ListLine, parse_list_file
 from threatcull.store.allowlist import add_entry, import_entries, operator_entries
-from threatcull.store.home import home_entries, import_home
 
 
 def test_plain_text_one_value_per_line_with_comments_and_notes() -> None:
@@ -79,9 +78,11 @@ def test_import_counts_a_value_repeated_in_the_file_once(
     assert len(operator_entries(conn)) == 1
 
 
-def test_home_import_explains_private_addresses(conn: sqlite3.Connection, now: datetime) -> None:
-    report = import_home(conn, parse_list_file(b"45.9.20.1\n192.168.1.10\n"), now=now)
+def test_import_as_my_network_explains_private_addresses(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
+    report = import_entries(conn, parse_list_file(b"45.9.20.1\n192.168.1.10\n"), mine=True, now=now)
     assert report.added == 1
     assert [bad.value for bad in report.invalid] == ["192.168.1.10"]
-    assert "no Home Network entry is needed" in report.invalid[0].reason
-    assert all(entry.origin == "manual" for entry in home_entries(conn))
+    assert "no allowlist entry is needed" in report.invalid[0].reason
+    assert [(e.value, e.mine) for e in operator_entries(conn)] == [("45.9.20.1", True)]

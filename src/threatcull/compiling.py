@@ -19,8 +19,7 @@ from threatcull.outputs.stream import StagedOutput, home_hits, mark_allowlisted,
 from threatcull.policy.allowlist import Allowlist
 from threatcull.policy.scoring import create_scored_table, drop_scored_table
 from threatcull.policy.stats import CompileStats, compile_stats
-from threatcull.store.allowlist import builtin_entries, operator_entries
-from threatcull.store.home import home_allow_entries
+from threatcull.store.allowlist import builtin_entries, mine_entries, operator_entries
 from threatcull.store.outputs import OutputSpec, list_outputs, record_published
 from threatcull.store.runs import finish_run, start_run
 from threatcull.store.settings import Settings, load_settings
@@ -35,7 +34,7 @@ class CompileReport:
     reasons: tuple[str, ...] = ()
     allowlisted: int = 0
     stale_sources: tuple[str, ...] = ()
-    # Scored Indicators a Home Network entry excluded: a Source lists our own network.
+    # Scored Indicators an own-network entry excluded: a Source lists the operator's network.
     home_hit_count: int = 0
     home_hits: tuple[tuple[str, str], ...] = ()  # (value, Source ids), first HOME_HITS_CAP
     stats: CompileStats | None = None
@@ -143,10 +142,10 @@ def _compile(
         excluded = mark_allowlisted(
             conn,
             Allowlist([*operator_entries(conn), *builtin_entries(conn)]),
-            home=Allowlist(home_allow_entries(conn)),
+            home=Allowlist(mine_entries(conn)),
         )
         hit_count, hits = home_hits(conn, HOME_HITS_CAP)
-        # `excluded` counts every excluded row, Home Network included; the Allowlist
+        # `excluded` counts every excluded row, own-network entries included; the Allowlist
         # count operators see (CLI, dashboard) must name only Allowlist exclusions.
         allowlisted = excluded - hit_count
         stats = compile_stats(conn, settings)

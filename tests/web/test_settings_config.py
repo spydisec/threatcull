@@ -26,7 +26,7 @@ def test_export_downloads_the_configuration(client: TestClient, logged_in: str) 
 def test_settings_page_offers_the_export(client: TestClient, logged_in: str) -> None:
     page = client.get("/settings").text
     assert 'href="/settings/export"' in page
-    assert "no passwords, tokens or threat data" in page
+    assert "No passwords, tokens or threat data" in page
 
 
 _NEW_OUTPUT = (
@@ -78,3 +78,10 @@ def test_import_needs_the_csrf_token(client: TestClient, logged_in: str) -> None
 def test_import_needs_a_login(client: TestClient) -> None:
     response = client.post("/settings/import", follow_redirects=False)
     assert response.status_code in {303, 403}
+
+
+def test_the_settings_page_title_is_plain_text(client: TestClient, logged_in: str) -> None:
+    page = client.get("/settings").text
+    title = page.split("<title>", 1)[1].split("</title>", 1)[0]
+    assert title == "Settings · ThreatCull"
+    assert page.count('id="configuration"') == 1

@@ -19,7 +19,13 @@
 
 {% if result %}
 <section class="card">
-  <h2><span class="mono">{{ result.value }}</span> <span class="badge">{{ result.kind }}</span></h2>
+  <div class="card-head">
+    <h2><span class="mono">{{ result.value }}</span> <span class="badge">{{ result.kind }}</span></h2>
+    {% if result.allowlisted_by %}<span class="pill pill-ok">Allowlisted</span>
+    {% elif labels %}<span class="pill pill-bad">Published in {{ labels | length }} Output{{ "s" if labels | length != 1 }}</span>
+    {% elif result.score %}<span class="pill pill-warn">Listed, in no Output</span>
+    {% else %}<span class="pill pill-off">Not listed</span>{% endif %}
+  </div>
   <dl class="stats">
     <dt>Score</dt>
     <dd>score {{ result.score }} ({{ result.tier or "not listed" }})</dd>

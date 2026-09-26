@@ -11,8 +11,12 @@ from threatcull.indicators import IndicatorKind, normalize
 from threatcull.outputs.select import select
 from threatcull.policy.allowlist import Allowlist
 from threatcull.policy.scoring import Tier, scored_indicators
-from threatcull.store.allowlist import AllowlistEntry, builtin_entries, operator_entries
-from threatcull.store.home import home_allow_entries
+from threatcull.store.allowlist import (
+    AllowlistEntry,
+    builtin_entries,
+    mine_entries,
+    operator_entries,
+)
 from threatcull.store.outputs import list_outputs
 from threatcull.store.settings import load_settings
 
@@ -70,8 +74,8 @@ def lookup(conn: sqlite3.Connection, raw: str, *, now: datetime) -> LookupResult
     )
     matches = scored_indicators(conn, now=now, settings=load_settings(conn), value=indicator.value)
     scored = matches[0] if matches else None
-    # The Home Network first, so the reason reads "Home Network: <note>" when both match.
-    allowlisted_by = Allowlist(home_allow_entries(conn)).match(
+    # The operator's own network first, so the reason reads "My network: <note>".
+    allowlisted_by = Allowlist(mine_entries(conn)).match(
         indicator.value, indicator.kind
     ) or Allowlist([*operator_entries(conn), *builtin_entries(conn)]).match(
         indicator.value, indicator.kind

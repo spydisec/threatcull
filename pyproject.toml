@@ -1,6 +1,6 @@
 [project]
 name = "threatcull"
-version = "1.0.1"
+version = "1.1.0"
 description = "Self-hosted threat-feed compiler: cull the noise, block the threats."
 readme = "README.md"
 license = "AGPL-3.0-only"

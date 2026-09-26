@@ -11,8 +11,10 @@ from threatcull.store.allowlist import (
     AllowlistEntry,
     add_entry,
     builtin_entries,
+    mine_entries,
     operator_entries,
     remove_entry,
+    set_mine,
 )
 from threatcull.store.errors import NotFoundError
 from threatcull.store.sightings import record_fetch_success
@@ -94,7 +96,7 @@ def test_siblings_of_an_allowlisted_domain_are_not_excluded(value: str) -> None:
 def test_operator_entries_are_normalised(conn: sqlite3.Connection, now: datetime) -> None:
     entry = add_entry(conn, " Pay.Example.COM. ", "payment provider", now=now)
     assert (entry.value, entry.kind, entry.origin) == ("pay.example.com", "domain", "operator")
-    with pytest.raises(ValueError, match="not a public IP"):
+    with pytest.raises(ValueError, match="no allowlist entry is needed"):
         add_entry(conn, "203.0.113.0/24", now=now)  # documentation range
     with pytest.raises(ValueError, match="not a public IP"):
         add_entry(conn, "192.168.0.0/15", now=now)  # overlaps private space
@@ -135,3 +137,36 @@ def test_builtin_entries_come_from_enabled_allowlist_sources(
     (entry,) = builtin_entries(conn)
     assert (entry.value, entry.origin) == ("104.16.0.0/13", "cdn")
     assert entry.note == "Built-in Allowlist: Test Source"
+
+
+# ---- My network (merged from the Home Network) --------------------------------------------
+
+
+def test_my_network_entries_are_allowlist_entries_with_the_mine_flag(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
+    add_entry(conn, "45.9.20.1", "office", mine=True, now=now)
+    add_entry(conn, "pay.example.com", "payments", now=now)
+    assert [(e.value, e.mine) for e in operator_entries(conn)] == [
+        ("45.9.20.1", True),
+        ("pay.example.com", False),
+    ]
+    assert [e.value for e in mine_entries(conn)] == ["45.9.20.1"]
+    assert mine_entries(conn)[0].note == "My network: office"
+
+
+def test_the_mine_flag_can_be_switched(conn: sqlite3.Connection, now: datetime) -> None:
+    add_entry(conn, "45.9.20.1", "office", now=now)
+    set_mine(conn, "45.9.20.1", True)
+    assert [e.value for e in mine_entries(conn)] == ["45.9.20.1"]
+    set_mine(conn, "45.9.20.1", False)
+    assert mine_entries(conn) == []
+    with pytest.raises(NotFoundError):
+        set_mine(conn, "8.8.8.8", True)
+
+
+def test_a_private_value_explains_that_no_entry_is_needed(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
+    with pytest.raises(ValueError, match="no allowlist entry is needed"):
+        add_entry(conn, "192.168.1.10", "lan", now=now)

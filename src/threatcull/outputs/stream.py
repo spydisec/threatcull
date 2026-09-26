@@ -45,15 +45,15 @@ class StagedOutput:
 
 
 ALLOWLISTED = 1
-HOME_NETWORK = 2  # ``scored.allowlisted`` value of a row a Home Network entry excludes
+HOME_NETWORK = 2  # ``scored.allowlisted`` value of a row an own-network entry excludes
 
 
 def mark_allowlisted(
     conn: sqlite3.Connection, allowlist: Allowlist, home: Allowlist | None = None
 ) -> int:
-    """Flag every ``scored`` row the Allowlist or Home Network excludes; returns how many.
+    """Flag every ``scored`` row the Allowlist excludes; returns how many.
 
-    Rows a Home Network entry matches get ``allowlisted = HOME_NETWORK`` (even when
+    Rows an own-network entry matches get ``allowlisted = HOME_NETWORK`` (even when
     the Allowlist matches them too), the rest ``ALLOWLISTED``, in one SQL pass.
     """
 
@@ -74,7 +74,7 @@ def mark_allowlisted(
 
 
 def home_hits(conn: sqlite3.Connection, limit: int) -> tuple[int, tuple[tuple[str, str], ...]]:
-    """How many ``scored`` rows the Home Network excluded, and the first ``limit`` of them.
+    """How many ``scored`` rows own-network entries excluded, and the first ``limit`` of them.
 
     Each hit is ``(value, comma-joined sorted Source ids)``, ordered by value.
     """

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Configuration export/import as YAML: settings, Source choices, custom Sources, the
-Allowlist, the Home Network and Output definitions.
+Allowlist (including the operator's own network) and Output definitions.
 
 A configuration file never holds passwords, API tokens, Feed Tokens, their hashes, the
 session secret or threat data (Sightings, Runs, Indicators): it is safe to keep next to
@@ -23,9 +23,8 @@ from threatcull.clock import ts
 from threatcull.indicators import SourceKind
 from threatcull.parsers import SourceFormat
 from threatcull.policy.scoring import Tier
-from threatcull.store.allowlist import add_entry, normalize_allow_value, operator_entries
+from threatcull.store.allowlist import add_entry, normalize_allow_value, operator_entries, set_mine
 from threatcull.store.db import transaction
-from threatcull.store.home import HomeOrigin, add_home, home_entries, normalize_home_value
 from threatcull.store.outputs import OutputFormat, OutputSpec, create_output, list_outputs
 from threatcull.store.settings import load_settings, save_settings
 from threatcull.store.sources import (
@@ -70,12 +69,8 @@ def export_config(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
             if s.custom
         ],
         "allowlist": [
-            {"value": e.value, "note": e.note}
+            {"value": e.value, "note": e.note, "mine": e.mine}
             for e in sorted(operator_entries(conn), key=lambda e: e.value)
-        ],
-        "home_network": [
-            {"value": e.value, "note": e.note, "origin": e.origin}
-            for e in sorted(home_entries(conn), key=lambda e: e.value)
         ],
         "outputs": [
             {
@@ -137,12 +132,16 @@ class _CustomSourceIn(_Strict):
 class _AllowIn(_Strict):
     value: str
     note: str = ""
+    mine: bool = False  # the operator's own network: alert when a Source lists it
 
 
 class _HomeIn(_Strict):
+    """A ``home_network`` entry from a file exported before v1.1: imported as an
+    Allowlist entry flagged ``mine``."""
+
     value: str
     note: str = ""
-    origin: HomeOrigin = "manual"
+    origin: Literal["manual", "auto"] = "manual"
 
 
 class _OutputIn(_Strict):
@@ -164,7 +163,7 @@ class ConfigDocument(_Strict):
     catalog_sources: dict[str, bool] = Field(default_factory=dict)
     custom_sources: list[_CustomSourceIn] = Field(default_factory=list)
     allowlist: list[_AllowIn] = Field(default_factory=list)
-    home_network: list[_HomeIn] = Field(default_factory=list)
+    home_network: list[_HomeIn] = Field(default_factory=list)  # before v1.1
     outputs: list[_OutputIn] = Field(default_factory=list)
 
 
@@ -302,28 +301,29 @@ def _apply_sources(
 def _apply_lists(
     conn: sqlite3.Connection, doc: ConfigDocument, result: ImportResult, now: datetime
 ) -> None:
+    # Files exported before v1.1 list the operator's own network separately.
+    wanted = [
+        *doc.allowlist,
+        *(_AllowIn(value=h.value, note=h.note, mine=True) for h in doc.home_network),
+    ]
     allowed = {e.value for e in operator_entries(conn)}
-    for entry in doc.allowlist:
+    added: dict[str, bool] = {}
+    for entry in wanted:
         try:
             value = normalize_allow_value(entry.value).value
         except ValueError as exc:
             result.skipped.append(f"skipped Allowlist entry {entry.value!r}: {exc}")
             continue
-        if value not in allowed:
-            add_entry(conn, entry.value, entry.note, now=now)
-            allowed.add(value)
-            result.applied.append(f"added Allowlist entry {value}")
-    home = {e.value for e in home_entries(conn)}
-    for item in doc.home_network:
-        try:
-            value = normalize_home_value(item.value).value
-        except ValueError as exc:
-            result.skipped.append(f"skipped Home Network entry {item.value!r}: {exc}")
+        if value in added:  # listed twice in this file: keep the "mine" flag if either has it
+            if entry.mine and not added[value]:
+                set_mine(conn, value, True)
+                added[value] = True
             continue
-        if value not in home:
-            add_home(conn, item.value, item.note, origin=item.origin, now=now)
-            home.add(value)
-            result.applied.append(f"added Home Network entry {value}")
+        if value not in allowed:
+            add_entry(conn, entry.value, entry.note, mine=entry.mine, now=now)
+            added[value] = entry.mine
+            label = "My network entry" if entry.mine else "Allowlist entry"
+            result.applied.append(f"added {label} {value}")
 
 
 def _apply_outputs(conn: sqlite3.Connection, doc: ConfigDocument, result: ImportResult) -> None:

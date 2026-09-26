@@ -129,6 +129,17 @@ _MIGRATIONS: tuple[str, ...] = (
         WHERE disabled_reason = 'Disabled by Business Mode: not cleared for business use';
     PRAGMA user_version = 7;
     """,
+    # The Home Network becomes Allowlist entries flagged "mine" (alert when a Source
+    # lists them). An entry on both lists keeps its Allowlist note.
+    """
+    ALTER TABLE allowlist ADD COLUMN mine INTEGER NOT NULL DEFAULT 0;
+    UPDATE allowlist SET mine = 1 WHERE value IN (SELECT value FROM home_network);
+    INSERT INTO allowlist (value, kind, note, created_at, mine)
+        SELECT value, kind, note, created_at, 1 FROM home_network
+        WHERE value NOT IN (SELECT value FROM allowlist);
+    DROP TABLE home_network;
+    PRAGMA user_version = 8;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)

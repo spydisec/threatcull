@@ -116,7 +116,7 @@ def test_outputs_page_shows_the_url_pattern_using_the_request_host(
     response = client.get("/outputs")
     assert response.status_code == 200
     assert f"http://testserver/o/{OUTPUT_SPEC.name}?token=" in response.text
-    assert "Rotate the token" in response.text
+    assert "Rotate its token" in response.text
 
 
 def test_runs_page_shows_a_run_status(client: TestClient, logged_in: str, tmp_path: Path) -> None:

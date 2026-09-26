@@ -49,7 +49,7 @@ class CompileStats:
 
     @property
     def published(self) -> int:
-        """Distinct Indicators left with a Tier after the Allowlist and Home Network."""
+        """Distinct Indicators left with a Tier after the Allowlist (own network included)."""
         return sum(self.tiers.values())
 
     def kept(self, kind: str) -> int:

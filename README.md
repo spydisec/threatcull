@@ -5,8 +5,8 @@ ranges and your own infrastructure, scores each indicator by how many independen
 serves the result to your firewalls, DNS servers and SIEM.
 
 - Catalog of blocklist sources with licence details, plus your own sources (URL or local file)
-- Built-in CDN allowlists, your own allowlist entries, and a Home Network list that never gets
-  published
+- Built-in CDN allowlists and your own entries; mark your own network to get an alert when a
+  source lists it
 - Confidence tiers (high, medium, low) from source agreement
 - Outputs as plain, hosts, AdGuard, RPZ, CSV or JSON, each at its own URL with a Feed Token
 - Web UI with a dashboard, lookup, run history and a built-in scheduler
@@ -58,7 +58,7 @@ docker compose run --rm -T threatcull config export > threatcull-config.yaml
 docker compose run --rm -T threatcull config import - < threatcull-config.yaml
 ```
 
-The file holds settings, source choices, allowlist, Home Network and outputs. It holds no passwords,
+The file holds settings, source choices, the allowlist and outputs. It holds no passwords,
 tokens or threat data. **Settings > Configuration** in the web UI does the same. For a full backup,
 copy the `threatcull-data` volume.
 
@@ -78,8 +78,8 @@ uv run threatcull serve --host <lan-ip> --port 6969
 
 - **Offline networks:** add a custom source with a `file://` URL. Sources added in the web UI must
   point to files in `data/imports/`.
-- **Home Network:** list your public addresses on the Home Network page (or run
-  `threatcull home detect`). ThreatCull keeps them out of every output and warns you when a source
+- **Your network:** add your public addresses to the allowlist with **My network** ticked (or run
+  `threatcull allow detect`). ThreatCull keeps them out of every output and warns you when a source
   lists one.
 - **Scripts:** create an API token with `threatcull api-token create <name> --user admin` and send it
   as `Authorization: Bearer <token>` to `/api/v1/`.

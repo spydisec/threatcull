@@ -239,7 +239,7 @@ async def check_csrf(
 
 
 def home_detector(request: Request) -> HomeDetector:
-    """The app's Home Network detector (tests swap in a fake via ``app.state``)."""
+    """The app's own-address detector (tests swap in a fake via ``app.state``)."""
     detector: HomeDetector = request.app.state.home_detector
     return detector
 

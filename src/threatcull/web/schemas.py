@@ -16,7 +16,6 @@ from threatcull.catalog import BusinessUse, Category
 from threatcull.indicators import SourceKind
 from threatcull.parsers import SourceFormat
 from threatcull.policy.scoring import Tier
-from threatcull.store.home import HomeOrigin
 from threatcull.store.outputs import OutputFormat
 
 # Mirrors threatcull.store.sources._CUSTOM_ID (kept in sync by
@@ -61,6 +60,7 @@ class AllowlistEntryIn(BaseModel):
 
     value: str = Field(min_length=1)
     note: str = ""
+    mine: bool = False  # the operator's own network: flagged when a Source lists it
 
 
 class OutputCreateIn(BaseModel):
@@ -84,17 +84,3 @@ class OutputCreateIn(BaseModel):
     min_tier: Tier
     max_entries: int | None = Field(default=None, ge=1)
     format: OutputFormat
-
-
-class HomeEntryIn(BaseModel):
-    """Body of ``POST /home`` and ``POST /api/v1/home``.
-
-    ``origin`` is ``auto`` only for a detected candidate's Add button; the store
-    normalises ``value`` and explains why a private address needs no entry.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    value: str = Field(min_length=1)
-    note: str = ""
-    origin: HomeOrigin = "manual"

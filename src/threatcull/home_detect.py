@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Suggest Home Network entries from this host's own configuration.
+"""Suggest your own network's public addresses from this host's configuration.
 
 Detection only reads local files (``/proc`` and ``/etc/resolv.conf``); it never
 sends a packet, not even a DNS query. The one exception is

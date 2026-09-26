@@ -179,7 +179,7 @@ def test_api_allowlist_returns_exactly_the_allow_listed_keys(
     _seed_builtin(tmp_path, utcnow())
     body = client.get("/api/v1/allowlist").json()
     assert len(body) == 1
-    assert set(body[0].keys()) == {"value", "kind", "note", "origin"}
+    assert set(body[0].keys()) == {"value", "kind", "note", "origin", "mine"}
     assert body[0]["origin"] == "cdn"
 
 
@@ -197,7 +197,13 @@ def test_api_add_entry_requires_csrf_header(
     )
     assert response.status_code == 200
     body = response.json()
-    assert body == {"value": "1.2.3.4", "kind": "ip", "note": "n", "origin": "operator"}
+    assert body == {
+        "value": "1.2.3.4",
+        "kind": "ip",
+        "note": "n",
+        "origin": "operator",
+        "mine": False,
+    }
     assert _operator_values(tmp_path) == ["1.2.3.4"]
 
 

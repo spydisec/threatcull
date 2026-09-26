@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from starlette.responses import HTMLResponse, Response
 
+from threatcull.web.dashboard import CATEGORY_LABELS
 from threatcull.web.deps import session_user
 from threatcull.web.security import ensure_csrf_token
 
@@ -41,6 +42,7 @@ def _when(value: str | None, missing: str = "never") -> Markup:
 
 
 _env.filters["when"] = _when
+_env.globals["category_labels"] = CATEGORY_LABELS  # readable category names
 templates = Jinja2Templates(env=_env)
 
 FLASH_KEY = "flash"
