@@ -13,7 +13,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A pull request that touches only docs or other non-code files skips the
+  # tests. A skipped job still satisfies the required "test" check, which a
+  # workflow-level paths filter would leave pending.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # If the file list cannot be read, run the tests rather than skip them.
+          if ! files=$(gh pr diff "$PR" --repo "$REPO" --name-only); then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf '%s\n' "$files"
+          # Tests read src/ (code, catalog.yaml, templates, static), the Vale
+          # config, and the project and lock files.
+          pattern='^(src/|tests/|pyproject\.toml$|uv\.lock$|\.vale\.ini$|\.vale/|\.github/workflows/test\.yml$)'
+          if grep -qE "$pattern" <<< "$files"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
