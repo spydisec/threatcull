@@ -1,0 +1,147 @@
+{
+  "repo_notes": [
+    {
+      "content": "ThreatCull is a self-hosted threat-feed compiler: Python 3.12+, FastAPI, SQLite, Jinja2 + htmx pages with small TypeScript islands (no SPA), AGPL-3.0, shipped as the container image ghcr.io/spydisec/threatcull. Pipeline: Fetch the enabled Sources, cull (drop duplicates, private and reserved ranges, Allowlist entries and the operator's own network), score each Indicator by how many independent Sources list it (confidence tiers), Compile Outputs, and serve each Output over a URL protected by its Feed Token. Use the project's own terms consistently: Source, Catalog (the bundled catalog.yaml of vetted Sources), Indicator, Sighting, Allowlist, My network (called home in code, see home_detect.py), Output, Feed Token, API token, Fetch, Compile, Run. Stored and scheduled times are UTC; only the web UI converts them to the TZ timezone. CIDR ranges are left out of Outputs. Every Catalog Source carries licence evidence and a business-use flag; a Source whose terms turn restricted is disabled until the operator acknowledges the change. The design notes and ADRs are not in the public repository: explain behaviour from the code, README.md, CHANGELOG.md, SECURITY.md and CONTRIBUTING.md."
+    }
+  ],
+  "pages": [
+    {
+      "title": "Overview",
+      "purpose": "What ThreatCull is, the Fetch, cull, score, Compile and serve pipeline, top-level architecture map, links to child pages."
+    },
+    {
+      "title": "Getting Started and Deployment",
+      "purpose": "Docker Compose and local install, data directory layout, init/serve bootstrap, admin password env vars, TZ and the other environment variables, reverse proxy and container hardening (non-root, cap_drop, no-new-privileges).",
+      "parent": "Overview"
+    },
+    {
+      "title": "Configuration and Settings",
+      "purpose": "Settings store, YAML config export/import schema and validation (no passwords or tokens), settings web page, display timezone (clock.py).",
+      "parent": "Overview"
+    },
+    {
+      "title": "Threat Data Pipeline",
+      "purpose": "Overview of the Fetch, parse, score, Compile and serve flow; links to per-stage child pages."
+    },
+    {
+      "title": "Sources and Catalog",
+      "purpose": "Catalog YAML sync, Catalog updates between releases (catalog_update.py: download, --file upload, revision checks, refusing older or unsafe files), custom allowlist/blocklist Sources, licence classes and restricted terms, enable/disable policy.",
+      "parent": "Threat Data Pipeline"
+    },
+    {
+      "title": "Fetching and Parsing",
+      "purpose": "HTTP fetcher, conditional requests (ETag, Last-Modified), retries and size caps, fetch locking, list formats and parsers, Indicator normalisation, streaming into SQLite.",
+      "parent": "Threat Data Pipeline"
+    },
+    {
+      "title": "Policy: Scoring, Allowlist and Stats",
+      "purpose": "Confidence tiers from Source agreement, Allowlist and My network suppression, My network detection, cleanup funnel statistics.",
+      "parent": "Threat Data Pipeline"
+    },
+    {
+      "title": "Compilation and Output Rendering",
+      "purpose": "Compile runs, shrink guard, Output specs and selection, renderers (plain, hosts, adguard, rpz, csv, json), streaming and file writing (outputs/ package).",
+      "parent": "Threat Data Pipeline"
+    },
+    {
+      "title": "Lookup and Sightings",
+      "purpose": "Indicator lookup explaining score, tier, Allowlist state and per-Source Sighting history.",
+      "parent": "Threat Data Pipeline"
+    },
+    {
+      "title": "Web Application",
+      "purpose": "FastAPI app factory, middleware stack, routing layout, templating and frontend islands; links to child pages."
+    },
+    {
+      "title": "Authentication, Sessions and Security",
+      "purpose": "Session cookies, CSRF synchroniser tokens, Argon2id login with rate limiting and timing equalisation, API bearer tokens, security headers and trusted forwarded-headers middleware.",
+      "parent": "Web Application"
+    },
+    {
+      "title": "HTML Pages and Forms",
+      "purpose": "pages.py route handlers, form schemas, htmx fragment patterns, flash messages, per-page behaviour.",
+      "parent": "Web Application"
+    },
+    {
+      "title": "Dashboard and Charts",
+      "purpose": "Dashboard statistics, funnel/overlap/health metrics, 24-hour and 30-day series grouped by local day, chart-data handoff to the Chart.js islands.",
+      "parent": "Web Application"
+    },
+    {
+      "title": "Templates and UI Styling",
+      "purpose": "Jinja2 environment and filters (the when filter shows times in TZ), base layout, shared macros, air-gapped CSS design tokens, busy and session-expired pages.",
+      "parent": "Web Application"
+    },
+    {
+      "title": "Frontend TypeScript Islands",
+      "purpose": "frontend/ build (npm, tsconfig), copy/filter/csrf/charts islands, committed islands.js bundle and the CI drift check.",
+      "parent": "Web Application"
+    },
+    {
+      "title": "JSON API and Feed Endpoints",
+      "purpose": "/api/v1 read and write routes, /o/ Output delivery with Feed Tokens, health endpoint.",
+      "parent": "Web Application"
+    },
+    {
+      "title": "Scheduler and Background Jobs",
+      "purpose": "APScheduler wiring, pipeline runner, job status tracking and run lifecycle, interrupted-run recovery, busy database handling (503).",
+      "parent": "Web Application"
+    },
+    {
+      "title": "CLI",
+      "purpose": "Overview of the threatcull command tree and dispatch architecture, exit codes, error handling."
+    },
+    {
+      "title": "Operational Commands",
+      "purpose": "init, sources, allow, fetch, compile, run, lookup, outputs, config export/import and catalog show/update subcommands with examples.",
+      "parent": "CLI"
+    },
+    {
+      "title": "Users, API Tokens and Serving",
+      "purpose": "user create/set-password/list, api-token create/list/revoke, serve options (host, port, trusted proxy, secure cookies, TZ check), admin bootstrap.",
+      "parent": "CLI"
+    },
+    {
+      "title": "Persistence Layer",
+      "purpose": "Overview of the SQLite store package and data model; links to child pages."
+    },
+    {
+      "title": "Database Schema and Migrations",
+      "purpose": "open_db, migrations, pragmas, connection handling, data directory files.",
+      "parent": "Persistence Layer"
+    },
+    {
+      "title": "Store Modules Reference",
+      "purpose": "sources, allowlist, outputs, runs, sightings, users, api_tokens, settings and config modules and their APIs.",
+      "parent": "Persistence Layer"
+    },
+    {
+      "title": "Development, CI and Security",
+      "purpose": "Overview of tooling, workflows and contribution policy; links to child pages."
+    },
+    {
+      "title": "Tooling and Local Workflow",
+      "purpose": "Makefile targets, uv, ruff, mypy, pre-commit, commitlint, Vale prose rules and vocabulary, feat/* branches into dev and releases on main.",
+      "parent": "Development, CI and Security"
+    },
+    {
+      "title": "Testing Strategy",
+      "purpose": "pytest layout, fixtures and factories, the local fixture HTTP server, web test client helpers, offline pipeline tests, the network marker, coverage gate.",
+      "parent": "Development, CI and Security"
+    },
+    {
+      "title": "CI/CD Pipelines and Release",
+      "purpose": "lint/test/docker/security/image-scan workflows, Grype image scanning, CodeRabbit review config, release tagging with CHANGELOG.md as release notes, multi-arch image and provenance attestation, dependabot, issue forms.",
+      "parent": "Development, CI and Security"
+    },
+    {
+      "title": "Security Model and Disclosure",
+      "purpose": "Threat model, hardening defaults, secret key handling, SECURITY.md private reporting process, scanners.",
+      "parent": "Development, CI and Security"
+    },
+    {
+      "title": "Glossary",
+      "purpose": "Definitions of ThreatCull terms (Source, Catalog, Indicator, Sighting, Allowlist, My network, Output, Feed Token, API token, confidence tier, shrink guard, Compile, Run, islands, RPZ) with code pointers."
+    }
+  ]
+}
