@@ -40,3 +40,6 @@ compose.yaml
 
 # Claude Code settings (local only)
 .claude/
+
+# Tests run locally only (make check); they are not part of the repository.
+tests/

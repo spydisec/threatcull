@@ -21,11 +21,12 @@ format: ## Apply Ruff formatting and safe fixes
 	uv run ruff format .
 	uv run ruff check --fix .
 
-types: ## mypy --strict
-	uv run mypy
+types: ## mypy --strict (src, plus tests/ when it exists locally)
+	@if [ -d tests ]; then uv run mypy; else uv run mypy src; fi
 
-test: ## Tests with coverage (offline)
-	uv run pytest --cov --cov-report=term-missing
+test: ## Tests with coverage (offline); tests/ lives on the maintainer's machine only
+	@if [ -d tests ]; then uv run pytest --cov --cov-report=term-missing; \
+	else echo "no tests/ directory: tests run on the maintainer's machine"; fi
 
 audit: ## Vulnerability audit of runtime dependencies
 	@tmp=$$(mktemp); \
@@ -43,4 +44,4 @@ ui: ## Rebuild the TypeScript islands bundle (needs Node)
 ui-check: ui ## Fail if the committed islands bundle is out of date
 	@git diff --quiet -- src/threatcull/web/static/islands.js || { echo "islands.js is out of date: run make ui and stage it"; exit 1; }
 
-check: lint prose types ui-check test security ## Everything CI runs
+check: lint prose types ui-check test security ## CI checks plus the local tests

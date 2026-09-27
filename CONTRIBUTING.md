@@ -12,9 +12,10 @@ passwords, hostnames and addresses from your own network.
 
 1. Open an issue first for anything bigger than a small fix, so we agree on the approach.
 2. Branch from `dev` and open the pull request against `dev`. `main` holds releases.
-3. Run `make setup` once, then `make check` before you push. CI runs the same checks: ruff, mypy
-   strict, tests with coverage, bandit, semgrep, pip-audit, gitleaks, Vale and the Docker build.
-4. Write tests for new or changed behaviour.
+3. Run `make setup` once, then `make check` before you push. CI runs ruff, mypy strict, bandit,
+   semgrep, pip-audit, gitleaks, Vale and the Docker build with a smoke test.
+4. The test suite is kept outside the repository and runs on the machine of the maintainer
+   before each merge. Describe how you checked your change in the pull request.
 5. Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for anything a user
    would notice: an emoji, a bold one-line summary, then what changed and what to do about it.
 6. Use [Conventional Commits](https://www.conventionalcommits.org/) with a subject of 72

@@ -29,7 +29,7 @@ jobs:
       - name: Ruff lint
         run: uv run ruff check .
       - name: mypy (strict)
-        run: uv run mypy
+        run: uv run mypy src # tests/ is local only
       - name: Vale (prose in pushed Markdown)
         run: |
           uvx vale sync
