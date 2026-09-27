@@ -3,7 +3,7 @@
 #
 # Reviews focus on security and correctness in the application code, workflows and
 # container. CI already runs ruff, mypy, pytest, bandit, semgrep, pip-audit, gitleaks,
-# Vale and hadolint, so style linters stay off here and tests are not reviewed.
+# Vale and hadolint, so style linters stay off here. The test suite is not in the repo.
 
 language: "en-GB"
 
@@ -101,7 +101,7 @@ reviews:
       instructions: |
         - Every Source needs licence evidence: licence text and a licence_url on the
           provider's own site. default_enabled blocklists need business_use: allowed.
-        - A change to any Source needs a higher revision (tests/test_catalog.py pins it).
+        - A change to any Source needs a higher revision.
         - Flag duplicate URLs and non-https feed URLs.
     - path: ".github/workflows/**"
       instructions: |

@@ -152,7 +152,7 @@ organisation passes the data on, which many licences forbid.
 
 ```bash
 make setup   # dependencies and git hooks
-make check   # lint, types, tests and security checks, as in CI
+make check   # lint, types and security checks, as in CI
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for issues and pull requests, [SECURITY.md](SECURITY.md)
