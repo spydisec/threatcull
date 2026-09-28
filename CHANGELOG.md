@@ -8,6 +8,19 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-09-28
+
+A security fix for domain feeds in `csv` or `json` format. Upgrading is recommended; nothing else
+to do.
+
+### Security
+
+- 🧱 **Line breaks can't reach Outputs.** A `csv` or `json` feed could list a domain containing a line
+  break (for example `"google\n.com\n.zz.zz"`): it passed validation and each part became its own
+  line in plain, hosts, AdGuard and RPZ Outputs, which could add broad blocking rules past the
+  allowlist. Values with whitespace or control characters inside are now rejected, and the Output
+  writer refuses a line break as a last check. Found in an internal security review.
+
 ## [2.0.1] - 2026-09-28
 
 A new Catalog Source, owner-only approval for Catalog suggestions, and releases that also work when
@@ -224,7 +237,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/spydisec/threatcull/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/spydisec/threatcull/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/spydisec/threatcull/compare/v1.4.0...v2.0.0
 [1.4.0]: https://github.com/spydisec/threatcull/compare/v1.3.0...v1.4.0
