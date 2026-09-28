@@ -8,6 +8,10 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Added
+
+- 🆕 **New Catalog Source: BlackHole TODAY IPs.** An IP blocklist (`blackhole-today-ips`), disabled until you enable it. [#28](https://github.com/spydisec/threatcull/issues/28)
+
 ### Changed
 
 - 🔏 **Only the owner approves Catalog suggestions.** The `approved` label opens the pull request
