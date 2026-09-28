@@ -25,6 +25,14 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docker == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Pull requests from forks get no repository secrets: they build on the standard
+    # python:3.13-slim image (the Dockerfile's fallback) instead of Docker Hardened
+    # Images, so outside contributions still pass. Nothing from these builds is published.
+    env:
+      DHI: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+      FALLBACK_ARGS: >-
+        --build-arg PYTHON_BUILD_IMAGE=python:3.13-slim
+        --build-arg PYTHON_RUNTIME_IMAGE=python:3.13-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,9 +44,17 @@ jobs:
           < Dockerfile
       - name: Validate docker-compose.yaml
         run: docker compose -f docker-compose.yaml config --quiet
+      # Proves the fork path on every run: with no dhi.io login yet, the fallback build
+      # must not touch the DHI stages (BuildKit skips stages the target doesn't use).
+      - name: Fallback build without dhi.io (what fork pull requests run)
+        if: env.DHI == 'true'
+        run: |
+          read -ra extra <<< "$FALLBACK_ARGS"
+          docker build "${extra[@]}" --build-arg VERSION=ci -t threatcull:fallback .
       # The base images come from Docker Hardened Images (dhi.io), which needs a Docker
       # account. DOCKERHUB_USERNAME / DOCKERHUB_TOKEN: a read-only access token.
       - name: Log in to dhi.io
+        if: env.DHI == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: dhi.io
@@ -47,12 +63,19 @@ jobs:
       - name: Build
         env:
           DOCKER_BUILDKIT: "1"
-        run: docker build --build-arg VERSION=ci -t threatcull:ci .
+        run: |
+          if [ "$DHI" = "true" ]; then extra=(); else
+            echo "::notice::No Docker Hub secrets (fork pull request): building on python:3.13-slim."
+            read -ra extra <<< "$FALLBACK_ARGS"
+          fi
+          docker build "${extra[@]}" --build-arg VERSION=ci -t threatcull:ci .
       - name: Smoke test (no internet needed)
         run: scripts/docker-smoke.sh threatcull:ci
       # Fails the pull request on a high or critical CVE that already has a fix
       # (a base-image digest bump or a dependency update usually clears it).
       - name: Scan the image for known vulnerabilities (Grype)
+        # Only the Docker Hardened Images build is what releases publish.
+        if: env.DHI == 'true'
         uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           image: threatcull:ci
@@ -69,6 +92,14 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docker == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Pull requests from forks get no repository secrets: they build on the standard
+    # python:3.13-slim image (the Dockerfile's fallback) instead of Docker Hardened
+    # Images, so outside contributions still pass. Nothing from these builds is published.
+    env:
+      DHI: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+      FALLBACK_ARGS: >-
+        --build-arg PYTHON_BUILD_IMAGE=python:3.13-slim
+        --build-arg PYTHON_RUNTIME_IMAGE=python:3.13-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,10 +109,13 @@ jobs:
       # The base images come from Docker Hardened Images (dhi.io), which needs a Docker
       # account. DOCKERHUB_USERNAME / DOCKERHUB_TOKEN: a read-only access token.
       - name: Log in to dhi.io
+        if: env.DHI == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: dhi.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build linux/arm64
-        run: docker buildx build --platform linux/arm64 --build-arg VERSION=ci .
+        run: |
+          if [ "$DHI" = "true" ]; then extra=(); else read -ra extra <<< "$FALLBACK_ARGS"; fi
+          docker buildx build "${extra[@]}" --platform linux/arm64 --build-arg VERSION=ci .
