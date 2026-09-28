@@ -10,6 +10,7 @@ from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlsplit, urlunsplit
 
 from threatcull.indicators import IndicatorKind
 from threatcull.outputs.files import output_path
@@ -150,5 +151,19 @@ def _attributions(
 
 
 def _public_url(url: str) -> str:
-    """A feed URL safe to publish: never a path on the ThreatCull host."""
-    return "local file" if url.startswith("file://") else url
+    """A feed URL safe to publish in an Output header: never a path on the ThreatCull
+    host, and never credentials or query strings (they often carry API keys)."""
+    if url.startswith("file://"):
+        return "local file"
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+        port = parts.port
+    except ValueError:
+        return "(feed URL hidden)"
+    if not host:
+        return "(feed URL hidden)"
+    netloc = f"[{host}]" if ":" in host else host
+    if port is not None:
+        netloc += f":{port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, "", ""))

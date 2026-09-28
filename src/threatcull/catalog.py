@@ -89,7 +89,10 @@ def feed_label(url: str) -> str:
     raw GitHub file, or "local file" for a file:// Source."""
     if url.startswith("file://"):
         return "local file"
-    parts = urlparse(url)
+    try:
+        parts = urlparse(url)
+    except ValueError:  # e.g. an unmatched "[": show the URL rather than fail the page
+        return url
     segments = [segment for segment in parts.path.split("/") if segment]
     if parts.hostname == "raw.githubusercontent.com" and len(segments) >= 2:  # noqa: PLR2004
         return f"github.com/{segments[0]}/{segments[1]}"

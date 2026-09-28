@@ -8,6 +8,7 @@ import re
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from threatcull.catalog import CatalogEntry, Category, SourceRole
 from threatcull.indicators import SourceKind
@@ -196,6 +197,13 @@ def _check_custom(source_id: str, name: str, url: str) -> None:
         raise ValueError("custom Source names cannot contain control characters")
     if not url.startswith(_CUSTOM_SCHEMES):
         raise ValueError("custom Source URLs must use https://, http:// or file://")
+    try:
+        parts = urlsplit(url)
+        valid = bool(parts.path) if parts.scheme == "file" else bool(parts.hostname)
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ValueError(f"{url!r} is not a valid URL")
     if _CONTROL_CHARS.search(url):
         raise ValueError("custom Source URLs cannot contain control characters")
 
