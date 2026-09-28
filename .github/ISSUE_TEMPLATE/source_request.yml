@@ -6,8 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        A bot checks the feed and the licence link within a few minutes and comments with what it
-        found. A maintainer then reviews it; an approved Source arrives through a pull request.
+        A bot downloads the feed within a few minutes, counts the entries ThreatCull would keep and
+        comments with what it found. A maintainer then reviews it; an approved Source arrives through a pull request.
         See [docs/CATALOG.md](https://github.com/spydisec/threatcull/blob/main/docs/CATALOG.md)
         for what a Source needs.
   - type: input
@@ -70,33 +70,6 @@ body:
         - Spam / scam
         - Ads / tracking
         - Infrastructure
-    validations:
-      required: true
-  - type: input
-    id: licence
-    attributes:
-      label: Licence
-      description: The licence name or a one-line summary of the terms.
-      placeholder: "CC BY-SA 4.0"
-    validations:
-      required: true
-  - type: input
-    id: licence_url
-    attributes:
-      label: Licence link
-      description: The terms on the publisher's own site (https).
-      placeholder: "https://example.com/terms"
-    validations:
-      required: true
-  - type: dropdown
-    id: business_use
-    attributes:
-      label: Business use
-      description: Do the terms let a business use the list to protect its own network?
-      options:
-        - allowed
-        - forbidden
-        - unknown
     validations:
       required: true
   - type: dropdown

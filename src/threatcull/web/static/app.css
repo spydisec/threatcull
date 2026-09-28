@@ -286,7 +286,7 @@ legend { padding: 0 0.3rem; color: var(--muted); font-size: 0.88em; }
 .table td { overflow-wrap: break-word; }
 .table-sources td:first-child { min-width: 12rem; }
 .table-sources td:nth-child(3) { max-width: 16rem; }
-.table-sources td:nth-child(5) { min-width: 11rem; max-width: 20rem; }
+.table-sources td:nth-child(4) { min-width: 11rem; max-width: 20rem; }
 .row-off td:not(.actions) { color: var(--muted); }
 .row-off td strong { color: var(--fg); font-weight: 500; }
 .col-action, .table td.actions { width: 1%; white-space: nowrap; }

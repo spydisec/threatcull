@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from threatcull.catalog import CatalogEntry, shipped_catalog
+from threatcull.catalog import CatalogEntry, feed_label, shipped_catalog
 from threatcull.web.dashboard import CATEGORY_LABELS
 
 DOC = Path(__file__).resolve().parent.parent / "docs" / "CATALOG.md"
@@ -29,11 +29,11 @@ GROUPS = (
 
 
 def _row(entry: CatalogEntry) -> str:
+    feed = feed_label(entry.url)
     cells = [
         f"**{entry.name}**<br>`{entry.id}`",
         CATEGORY_LABELS.get(entry.category, entry.category),
-        f"[{entry.licence_class.value}]({entry.licence_url})",
-        entry.business_use.value,
+        f"[{feed}]({entry.url})",
         "yes" if entry.default_enabled else "",
     ]
     return "| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |"
@@ -54,8 +54,8 @@ def render() -> str:
         if note:
             lines += [note, ""]
         lines += [
-            "| Source | Category | Licence | Business use | On by default |",
-            "|---|---|---|---|---|",
+            "| Source | Category | Feed | On by default |",
+            "|---|---|---|---|",
             *(_row(entry) for entry in sorted(entries, key=lambda e: e.name.lower())),
         ]
     lines += ["", "<!-- vale on -->", END]

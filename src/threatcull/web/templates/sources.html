@@ -3,9 +3,8 @@
 {% block content %}
 <h1>Sources</h1>
 <p class="lead">
-  ThreatCull downloads each Source straight from its publisher, so you are responsible for
-  following each Source's terms. The licence labels summarise those terms but are not legal
-  advice: open the licence link before relying on a Source.
+  ThreatCull downloads each Source straight from its publisher. You decide which Sources to use;
+  the Feed link shows where each list comes from.
 </p>
 {% if error is defined and error %}
 <p class="error">{{ error }}</p>
@@ -21,7 +20,7 @@
   <table class="table table-sources" id="sources-table">
     <thead>
       <tr>
-        <th>Source</th><th>Category</th><th>Licence</th><th>Business use</th>
+        <th>Source</th><th>Category</th><th>Feed</th>
         <th>Status</th><th class="col-action">Action</th>
       </tr>
     </thead>
@@ -91,13 +90,6 @@
       </label>
       <label>Id (made from the name when empty)
         <input type="text" name="id" placeholder="custom-my-blocklist">
-      </label>
-      <label>Business use
-        <select name="business_use">
-          <option value="unknown">unknown</option>
-          <option value="allowed">allowed</option>
-          <option value="forbidden">forbidden</option>
-        </select>
       </label>
       <p class="hint">A <code>file://</code> URL must point inside the data directory's <code>imports/</code> folder.</p>
       </div>

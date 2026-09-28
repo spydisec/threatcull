@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfoNotFoundError
 import uvicorn
 import yaml
 
-from threatcull.catalog import BusinessUse, Category, SourceRole, load_catalog
+from threatcull.catalog import Category, SourceRole, load_catalog
 from threatcull.catalog_update import (
     DEFAULT_CATALOG_URL,
     MAX_CATALOG_BYTES,
@@ -189,7 +189,6 @@ def _add_sources_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]
     src_list.add_argument("--enabled", action="store_true")
     enable = src.add_parser("enable")
     enable.add_argument("source_id")
-    enable.add_argument("--acknowledge-restricted", action="store_true")
     src.add_parser("disable").add_argument("source_id")
     custom = src.add_parser("add-custom")
     custom.add_argument("--name", required=True)
@@ -212,9 +211,6 @@ def _add_sources_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]
     )
     custom.add_argument("--csv-column", type=int, default=0)
     custom.add_argument("--json-key", dest="json_keys", action="append", default=[])
-    custom.add_argument(
-        "--business-use", choices=[b.value for b in BusinessUse], default=BusinessUse.UNKNOWN.value
-    )
 
 
 def _add_catalog_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -309,17 +305,12 @@ def _sources_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
             f"ok {s.last_success_at}" if s.last_success_at else "never fetched"
         )
         note = f" ({s.disabled_reason})" if s.disabled_reason else ""
-        print(
-            f"{state}  {s.id:<30} {s.role:<9} {s.licence_class:<13} "
-            f"business={s.business_use:<9} {health}{note}"
-        )
+        print(f"{state}  {s.id:<30} {s.role:<9} {s.kind:<6} {s.category:<14} {health}{note}")
     return EXIT_OK
 
 
 def _sources_enable(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
-    source = set_enabled(
-        conn, args.source_id, True, acknowledge_restricted=args.acknowledge_restricted
-    )
+    source = set_enabled(conn, args.source_id, True)
     print(f"enabled {source.id}")
     return EXIT_OK
 
@@ -341,7 +332,6 @@ def _sources_add_custom(conn: sqlite3.Connection, args: argparse.Namespace) -> i
         category=args.category if role == "blocklist" else "infrastructure",
         csv_column=args.csv_column,
         json_keys=tuple(args.json_keys),
-        business_use=BusinessUse(args.business_use),
         role=role,
     )
     print(f"added {source.id} (disabled; enable it with `threatcull sources enable {source.id}`)")

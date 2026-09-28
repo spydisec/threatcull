@@ -32,7 +32,7 @@ from threatcull.store.allowlist import (
 )
 from threatcull.store.config import apply_config, dump_config, parse_config
 from threatcull.store.db import transaction
-from threatcull.store.errors import NotFoundError, PolicyError
+from threatcull.store.errors import NotFoundError
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
 from threatcull.store.runs import compile_history, last_run, recent_fetches, recent_runs
 from threatcull.store.settings import load_settings
@@ -528,25 +528,19 @@ def _apply_enabled_change(
     conn: sqlite3.Connection,
     source_id: str,
     enabled: bool,
-    *,
-    acknowledge_restricted: bool,
 ) -> Response:
     """Shared body of the enable/disable handlers below.
 
-    Without htmx: ``PolicyError``/``NotFoundError`` re-render the full Sources
-    page with the message (400/404), success is the usual ``303`` to
-    ``/sources``.
+    Without htmx: ``NotFoundError`` re-renders the full Sources page with the
+    message (404), success is the usual ``303`` to ``/sources``.
 
     With htmx (``HX-Request``) the answer is always the Source's row, status
     ``200``: htmx swaps only 2xx bodies by default, and a full page can't go
-    inside a ``<tr>``. A refusal shows as an inline alert in the row's action
-    cell (the row itself unchanged); an unknown Source gets a one-cell error row.
+    inside a ``<tr>``. An unknown Source gets a one-cell error row.
     """
     htmx = request.headers.get("HX-Request") == "true"
     try:
-        source = store_set_enabled(
-            conn, source_id, enabled, acknowledge_restricted=acknowledge_restricted
-        )
+        source = store_set_enabled(conn, source_id, enabled)
     except NotFoundError as exc:
         if htmx:
             return render_fragment(
@@ -557,19 +551,6 @@ def _apply_enabled_change(
             conn,
             {"error": str(exc)},
             status_code=404,
-        )
-    except PolicyError as exc:
-        if htmx:
-            return render_fragment(
-                request,
-                "_source_row.html",
-                {"source": get_source(conn, source_id), "row_error": str(exc)},
-            )
-        return _render_sources(
-            request,
-            conn,
-            {"error": str(exc)},
-            status_code=400,
         )
     _notify_sources_changed(request)
     if htmx:
@@ -583,11 +564,8 @@ def enable_source(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
     source_id: str,
-    acknowledge_restricted: Annotated[bool, Form()] = False,
 ) -> Response:
-    return _apply_enabled_change(
-        request, conn, source_id, True, acknowledge_restricted=acknowledge_restricted
-    )
+    return _apply_enabled_change(request, conn, source_id, True)
 
 
 @router.post("/sources/{source_id}/disable", dependencies=[Depends(check_csrf)])
@@ -597,7 +575,7 @@ def disable_source(
     user: Annotated[str, Depends(require_user)],
     source_id: str,
 ) -> Response:
-    return _apply_enabled_change(request, conn, source_id, False, acknowledge_restricted=False)
+    return _apply_enabled_change(request, conn, source_id, False)
 
 
 @router.post("/sources/catalog/update", dependencies=[Depends(check_csrf)])
@@ -671,7 +649,6 @@ def add_custom_source_page(
     category: Annotated[str, Form()] = "malicious",
     csv_column: Annotated[int, Form()] = 0,
     json_keys: Annotated[str, Form()] = "",
-    business_use: Annotated[str, Form()] = "unknown",
 ) -> Response:
     keys = tuple(key.strip() for key in json_keys.split(",") if key.strip())
     try:
@@ -685,7 +662,6 @@ def add_custom_source_page(
             category=category,
             csv_column=csv_column,
             json_keys=keys,
-            business_use=business_use,
         )
     except ValidationError as exc:
         return _render_sources(
@@ -723,7 +699,6 @@ def add_custom_source_page(
                 category=payload.category if payload.role == "blocklist" else "infrastructure",
                 csv_column=payload.csv_column,
                 json_keys=payload.json_keys,
-                business_use=payload.business_use,
                 role=payload.role,
             )
             store_set_enabled(conn, source_id, True)

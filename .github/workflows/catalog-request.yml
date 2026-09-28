@@ -125,7 +125,7 @@ jobs:
             "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$branch"
           body=$(printf '%s\n\n%s\n\n%s\n' \
             "Adds \`$SOURCE_ID\` to the Catalog from #$ISSUE (approved), raises the revision and updates docs/CATALOG.md and CHANGELOG.md." \
-            "Before merging: set \`licence_class\` from the licence (it starts as \`unknown\`), add \`family:\` if the bot noted a shared publisher, and run \`make check\` locally (the Catalog revision test pins a hash)." \
+            "Before merging: add \`family:\` if the bot noted a shared publisher, and run \`make check\` locally (the Catalog revision test pins a hash)." \
             "Pull requests opened by GitHub Actions don't start CI: close and reopen this one to run the checks.")
           url=$(gh pr create --repo "$REPO" --base dev --head "$branch" \
             --title "feat(catalog): add $SOURCE_ID" --body "$body")

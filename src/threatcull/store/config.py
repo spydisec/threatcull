@@ -16,9 +16,9 @@ from datetime import datetime
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from threatcull.catalog import BusinessUse, Category, SourceRole
+from threatcull.catalog import LEGACY_FIELDS, Category, SourceRole
 from threatcull.clock import ts
 from threatcull.indicators import SourceKind
 from threatcull.parsers import SourceFormat
@@ -61,7 +61,6 @@ def export_config(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
                 "format": str(s.format),
                 "kind": str(s.kind),
                 "category": s.category,
-                "business_use": str(s.business_use),
                 "csv_column": s.csv_column,
                 "json_keys": list(s.json_keys),
                 "enabled": s.enabled,
@@ -125,10 +124,17 @@ class _CustomSourceIn(_Strict):
     format: SourceFormat
     kind: SourceKind
     category: Category
-    business_use: BusinessUse = BusinessUse.UNKNOWN
     csv_column: int = Field(default=0, ge=0)
     json_keys: list[str] = Field(default_factory=list)
     enabled: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy(cls, data: Any) -> Any:
+        """Files exported before 2.0 carry business_use; accept and ignore it."""
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if key not in LEGACY_FIELDS}
+        return data
 
 
 class _AllowIn(_Strict):
@@ -253,15 +259,9 @@ def _apply_sources(
             continue
         if source.enabled == enabled:
             continue
-        restricted = str(source.licence_class) == "restricted"
-        set_enabled(conn, source_id, enabled, acknowledge_restricted=True)
+        set_enabled(conn, source_id, enabled)
         verb = "enabled" if enabled else "disabled"
-        note = (
-            " (restricted terms acknowledged in the imported file)"
-            if enabled and restricted
-            else ""
-        )
-        result.applied.append(f"{verb} Source {source_id}{note}")
+        result.applied.append(f"{verb} Source {source_id}")
     seen: set[str] = set()
     for custom in doc.custom_sources:
         if custom.id in seen:
@@ -290,7 +290,6 @@ def _apply_sources(
                 category=custom.category,
                 csv_column=custom.csv_column,
                 json_keys=tuple(custom.json_keys),
-                business_use=custom.business_use,
                 role=custom.role,
             )
         except ValueError as exc:
@@ -298,7 +297,7 @@ def _apply_sources(
             continue
         verb = "added" if existing is None else "updated"
         result.applied.append(f"{verb} custom Source {custom.id}")
-        set_enabled(conn, custom.id, custom.enabled, acknowledge_restricted=True)
+        set_enabled(conn, custom.id, custom.enabled)
 
 
 def _apply_lists(
