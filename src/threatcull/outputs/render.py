@@ -65,6 +65,9 @@ def head(fmt: OutputFormat, ctx: RenderContext, count: int) -> str:
 
 def entry(fmt: OutputFormat, item: ScoredIndicator, ctx: RenderContext, index: int) -> str:
     """One Indicator's text; ``index`` is its 0-based position in the Output."""
+    if "\n" in item.value or "\r" in item.value:
+        # normalize() refuses these; never let one become extra rules in a feed.
+        raise ValueError(f"refusing to publish a value with a line break: {item.value!r}")
     if fmt == "plain":
         return f"{item.value}\n"
     if fmt == "hosts":
