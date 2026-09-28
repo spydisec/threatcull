@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 #
 # Reviews focus on security and correctness in the application code, workflows and
-# container. CI already runs ruff, mypy, pytest, bandit, semgrep, pip-audit, gitleaks,
+# container. CI already runs ruff, mypy, semgrep, pip-audit, gitleaks,
 # Vale and hadolint, so style linters stay off here. The test suite is not in the repo.
 
 language: "en-GB"
@@ -116,11 +116,12 @@ reviews:
         - Must stay a single plain file that works when pasted into a Portainer stack.
         - Never commit a real password; THREATCULL_ADMIN_PASSWORD stays empty.
 
-  # Security scanners only. CI already runs ruff, bandit, semgrep, gitleaks, Vale and
-  # hadolint on every pull request; the duplicates here add review comments, not safety.
+  # Only scanners CI does not already run. CI runs ruff (with its bandit rules), semgrep,
+  # gitleaks, pip-audit, Vale and hadolint on every pull request; duplicates here add review
+  # comments, not safety.
   tools:
     gitleaks:
-      enabled: true
+      enabled: false  # CI scans the full history on every PR
     osvScanner:
       enabled: true
     zizmor:
@@ -132,8 +133,7 @@ reviews:
     shellcheck:
       enabled: true
     semgrep:
-      enabled: true
-      config_file: ".semgrep.yml"
+      enabled: false  # CI runs semgrep with p/python and .semgrep.yml
     github-checks:
       enabled: true
     ruff:

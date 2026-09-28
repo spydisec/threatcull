@@ -107,7 +107,7 @@ def parse_catalog(text: str, *, allow_file_urls: bool = True) -> Catalog:
     """
     try:
         # _NoAliasLoader subclasses yaml.SafeLoader (no Python tags) and refuses aliases.
-        raw = yaml.load(text, Loader=_NoAliasLoader)  # noqa: S506  # nosec B506
+        raw = yaml.load(text, Loader=_NoAliasLoader)  # noqa: S506
     except RecursionError as exc:
         raise CatalogError("the Catalog nests too deeply") from exc
     except yaml.YAMLError as exc:

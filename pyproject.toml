@@ -24,7 +24,6 @@ threatcull = "threatcull.cli:main"
 
 [dependency-groups]
 dev = [
-    "bandit>=1.8",
     "mypy>=1.13",
     "pre-commit>=4.0",
     "pytest>=8.3",

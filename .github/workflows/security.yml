@@ -55,8 +55,6 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen
-      - name: bandit
-        run: uv run bandit -q -r src
       - name: semgrep
         run: uvx semgrep scan --config p/python --config .semgrep.yml --error --metrics off src
       - name: zizmor (workflow security)
