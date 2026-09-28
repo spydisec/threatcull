@@ -140,6 +140,18 @@ _MIGRATIONS: tuple[str, ...] = (
     DROP TABLE home_network;
     PRAGMA user_version = 8;
     """,
+    # 2.0 drops licence data: every Source is a feed the operator chooses to use.
+    # Sources disabled because their terms turned restricted stay disabled, without
+    # the reason that no longer applies.
+    """
+    ALTER TABLE sources DROP COLUMN licence_class;
+    ALTER TABLE sources DROP COLUMN business_use;
+    ALTER TABLE sources DROP COLUMN licence;
+    ALTER TABLE sources DROP COLUMN licence_url;
+    UPDATE sources SET disabled_reason = NULL
+        WHERE disabled_reason = 'Terms changed to restricted; acknowledge to re-enable';
+    PRAGMA user_version = 9;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)

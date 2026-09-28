@@ -20,7 +20,7 @@ from threatcull.home_detect import Candidate, public_ip_candidate
 from threatcull.lookup import LookupResult, lookup
 from threatcull.store.allowlist import AllowlistEntry, add_entry, builtin_entries, operator_entries
 from threatcull.store.allowlist import remove_entry as store_remove_entry
-from threatcull.store.errors import NotFoundError, PolicyError
+from threatcull.store.errors import NotFoundError
 from threatcull.store.outputs import OutputSpec, list_outputs
 from threatcull.store.outputs import rotate_token as store_rotate_token
 from threatcull.store.runs import Run, recent_runs
@@ -54,10 +54,6 @@ def _source_json(source: Source) -> dict[str, Any]:
         "kind": source.kind,
         "role": source.role,
         "category": source.category,
-        "licence_class": source.licence_class.value,
-        "business_use": source.business_use.value,
-        "licence": source.licence,
-        "licence_url": source.licence_url,
         "refresh_minutes": source.refresh_minutes,
         "custom": source.custom,
         "enabled": source.enabled,
@@ -171,13 +167,9 @@ def api_set_source_enabled(
     user: Annotated[str, Depends(require_api_user)],
 ) -> dict[str, Any]:
     try:
-        source = store_set_enabled(
-            conn, source_id, body.enabled, acknowledge_restricted=body.acknowledge_restricted
-        )
+        source = store_set_enabled(conn, source_id, body.enabled)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except PolicyError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     notify_sources_changed(request)
     return _source_json(source)
 

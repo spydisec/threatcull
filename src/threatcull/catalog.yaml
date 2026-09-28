@@ -1,12 +1,11 @@
-# ThreatCull Catalog: Source definitions with licence evidence.
-# Licence facts checked 2026-09-24 against each provider's own terms. Not legal advice.
-# business_use: may a business use this Source to protect its own network?
+# ThreatCull Catalog: public threat feeds ThreatCull can fetch. Each operator
+# decides which Sources to use; ThreatCull downloads them from their publishers.
 # family: Sources from the same upstream share a family and count once in scoring.
 # revision: raise it by one with every change. ThreatCull uses the newest revision
 # it has: the one it shipped with, or one saved by `threatcull catalog update`.
 # requires: the oldest ThreatCull version that understands this file.
-revision: 1
-requires: "1.2.0"
+revision: 2
+requires: "2.0.0"
 sources:
   # ---------------------------------------------------------------- IP blocklists
   - id: feodotracker-ipblocklist
@@ -16,10 +15,6 @@ sources:
     format: plain
     kind: ip
     category: c2
-    licence_class: permissive
-    business_use: allowed
-    licence: CC0 per Feodo Tracker terms; abuse.ch Terms of Use also apply
-    licence_url: https://feodotracker.abuse.ch/blocklist/#tos
     refresh_minutes: 60
     default_enabled: true
 
@@ -30,10 +25,6 @@ sources:
     format: plain
     kind: ip
     category: malicious
-    licence_class: permissive
-    business_use: allowed
-    licence: The Unlicense (compilation; upstream terms vary)
-    licence_url: https://github.com/stamparm/ipsum/blob/master/LICENSE
     refresh_minutes: 1440
     default_enabled: true
 
@@ -43,10 +34,6 @@ sources:
     format: plain
     kind: ip
     category: malicious
-    licence_class: permissive
-    business_use: allowed
-    licence: "Informal grant: use in any way you see fit"
-    licence_url: https://cinsscore.com/
     refresh_minutes: 360
     default_enabled: true
 
@@ -56,10 +43,6 @@ sources:
     format: plain
     kind: ip
     category: malicious
-    licence_class: copyleft
-    business_use: allowed
-    licence: "IPThreat licence (share-alike; credit 'Data provided by IPThreat')"
-    licence_url: https://ipthreat.net/license
     refresh_minutes: 360
 
   - id: blocklist-de-all
@@ -68,10 +51,6 @@ sources:
     format: plain
     kind: ip
     category: malicious
-    licence_class: unknown
-    business_use: unknown
-    licence: No terms published
-    licence_url: https://www.blocklist.de/en/export.html
     refresh_minutes: 360
 
   - id: threatview-ip-high
@@ -80,10 +59,6 @@ sources:
     format: plain
     kind: ip
     category: malicious
-    licence_class: unknown
-    business_use: unknown
-    licence: No terms published (free community tier)
-    licence_url: https://threatview.io/
     refresh_minutes: 1440
 
   - id: et-compromised-ips
@@ -92,10 +67,6 @@ sources:
     format: plain
     kind: ip
     category: malicious
-    licence_class: unknown
-    business_use: unknown
-    licence: ET Open ruleset licence (BSD/GPLv2) does not explicitly cover this list
-    licence_url: https://rules.emergingthreats.net/open/suricata-7.0.3/LICENSE
     refresh_minutes: 1440
 
   - id: botvrij-ip-dst
@@ -104,10 +75,6 @@ sources:
     format: plain
     kind: ip
     category: malicious
-    licence_class: restricted
-    business_use: allowed
-    licence: Free to use and republish; resale forbidden
-    licence_url: https://www.botvrij.eu/
     refresh_minutes: 1440
 
   - id: c2intelfeeds-ip-30d
@@ -117,10 +84,6 @@ sources:
     csv_column: 0
     kind: ip
     category: c2
-    licence_class: noncommercial
-    business_use: forbidden
-    licence: CC BY-NC-SA 4.0
-    licence_url: https://github.com/drb-ra/C2IntelFeeds
     refresh_minutes: 360
 
   - id: greensnow
@@ -129,10 +92,6 @@ sources:
     format: plain
     kind: ip
     category: malicious
-    licence_class: restricted
-    business_use: unknown
-    licence: All rights reserved; reproduction or republication prohibited
-    licence_url: https://greensnow.co/
     refresh_minutes: 360
 
   - id: hagezi-tif-ips
@@ -142,10 +101,6 @@ sources:
     format: plain
     kind: ip
     category: malicious
-    licence_class: copyleft
-    business_use: unknown
-    licence: GPL-3.0 for the compilation; grants no rights in upstream data
-    licence_url: https://github.com/hagezi/dns-blocklists
     refresh_minutes: 1440
 
   # ------------------------------------------------------------ Domain blocklists
@@ -156,10 +111,6 @@ sources:
     format: hosts
     kind: domain
     category: malicious
-    licence_class: permissive
-    business_use: allowed
-    licence: The Unlicense
-    licence_url: https://github.com/blocklistproject/Lists/blob/master/LICENSE
     refresh_minutes: 1440
 
   - id: blocklistproject-phishing
@@ -169,10 +120,6 @@ sources:
     format: hosts
     kind: domain
     category: phishing
-    licence_class: permissive
-    business_use: allowed
-    licence: The Unlicense
-    licence_url: https://github.com/blocklistproject/Lists/blob/master/LICENSE
     refresh_minutes: 1440
     default_enabled: true
 
@@ -183,10 +130,6 @@ sources:
     format: hosts
     kind: domain
     category: malicious
-    licence_class: permissive
-    business_use: allowed
-    licence: The Unlicense
-    licence_url: https://github.com/blocklistproject/Lists/blob/master/LICENSE
     refresh_minutes: 1440
 
   - id: blocklistproject-scam
@@ -196,10 +139,6 @@ sources:
     format: hosts
     kind: domain
     category: spam
-    licence_class: permissive
-    business_use: allowed
-    licence: The Unlicense
-    licence_url: https://github.com/blocklistproject/Lists/blob/master/LICENSE
     refresh_minutes: 1440
 
   - id: blocklistproject-ads
@@ -209,10 +148,6 @@ sources:
     format: hosts
     kind: domain
     category: ads_tracking
-    licence_class: permissive
-    business_use: allowed
-    licence: The Unlicense
-    licence_url: https://github.com/blocklistproject/Lists/blob/master/LICENSE
     refresh_minutes: 1440
     default_enabled: true
 
@@ -223,10 +158,6 @@ sources:
     format: hosts
     kind: domain
     category: ads_tracking
-    licence_class: permissive
-    business_use: allowed
-    licence: The Unlicense
-    licence_url: https://github.com/blocklistproject/Lists/blob/master/LICENSE
     refresh_minutes: 1440
 
   - id: urlhaus-hostfile
@@ -236,10 +167,6 @@ sources:
     format: hosts
     kind: domain
     category: malicious
-    licence_class: permissive
-    business_use: unknown
-    licence: URLhaus data CC0; abuse.ch ToU say for-profit use may require a Spamhaus subscription
-    licence_url: https://abuse.ch/terms-of-use/
     refresh_minutes: 60
 
   - id: stamparm-blackbook
@@ -248,10 +175,6 @@ sources:
     format: plain
     kind: domain
     category: malicious
-    licence_class: permissive
-    business_use: allowed
-    licence: Public domain
-    licence_url: https://github.com/stamparm/blackbook
     refresh_minutes: 1440
 
   - id: digitalside-domains
@@ -260,10 +183,6 @@ sources:
     format: plain
     kind: domain
     category: malicious
-    licence_class: permissive
-    business_use: allowed
-    licence: MIT
-    licence_url: https://github.com/davidonzo/Threat-Intel/blob/master/LICENSE
     refresh_minutes: 1440
 
   - id: hagezi-tif-domains
@@ -273,10 +192,6 @@ sources:
     format: plain
     kind: domain
     category: malicious
-    licence_class: copyleft
-    business_use: unknown
-    licence: GPL-3.0 for the compilation; grants no rights in upstream data
-    licence_url: https://github.com/hagezi/dns-blocklists
     refresh_minutes: 1440
 
   - id: phishing-army-extended
@@ -285,10 +200,6 @@ sources:
     format: plain
     kind: domain
     category: phishing
-    licence_class: noncommercial
-    business_use: forbidden
-    licence: CC BY-NC 4.0
-    licence_url: https://phishing.army/
     refresh_minutes: 360
 
   - id: adaway-hosts
@@ -297,10 +208,6 @@ sources:
     format: hosts
     kind: domain
     category: ads_tracking
-    licence_class: copyleft
-    business_use: allowed
-    licence: GPL-3.0-or-later
-    licence_url: https://github.com/AdAway/adaway.github.io/blob/master/LICENSE.md
     refresh_minutes: 1440
 
   - id: stopforumspam-toxic-domains
@@ -309,10 +216,6 @@ sources:
     format: plain
     kind: domain
     category: spam
-    licence_class: restricted
-    business_use: allowed
-    licence: Commercial internal use only; no mirroring or redistribution
-    licence_url: https://www.stopforumspam.com/license
     refresh_minutes: 1440
 
   - id: durablenapkin-scam
@@ -321,10 +224,6 @@ sources:
     format: hosts
     kind: domain
     category: spam
-    licence_class: permissive
-    business_use: allowed
-    licence: MIT
-    licence_url: https://github.com/durablenapkin/scamblocklist/blob/master/LICENSE
     refresh_minutes: 1440
 
   # -------------------------------------------- Built-in Allowlist (vendor ranges)
@@ -336,10 +235,6 @@ sources:
     kind: ip
     role: allowlist
     category: infrastructure
-    licence_class: unknown
-    business_use: unknown
-    licence: Published by Cloudflare for allowlisting; no explicit licence
-    licence_url: https://www.cloudflare.com/ips/
     refresh_minutes: 1440
     default_enabled: true
 
@@ -351,10 +246,6 @@ sources:
     kind: ip
     role: allowlist
     category: infrastructure
-    licence_class: unknown
-    business_use: unknown
-    licence: Published by Cloudflare for allowlisting; no explicit licence
-    licence_url: https://www.cloudflare.com/ips/
     refresh_minutes: 1440
     default_enabled: true
 
@@ -366,9 +257,5 @@ sources:
     kind: ip
     role: allowlist
     category: infrastructure
-    licence_class: unknown
-    business_use: unknown
-    licence: Published by Fastly for allowlisting; no explicit licence
-    licence_url: https://www.fastly.com/documentation/reference/api/utils/public-ip-list/
     refresh_minutes: 1440
     default_enabled: true

@@ -8,15 +8,37 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+ThreatCull no longer tracks licences: every Source is a public feed, and you decide which ones to
+use. The Catalog gets its own page, and Source suggestions are checked automatically.
+
+**Upgrading from 1.x**
+
+| If you | Now |
+|---|---|
+| Read the Licence or Business use columns on the Sources page | The Feed column links each Source to its list; check the publisher's page. |
+| Run `sources enable --acknowledge-restricted` or `sources add-custom --business-use` | Drop the flag; both are gone. |
+| Read `licence`, `licence_url`, `licence_class` or `business_use` from `/api/v1/sources` | Those fields are gone. |
+| Send `acknowledge_restricted` to `POST /api/v1/sources/{id}` | Send `{"enabled": true}` only; the old field is refused (422). |
+| Parse Output headers | Each Source line reads `name \| feed URL`; JSON `attribution` entries carry `name` and `url`. |
+| Import a configuration file from 1.x | It still imports; `business_use` is ignored. |
+| Stay on 1.x and use **Check for updates** | 1.x refuses the 2.0 Catalog ("needs ThreatCull 2.0.0"). Upgrade the image. |
+
 ### Added
 
 - 📖 **Catalog page.** [docs/CATALOG.md](docs/CATALOG.md) lists every Source with its category,
-  licence, business use and default, explains Catalog updates, and says which Sources are wanted
-  and how to suggest one. The tables are generated from `catalog.yaml` (`make catalog-docs`).
+  feed and default, explains Catalog updates, and says which Sources are wanted and how to suggest
+  one. The tables are generated from `catalog.yaml` (`make catalog-docs`).
 - 🤖 **Checked Catalog suggestions.** The "Add a Source to the Catalog" issue form asks for
   everything a Source needs. A bot downloads the feed, counts the entries ThreatCull would keep,
-  checks the licence link and duplicates, and comments with the result. The `approved` label from a
-  maintainer opens the pull request that adds the Source.
+  looks for duplicates, and comments with the result. The `approved` label from a maintainer opens
+  the pull request that adds the Source.
+
+### Removed
+
+- 🧹 **Licence data.** The Catalog, the database, the Sources page, the API, the CLI and
+  configuration files no longer carry a licence, licence link, licence class or business use, and
+  enabling a Source never asks for an acknowledgement. The Sources page shows a Feed link instead.
+  Output headers still name every contributing Source, with its feed URL.
 
 ## [1.4.0] - 2026-09-26
 

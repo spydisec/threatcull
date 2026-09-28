@@ -16,7 +16,7 @@ serves the result to your firewalls, DNS servers and SIEM.
 sources ──> drop duplicates, private ranges, your allowlist ──> score by source agreement ──> feed URLs
 ```
 
-- [Catalog](docs/CATALOG.md) of blocklist sources with licence details, plus your own sources (URL or local file)
+- [Catalog](docs/CATALOG.md) of public blocklist sources, plus your own sources (URL or local file)
 - Built-in CDN allowlists, your own entries and your own allowlist URLs; mark your own network to
   get an alert when a source lists it
 - Confidence tiers (high, medium, low) from source agreement
@@ -31,8 +31,8 @@ sources ──> drop duplicates, private ranges, your allowlist ──> score by
       <br><sub><b>Dashboard</b></sub>
     </td>
     <td width="33%" align="center">
-      <a href="docs/images/sources-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/sources-dark.webp"><img alt="Sources page listing each blocklist with its licence and status" src="docs/images/sources-light.webp"></picture></a>
-      <br><sub><b>Sources and licences</b></sub>
+      <a href="docs/images/sources-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/sources-dark.webp"><img alt="Sources page listing each blocklist with its feed and status" src="docs/images/sources-light.webp"></picture></a>
+      <br><sub><b>Sources</b></sub>
     </td>
     <td width="33%" align="center">
       <a href="docs/images/lookup-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/lookup-dark.webp"><img alt="Lookup page showing the score and sightings for one IP" src="docs/images/lookup-light.webp"></picture></a>
@@ -141,12 +141,11 @@ uv run threatcull serve --host <lan-ip> --port 6969
 - **Scheduling:** `serve` runs fetches and compiles itself. Don't also run `threatcull run` from `cron`
   on the same data directory.
 
-## Sources and licences
+## Sources
 
-ThreatCull ships no threat data. Each install downloads every source from its publisher, so you accept
-each source's terms. The Sources page shows each licence and links to its terms; read them before you
-rely on a source. Serving outputs to your own devices is your own use; sharing a feed URL with another
-organisation passes the data on, which many licences forbid.
+ThreatCull ships no threat data. Each install downloads every source straight from its publisher, and
+you decide which sources to use. The Sources page links each one to its feed, so you can see who
+publishes it and follow their terms.
 
 ## Development
 

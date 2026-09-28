@@ -30,9 +30,7 @@ notes come from that CHANGELOG.md section.
 ## Catalog Sources
 
 [docs/CATALOG.md](docs/CATALOG.md) lists every Source, the areas where more are wanted and what a
-new one needs. A new Source needs its licence or terms of use: name, link and whether business use
-is allowed. Sources without published terms stay out of the Catalog. Add them as a custom Source
-instead.
+new one needs: a working public feed that adds coverage the Catalog lacks.
 
 Every change to `src/threatcull/catalog.yaml` raises its `revision` by one: installs pick up the
 change with **Check for updates**, and only a higher revision replaces the Catalog they use. Raise

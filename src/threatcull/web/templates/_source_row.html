@@ -10,18 +10,11 @@
     <div class="sub">{{ source.role }} · {{ source.kind }}</div>
   </td>
   <td>
-    <span class="badge">{{ source.licence_class.value }}</span>
-    <div class="sub">
-      {% if source.licence_url %}
-      <a href="{{ source.licence_url }}" rel="noopener noreferrer">{{ source.licence }}</a>
-      {% else %}
-      {{ source.licence }}
-      {% endif %}
-    </div>
-  </td>
-  <td>
-    {%- set use = source.business_use.value -%}
-    <span class="pill pill-{{ {'allowed': 'ok', 'forbidden': 'bad'}.get(use, 'off') }}">{{ use }}</span>
+    {% if source.url.startswith("http") %}
+    <a href="{{ source.url }}" rel="noopener noreferrer">{{ source.url | feed_label }}</a>
+    {% else %}
+    <span class="muted">local file</span>
+    {% endif %}
   </td>
   <td>
     {% if not source.enabled %}
@@ -38,9 +31,6 @@
     {% if source.last_success_at %}<div class="sub nowrap">{{ source.last_success_at | when }}</div>{% endif %}
   </td>
   <td class="actions">
-    {% if row_error is defined and row_error %}
-    <p class="error" role="alert">{{ row_error }}</p>
-    {% endif %}
     {% if source.enabled %}
     <form method="post" action="/sources/{{ source.id }}/disable"
           hx-post="/sources/{{ source.id }}/disable"
@@ -49,15 +39,9 @@
       <button type="submit">Disable</button>
     </form>
     {% else %}
-    {# A restricted licence needs an explicit acknowledgement: the confirm dialog
-       is it, and only a confirmed htmx request carries acknowledge_restricted. #}
     <form method="post" action="/sources/{{ source.id }}/enable"
           hx-post="/sources/{{ source.id }}/enable"
-          hx-target="#source-row-{{ source.id }}" hx-swap="outerHTML"
-          {% if source.licence_class.value == "restricted" %}
-          hx-vals='{"acknowledge_restricted": "true"}'
-          hx-confirm="{{ source.name }} has a restricted licence: {{ source.licence }}. Enable it only if your use follows these terms. I acknowledge the restricted licence."
-          {% endif %}>
+          hx-target="#source-row-{{ source.id }}" hx-swap="outerHTML">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <button type="submit" class="btn-enable">Enable</button>
     </form>

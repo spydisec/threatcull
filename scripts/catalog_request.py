@@ -27,8 +27,8 @@ from pydantic import ValidationError
 
 from threatcull.catalog import Catalog, CatalogEntry, shipped_catalog
 from threatcull.fetcher import USER_AGENT, Fetcher, FetchError, HttpFetcher
-from threatcull.indicators import normalize
-from threatcull.parsers import parse
+from threatcull.indicators import SourceKind, normalize
+from threatcull.parsers import SourceFormat, parse
 from threatcull.web.dashboard import CATEGORY_LABELS
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -36,7 +36,6 @@ CATALOG_YAML = ROOT / "src" / "threatcull" / "catalog.yaml"
 CHANGELOG = ROOT / "CHANGELOG.md"
 MARKER = "<!-- catalog-request-bot -->"
 MAX_FEED_BYTES = 8 * 1024 * 1024
-HTTP_ERROR = 400
 ALLOWLIST_BLOCK = "  # -------------------------------------------- Built-in Allowlist"
 
 _ROLES = {"Blocklist": "blocklist", "Allowlist": "allowlist"}
@@ -46,10 +45,22 @@ _REFRESH = {"Hourly": 60, "Daily": 1440, "Weekly": 10080}
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
+@dataclass(frozen=True)
+class Feed:
+    """What probe_feed needs: enough to download and parse a list."""
+
+    url: str
+    format: SourceFormat
+    kind: SourceKind
+    csv_column: int = 0
+    json_keys: tuple[str, ...] = ()
+
+
 @dataclass
 class Request:
     fields: dict[str, str]
     entry: CatalogEntry | None = None
+    feed: Feed | None = None  # set whenever the feed itself can be checked
     problems: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -86,21 +97,18 @@ def parse_form(body: str) -> dict[str, str]:
 def build_request(fields: dict[str, str], catalog: Catalog) -> Request:
     request = Request(fields)
     get = fields.get
-    name, url, licence_url = get("Source name", ""), get("Feed URL", ""), get("Licence link", "")
-    for label in ("Source name", "Feed URL", "Licence", "Licence link"):
+    name, url = get("Source name", ""), get("Feed URL", "")
+    for label in ("Source name", "Feed URL"):
         if _CONTROL.search(get(label, "")):
             request.problems.append(f"{label} contains control characters.")
     if not url.startswith("https://"):
         request.problems.append("Feed URL must start with https://.")
-    if not licence_url.startswith("https://"):
-        request.problems.append("Licence link must start with https://.")
     choices: dict[str, dict[str, Any]] = {
         "List type": _ROLES,
         "Contains": _KINDS,
         "Category": _CATEGORIES,
         "Update frequency": _REFRESH,
         "Format": {f: f for f in ("plain", "hosts", "adblock", "csv", "json")},
-        "Business use": {b: b for b in ("allowed", "forbidden", "unknown")},
     }
     picked: dict[str, Any] = {}
     for label, options in choices.items():
@@ -118,6 +126,13 @@ def build_request(fields: dict[str, str], catalog: Catalog) -> Request:
                 f"Same publisher as `{listed.id}`: if the lists overlap, give this one "
                 f"`family: {listed.family}` so they count once in the score."
             )
+    if (
+        url.startswith("https://")
+        and not _CONTROL.search(url)
+        and picked["Format"]
+        and picked["Contains"]
+    ):
+        request.feed = Feed(url, picked["Format"], picked["Contains"])
     if request.problems:
         return request
     try:
@@ -130,10 +145,6 @@ def build_request(fields: dict[str, str], catalog: Catalog) -> Request:
                 "kind": picked["Contains"],
                 "role": picked["List type"],
                 "category": picked["Category"],
-                "licence_class": "unknown",
-                "business_use": picked["Business use"],
-                "licence": get("Licence", ""),
-                "licence_url": licence_url,
                 "refresh_minutes": picked["Update frequency"],
             }
         )
@@ -144,7 +155,7 @@ def build_request(fields: dict[str, str], catalog: Catalog) -> Request:
     return request
 
 
-def probe_feed(entry: CatalogEntry, fetch: Fetcher) -> FeedProbe:
+def probe_feed(entry: Feed | CatalogEntry, fetch: Fetcher) -> FeedProbe:
     """Download the feed once and count what ThreatCull would keep from it."""
     try:
         result = fetch(entry.url, etag=None, last_modified=None)
@@ -161,14 +172,6 @@ def probe_feed(entry: CatalogEntry, fetch: Fetcher) -> FeedProbe:
     return FeedProbe(valid, rejected, None)
 
 
-def licence_answers(url: str, client: httpx.Client) -> bool:
-    try:
-        response = client.get(url)
-    except httpx.HTTPError:
-        return False
-    return response.status_code < HTTP_ERROR
-
-
 def entry_yaml(entry: CatalogEntry) -> str:
     data = entry.model_dump(mode="json", exclude={"notes", "json_keys", "csv_column"})
     if entry.json_keys:
@@ -181,7 +184,7 @@ def entry_yaml(entry: CatalogEntry) -> str:
     return "".join(f"  {line}" if line.strip() else line for line in text.splitlines(True))
 
 
-def report(request: Request, probe: FeedProbe | None, *, licence_ok: bool) -> Report:
+def report(request: Request, probe: FeedProbe | None) -> Report:
     lines = [MARKER, "### Catalog check", ""]
     problems = list(request.problems)
     if probe is not None:
@@ -197,19 +200,14 @@ def report(request: Request, probe: FeedProbe | None, *, licence_ok: bool) -> Re
                 f"- ✅ Feed downloaded: **{probe.valid} entries ThreatCull would keep**, "
                 f"{probe.rejected} lines rejected (comments, private or invalid values)."
             )
-    if request.entry is not None:
-        if licence_ok:
-            lines.append("- ✅ Licence link answers.")
-        else:
-            problems.append("Licence link did not answer. Check it opens the publisher's terms.")
     lines += [f"- ❌ {problem}" for problem in problems]
     lines += [f"- 💡 {note}" for note in dict.fromkeys(request.notes)]
     valid = not problems and request.entry is not None
     if valid and request.entry is not None:
         lines += [
             "",
-            "Looks usable. A maintainer checks the licence and adds the `approved` label; a pull",
-            "request with this entry follows. The licence class starts as `unknown` until then.",
+            "Looks usable. A maintainer reviews the list and adds the `approved` label; a pull",
+            "request with this entry follows.",
             "",
             "```yaml",
             entry_yaml(request.entry).rstrip(),
@@ -285,10 +283,8 @@ def main(argv: list[str]) -> int:
     with httpx.Client(
         timeout=20, follow_redirects=True, headers={"User-Agent": USER_AGENT}
     ) as client:
-        entry = request.entry
-        probe = probe_feed(entry, _fetcher(client)) if entry else None
-        licence_ok = entry is not None and licence_answers(entry.licence_url, client)
-        result = report(request, probe, licence_ok=licence_ok)
+        probe = probe_feed(request.feed, _fetcher(client)) if request.feed else None
+        result = report(request, probe)
     if args.report:
         args.report.write_text(result.markdown, encoding="utf-8")
     print(result.markdown)
