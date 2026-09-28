@@ -196,7 +196,7 @@ def serve_by_query_token(
     request: Request,
     name: str,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
-    token: str = "",  # nosec B107 - empty default for a query field, not a credential
+    token: str = "",  # empty default for a query field, not a credential
 ) -> Response:
     return _serve(request, conn, name, token)
 

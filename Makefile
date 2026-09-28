@@ -37,8 +37,7 @@ audit: ## Vulnerability audit of runtime dependencies
 	uv export --frozen --no-dev --no-emit-project --format requirements-txt -o $$tmp >/dev/null && \
 	uvx pip-audit --strict --disable-pip -r $$tmp; status=$$?; rm -f $$tmp; exit $$status
 
-security: audit ## bandit, semgrep, pip-audit, gitleaks
-	uv run bandit -q -r src
+security: audit ## semgrep, pip-audit, gitleaks (ruff runs the bandit rules)
 	uvx semgrep scan --config p/python --config .semgrep.yml --error --metrics off --quiet src
 	uv run pre-commit run gitleaks --all-files
 
