@@ -8,6 +8,18 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-28
+
+The image runs on Python 3.14. Nothing to do when upgrading.
+
+### Changed
+
+- 🐍 **Python 3.14.** The image builds on `dhi.io/python:3.14-dev` and runs on `dhi.io/python:3.14`,
+  both still Docker Hardened Images pinned by digest. Building without a Docker account now uses
+  `python:3.14-slim` for both build arguments.
+- 🔄 **Base images update themselves.** Dependabot now reads the hardened base images and opens a
+  pull request when Docker patches them or a new Python release comes out.
+
 ## [2.1.0] - 2026-09-28
 
 The image now builds on Docker Hardened Images: no shell or package manager inside, and no known
@@ -251,7 +263,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/spydisec/threatcull/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/spydisec/threatcull/compare/v2.0.2...v2.1.0
 [2.0.2]: https://github.com/spydisec/threatcull/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/spydisec/threatcull/compare/v2.0.0...v2.0.1
