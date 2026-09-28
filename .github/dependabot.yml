@@ -1,5 +1,15 @@
 version: 2
 
+# Docker Hardened Images (dhi.io) need a Docker account to read tags. Add
+# DOCKERHUB_USERNAME and DOCKERHUB_TOKEN as Dependabot secrets (Settings > Secrets and
+# variables > Dependabot); Actions secrets are not visible to Dependabot.
+registries:
+  dhi:
+    type: docker-registry
+    url: https://dhi.io
+    username: ${{secrets.DOCKERHUB_USERNAME}}
+    password: ${{secrets.DOCKERHUB_TOKEN}}
+
 updates:
   - package-ecosystem: uv
     directory: /
@@ -64,6 +74,8 @@ updates:
   # Base images in the Dockerfile are pinned by digest; this bumps the digests.
   - package-ecosystem: docker
     directory: /
+    registries:
+      - dhi
     schedule:
       interval: weekly
     target-branch: dev

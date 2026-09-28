@@ -38,7 +38,9 @@ check() { echo "ok: $1"; }
 start -v "${volume}:/data" -e THREATCULL_ADMIN_PASSWORD=smoke-password-123
 wait_healthy && check "healthz answers"
 
-[ "$(docker exec "$name" id -u)" = "10001" ] && check "runs as uid 10001"
+# The runtime image has no shell or coreutils: ask Python for the uid.
+[ "$(docker exec "$name" python -c 'import os; print(os.getuid())')" = "10001" ] \
+  && check "runs as uid 10001"
 docker exec "$name" threatcull --data-dir /data user list | grep -q '^admin' && check "admin created"
 docker exec "$name" threatcull --data-dir /data outputs list | grep -q 'ip-high' \
   && check "default Outputs exist"
