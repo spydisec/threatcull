@@ -1,0 +1,73 @@
+name: Changes
+
+# Called by the other workflows: which kinds of files a pull request touches, so
+# each job can skip work that the change cannot affect. A job skipped with `if:`
+# still satisfies a required status check; a workflow-level `paths:` filter would
+# leave the check pending and block the merge.
+#
+# Everything runs (every output "true") for pushes, schedules and manual runs, for
+# a pull request that changes a workflow, and whenever the file list cannot be read.
+
+on:
+  workflow_call:
+    outputs:
+      python:
+        description: Application code or its dependencies changed
+        value: ${{ jobs.changes.outputs.python }}
+      docker:
+        description: The image or anything built into it changed
+        value: ${{ jobs.changes.outputs.docker }}
+      frontend:
+        description: The TypeScript islands or their bundle changed
+        value: ${{ jobs.changes.outputs.frontend }}
+      prose:
+        description: Markdown or the Vale configuration changed
+        value: ${{ jobs.changes.outputs.prose }}
+      deps:
+        description: pyproject.toml or uv.lock changed
+        value: ${{ jobs.changes.outputs.deps }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      docker: ${{ steps.filter.outputs.docker }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      prose: ${{ steps.filter.outputs.prose }}
+      deps: ${{ steps.filter.outputs.deps }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          all() {
+            for name in python docker frontend prose deps; do
+              echo "$name=true" >> "$GITHUB_OUTPUT"
+            done
+            exit 0
+          }
+          [ "$EVENT" = "pull_request" ] || all
+          files=$(gh pr diff "$PR" --repo "$REPO" --name-only) || all
+          printf '%s\n' "$files"
+          grep -qE '^\.github/workflows/' <<< "$files" && all
+          match() { grep -qE "$1" <<< "$files" && echo true || echo false; }
+          app='^(src/|pyproject\.toml$|uv\.lock$|\.semgrep\.yml$)'
+          {
+            echo "python=$(match "$app")"
+            echo "docker=$(match "$app|^(Dockerfile|\.dockerignore|docker-compose\.yaml|\.grype\.yaml)$|^scripts/")"
+            echo "frontend=$(match '^frontend/|^src/threatcull/web/static/islands\.js$')"
+            echo "prose=$(match '\.md$|^\.vale\.ini$|^\.vale/')"
+            echo "deps=$(match '^(pyproject\.toml|uv\.lock)$')"
+          } >> "$GITHUB_OUTPUT"
