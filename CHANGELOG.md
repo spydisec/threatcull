@@ -8,15 +8,25 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-28
+
+A new Catalog Source, owner-only approval for Catalog suggestions, and releases that also work when
+made in the GitHub Release UI. Nothing to do when upgrading from 2.0.0.
+
 ### Added
 
-- 🆕 **New Catalog Source: BlackHole TODAY IPs.** An IP blocklist (`blackhole-today-ips`), disabled until you enable it. [#28](https://github.com/spydisec/threatcull/issues/28)
+- 🆕 **New Catalog Source: BlackHole TODAY IPs.** An IP blocklist (`blackhole-today-ips`) of
+  about 7,000 addresses, disabled until you enable it. Installs on 2.0.0 already get it with
+  **Check for updates**. [#28](https://github.com/spydisec/threatcull/issues/28)
 
 ### Changed
 
 - 🔏 **Only the owner approves Catalog suggestions.** The `approved` label opens the pull request
   only when the repository owner adds it; the bot removes it when others add it. Approval also closes
   the issue.
+- 🏷️ **Releases from the GitHub Release UI build the image.** The tag sets the version: when
+  `pyproject.toml` still has the previous one, the Release workflow builds the tagged version and
+  warns instead of stopping. Without a CHANGELOG.md section the release keeps its own notes.
 
 ## [2.0.0] - 2026-09-28
 
@@ -214,7 +224,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/spydisec/threatcull/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/spydisec/threatcull/compare/v1.4.0...v2.0.0
 [1.4.0]: https://github.com/spydisec/threatcull/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/spydisec/threatcull/compare/v1.2.0...v1.3.0
