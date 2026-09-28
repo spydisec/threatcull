@@ -21,7 +21,7 @@ _HOSTS_SKIP = frozenset(
         "broadcasthost",
         "ip6-localhost",
         "ip6-loopback",
-        "0.0.0.0",  # noqa: S104  # nosec B104 - hosts-file sink address, not a bind address
+        "0.0.0.0",  # noqa: S104 - hosts-file sink address, not a bind address
     }
 )
 

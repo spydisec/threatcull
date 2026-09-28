@@ -194,7 +194,7 @@ def parse_config(data: bytes) -> ConfigDocument:
         raise ConfigError("the file is not UTF-8 text") from exc
     try:
         # _NoAliasLoader subclasses yaml.SafeLoader (no Python tags) and refuses aliases.
-        raw = yaml.load(text, Loader=_NoAliasLoader)  # noqa: S506  # nosec B506
+        raw = yaml.load(text, Loader=_NoAliasLoader)  # noqa: S506
     except RecursionError as exc:  # e.g. 200,000 "[" in a row: fits in 1 MiB
         raise ConfigError("the file nests too deeply to be a ThreatCull configuration") from exc
     except yaml.YAMLError as exc:

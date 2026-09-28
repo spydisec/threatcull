@@ -16,7 +16,7 @@ from threatcull.store.errors import NotFoundError
 
 log = logging.getLogger(__name__)
 
-TOKEN_PREFIX = "tc_"  # noqa: S105  # nosec B105 - a public prefix, not a secret
+TOKEN_PREFIX = "tc_"  # noqa: S105 - a public prefix, not a secret
 _NAME = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 # last_used_at is informational: refresh it at most this often per token, so a
 # busy script doesn't cost a database write on every request.
