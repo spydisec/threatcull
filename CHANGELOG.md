@@ -8,6 +8,11 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-09-28
+
+A security fix for domain feeds in `csv` or `json` format. Upgrading is recommended; nothing else
+to do.
+
 ### Security
 
 - 🧱 **Line breaks can't reach Outputs.** A `csv` or `json` feed could list a domain containing a line
@@ -232,7 +237,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/spydisec/threatcull/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/spydisec/threatcull/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/spydisec/threatcull/compare/v1.4.0...v2.0.0
 [1.4.0]: https://github.com/spydisec/threatcull/compare/v1.3.0...v1.4.0
