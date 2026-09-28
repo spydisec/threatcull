@@ -4,7 +4,7 @@
 # revision: raise it by one with every change. ThreatCull uses the newest revision
 # it has: the one it shipped with, or one saved by `threatcull catalog update`.
 # requires: the oldest ThreatCull version that understands this file.
-revision: 2
+revision: 3
 requires: "2.0.0"
 sources:
   # ---------------------------------------------------------------- IP blocklists
@@ -225,6 +225,16 @@ sources:
     kind: domain
     category: spam
     refresh_minutes: 1440
+
+  - id: blackhole-today-ips
+    name: BlackHole TODAY IPs
+    url: https://blackhole.monster/blackhole-today
+    format: plain
+    kind: ip
+    role: blocklist
+    category: malicious
+    refresh_minutes: 1440
+    default_enabled: false
 
   # -------------------------------------------- Built-in Allowlist (vendor ranges)
   - id: cloudflare-ipv4
