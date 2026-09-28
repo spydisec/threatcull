@@ -17,6 +17,7 @@ use. The Catalog gets its own page, and Source suggestions are checked automatic
 
 | If you | Now |
 |---|---|
+| Use the `:1` image tag (the 1.x compose file) | Change it to `:2` in your compose file or Portainer stack; `:1` stays on 1.x. |
 | Read the Licence or Business use columns on the Sources page | The Feed column links each Source to its list; check the publisher's page. |
 | Run `sources enable --acknowledge-restricted` or `sources add-custom --business-use` | Drop the flag; both are gone. |
 | Read `licence`, `licence_url`, `licence_class` or `business_use` from `/api/v1/sources` | Those fields are gone. |

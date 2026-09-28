@@ -92,7 +92,7 @@ in the web UI to see its UTC value.
 docker compose pull && docker compose up -d
 ```
 
-The `:1` tag follows 1.x releases. Pin a version such as `:1.0.0` to upgrade by hand. Sources you
+The `:2` tag follows 2.x releases. Pin a version such as `:2.0.0` to upgrade by hand. Sources you
 disabled stay disabled.
 
 **Catalog only:** to pick up new or corrected sources between releases, use **Check for updates**
