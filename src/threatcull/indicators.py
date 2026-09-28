@@ -63,7 +63,11 @@ _SPECIAL_BOUNDS: dict[int, tuple[tuple[int, int], ...]] = {
     for version, ranges in _SPECIAL_PURPOSE.items()
 }
 
-_LABEL = re.compile(r"^(?!-)[a-z0-9_-]{1,63}(?<!-)$")
+# Used with fullmatch: "$" alone also matches before a trailing newline.
+_LABEL = re.compile(r"(?!-)[a-z0-9_-]{1,63}(?<!-)")
+# Whitespace or control characters inside a value (after trimming the ends) would
+# become extra lines in a published Output.
+_INNER_SPACE_OR_CONTROL = re.compile(r"[\s\x00-\x1f\x7f]")
 _MAX_DOMAIN_LENGTH = 253
 _MIN_LABELS = 2
 
@@ -77,7 +81,7 @@ class Indicator:
 def normalize(raw: str, source_kind: SourceKind) -> Indicator | None:
     """Return the canonical Indicator for ``raw``, or None if it is invalid or not public."""
     text = raw.strip()
-    if not text:
+    if not text or _INNER_SPACE_OR_CONTROL.search(text):
         return None
     if source_kind == "ip":
         return _normalize_ip(text)
@@ -134,6 +138,6 @@ def _normalize_domain(text: str) -> Indicator | None:
     labels = candidate.split(".")
     if len(candidate) > _MAX_DOMAIN_LENGTH or len(labels) < _MIN_LABELS:
         return None
-    if not all(_LABEL.match(label) for label in labels) or labels[-1].isdigit():
+    if not all(_LABEL.fullmatch(label) for label in labels) or labels[-1].isdigit():
         return None
     return Indicator(candidate, "domain")

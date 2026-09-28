@@ -8,6 +8,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Security
+
+- 🧱 **Line breaks can't reach Outputs.** A `csv` or `json` feed could list a domain containing a line
+  break (for example `"google\n.com\n.zz.zz"`): it passed validation and each part became its own
+  line in plain, hosts, AdGuard and RPZ Outputs, which could add broad blocking rules past the
+  allowlist. Values with whitespace or control characters inside are now rejected, and the Output
+  writer refuses a line break as a last check. Found in an internal security review.
+
 ## [2.0.1] - 2026-09-28
 
 A new Catalog Source, owner-only approval for Catalog suggestions, and releases that also work when
