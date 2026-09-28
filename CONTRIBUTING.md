@@ -23,9 +23,14 @@ passwords, hostnames and addresses from your own network.
 
 ## Releases
 
-The release pull request renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and bumps the
-version in `pyproject.toml`. Pushing the `vX.Y.Z` tag publishes the image, and the GitHub release
-notes come from that CHANGELOG.md section.
+The usual way: a release pull request renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and
+bumps the version in `pyproject.toml`; after it reaches `main`, pushing the `vX.Y.Z` tag publishes the
+image and the GitHub release, with its notes taken from that CHANGELOG.md section.
+
+A release made in the GitHub Release UI works too: tag `vX.Y.Z` on `main`. The Release workflow
+builds that version even if `pyproject.toml` still has the previous one (it warns), and keeps the
+notes written in the UI when CHANGELOG.md has no section for the version. Bump `pyproject.toml` in the
+next pull request.
 
 ## Catalog Sources
 

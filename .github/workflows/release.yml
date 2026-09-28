@@ -20,15 +20,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Tag matches the project version
+      # The tag is the version. A release made in the GitHub Release UI does not bump
+      # pyproject.toml, so the build uses the tag's version and says so instead of
+      # failing; the next pull request should bump pyproject.toml to match.
+      - name: Version from the tag
         id: version
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
-          if [ "$TAG" != "v$version" ]; then
-            echo "tag $TAG does not match pyproject.toml version $version" >&2
+          version=${TAG#v}
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([a-z]+[0-9]+)?$ ]]; then
+            echo "tag $TAG is not vX.Y.Z (or vX.Y.ZrcN)" >&2
             exit 1
+          fi
+          project=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          if [ "$project" != "$version" ]; then
+            echo "::warning::pyproject.toml says $project; building $version from the tag. Bump pyproject.toml in the next pull request."
+            sed -i "0,/^version = \".*\"/s//version = \"$version\"/" pyproject.toml
           fi
           image=ghcr.io/spydisec/threatcull
           tags="$image:$version"
@@ -43,7 +51,8 @@ jobs:
             echo "$tags"
             echo "TAGS_EOF"
           } >> "$GITHUB_OUTPUT"
-      - name: CHANGELOG.md has a section for this version
+      - name: Release notes from CHANGELOG.md, if it has this version
+        id: notes
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -52,9 +61,11 @@ jobs:
             found && /^## \[/ { exit }
             found { print }
           ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
-          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
-            echo "CHANGELOG.md has no '## [$VERSION]' section" >&2
-            exit 1
+          if grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::CHANGELOG.md has no '## [$VERSION]' section; the release keeps its own notes."
+            echo "found=false" >> "$GITHUB_OUTPUT"
           fi
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -82,12 +93,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
           VERSION: ${{ steps.version.outputs.version }}
+          CHANGELOG_NOTES: ${{ steps.notes.outputs.found }}
         run: |
+          notes=(--generate-notes)
+          [ "$CHANGELOG_NOTES" = "true" ] && notes=(--notes-file "$RUNNER_TEMP/notes.md")
           flags=()
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || flags+=(--prerelease)
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
+            # Made in the Release UI: keep its notes unless CHANGELOG.md has this version.
+            if [ "$CHANGELOG_NOTES" = "true" ]; then
+              gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
+            fi
           else
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
-              --title "ThreatCull $VERSION" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"
+              --title "ThreatCull $VERSION" "${notes[@]}" "${flags[@]}"
           fi
