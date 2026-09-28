@@ -29,8 +29,9 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           version=${TAG#v}
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([a-z]+[0-9]+)?$ ]]; then
-            echo "tag $TAG is not vX.Y.Z (or vX.Y.ZrcN)" >&2
+          # X.Y.Z, or a Python pre-release: X.Y.ZaN, X.Y.ZbN or X.Y.ZrcN.
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+)?$ ]]; then
+            echo "tag $TAG is not vX.Y.Z, vX.Y.ZaN, vX.Y.ZbN or vX.Y.ZrcN" >&2
             exit 1
           fi
           project=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
