@@ -55,7 +55,7 @@ ignore = ["PLR0913", "TRY003"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
-files = ["src", "tests"]
+files = ["src", "scripts", "tests"]
 mypy_path = "src"
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]

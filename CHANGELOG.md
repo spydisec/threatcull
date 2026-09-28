@@ -8,6 +8,16 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Added
+
+- 📖 **Catalog page.** [docs/CATALOG.md](docs/CATALOG.md) lists every Source with its category,
+  licence, business use and default, explains Catalog updates, and says which Sources are wanted
+  and how to suggest one. The tables are generated from `catalog.yaml` (`make catalog-docs`).
+- 🤖 **Checked Catalog suggestions.** The "Add a Source to the Catalog" issue form asks for
+  everything a Source needs. A bot downloads the feed, counts the entries ThreatCull would keep,
+  checks the licence link and duplicates, and comments with the result. The `approved` label from a
+  maintainer opens the pull request that adds the Source.
+
 ## [1.4.0] - 2026-09-26
 
 The web UI can show times in your own timezone, and the README shows what ThreatCull looks like.

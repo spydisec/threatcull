@@ -60,4 +60,10 @@ repos:
         entry: uvx vale
         language: system
         types: [markdown]
-        files: ^(README\.md|\.github/)
+        files: ^(README\.md|SECURITY\.md|CONTRIBUTING\.md|CHANGELOG\.md|docs/CATALOG\.md|\.github/)
+      - id: catalog-docs
+        name: docs/CATALOG.md matches catalog.yaml
+        entry: uv run python scripts/catalog_docs.py --check
+        language: system
+        pass_filenames: false
+        files: ^(src/threatcull/catalog\.yaml|docs/CATALOG\.md|scripts/catalog_docs\.py)$
