@@ -12,7 +12,7 @@ on:
   workflow_call:
     outputs:
       python:
-        description: Application code or its dependencies changed
+        description: Application code, repo scripts or their dependencies changed
         value: ${{ jobs.changes.outputs.python }}
       docker:
         description: The image or anything built into it changed
@@ -65,7 +65,7 @@ jobs:
           match() { grep -qE "$1" <<< "$files" && echo true || echo false; }
           app='^(src/|pyproject\.toml$|uv\.lock$|\.semgrep\.yml$)'
           {
-            echo "python=$(match "$app")"
+            echo "python=$(match "$app|^scripts/.*\.py$")"
             echo "docker=$(match "$app|^(Dockerfile|\.dockerignore|docker-compose\.yaml|\.grype\.yaml|scripts/docker-smoke\.sh)$")"
             echo "frontend=$(match '^frontend/|^src/threatcull/web/static/islands\.js$')"
             echo "prose=$(match '\.md$|^\.vale\.ini$|^\.vale/')"

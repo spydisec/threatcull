@@ -1,0 +1,132 @@
+name: Catalog request
+
+# Catalog suggestions from the "Add a Source to the Catalog" issue form.
+#
+# validate: on open, edit or reopen, check the form, download the feed once and
+#   parse it with ThreatCull's own parser, then post one comment with the result
+#   and label the issue catalog-valid or needs-info.
+# propose: when a maintainer adds the "approved" label, open a pull request that
+#   adds the entry to catalog.yaml, raises the revision and updates the docs.
+#
+# The issue body is untrusted: it reaches the script only through a file, and the
+# script validates it against the Catalog schema before writing anything.
+
+on:
+  issues:
+    types: [opened, edited, reopened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-request-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: >-
+      github.event.action != 'labeled' &&
+      github.event.issue.state == 'open' &&
+      contains(github.event.issue.labels.*.name, 'catalog')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --no-dev
+      - name: Check the suggestion
+        id: check
+        env:
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          printf '%s' "$BODY" > "$RUNNER_TEMP/body.md"
+          if uv run python scripts/catalog_request.py validate \
+              --body-file "$RUNNER_TEMP/body.md" --report "$RUNNER_TEMP/report.md"; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Comment and label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          VALID: ${{ steps.check.outputs.valid }}
+        run: |
+          set -euo pipefail
+          # Update the bot's earlier comment instead of adding a new one per edit.
+          existing=$(gh api "repos/$REPO/issues/$ISSUE/comments" --paginate \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- catalog-request-bot -->")))][0].id // empty')
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -F body=@"$RUNNER_TEMP/report.md" >/dev/null
+          else
+            gh issue comment "$ISSUE" --repo "$REPO" --body-file "$RUNNER_TEMP/report.md"
+          fi
+          if [ "$VALID" = "true" ]; then
+            gh issue edit "$ISSUE" --repo "$REPO" --add-label catalog-valid --remove-label needs-info
+          else
+            gh issue edit "$ISSUE" --repo "$REPO" --add-label needs-info --remove-label catalog-valid
+          fi
+
+  propose:
+    if: >-
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'approved' &&
+      contains(github.event.issue.labels.*.name, 'catalog')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dev
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --no-dev
+      - name: Add the entry, raise the revision, update the docs
+        id: apply
+        env:
+          BODY: ${{ github.event.issue.body }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$BODY" > "$RUNNER_TEMP/body.md"
+          result=$(uv run python scripts/catalog_request.py apply \
+            --body-file "$RUNNER_TEMP/body.md" --issue "$ISSUE")
+          uv run python scripts/catalog_docs.py
+          echo "id=$(jq -r .id <<< "$result")" >> "$GITHUB_OUTPUT"
+      - name: Open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          SOURCE_ID: ${{ steps.apply.outputs.id }}
+        run: |
+          set -euo pipefail
+          branch="catalog/issue-$ISSUE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add src/threatcull/catalog.yaml docs/CATALOG.md CHANGELOG.md
+          git commit -q -m "feat(catalog): add $SOURCE_ID" -m "Closes #$ISSUE"
+          git push -q --force-with-lease \
+            "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$branch"
+          body=$(printf '%s\n\n%s\n\n%s\n' \
+            "Adds \`$SOURCE_ID\` to the Catalog from #$ISSUE (approved), raises the revision and updates docs/CATALOG.md and CHANGELOG.md." \
+            "Before merging: set \`licence_class\` from the licence (it starts as \`unknown\`), add \`family:\` if the bot noted a shared publisher, and run \`make check\` locally (the Catalog revision test pins a hash)." \
+            "Pull requests opened by GitHub Actions don't start CI: close and reopen this one to run the checks.")
+          url=$(gh pr create --repo "$REPO" --base dev --head "$branch" \
+            --title "feat(catalog): add $SOURCE_ID" --body "$body")
+          gh issue comment "$ISSUE" --repo "$REPO" --body "Approved. Pull request: $url"

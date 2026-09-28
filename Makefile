@@ -26,7 +26,7 @@ format: ## Apply Ruff formatting and safe fixes
 	uv run ruff check --fix .
 
 types: ## mypy --strict (src, plus tests/ when it exists locally)
-	@if [ -d tests ]; then uv run mypy; else uv run mypy src; fi
+	@if [ -d tests ]; then uv run mypy; else uv run mypy src scripts; fi
 
 test: ## Tests with coverage (offline); tests/ lives on the maintainer's machine only
 	@if [ -d tests ]; then uv run pytest --cov --cov-report=term-missing; \

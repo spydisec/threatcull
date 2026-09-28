@@ -1,18 +1,29 @@
 name: Add a Source to the Catalog
 description: Suggest a public blocklist or allowlist for the built-in Catalog.
+title: "Catalog: "
 labels: ["catalog", "needs-triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        A bot checks the feed and the licence link within a few minutes and comments with what it
+        found. A maintainer then reviews it; an approved Source arrives through a pull request.
+        See [docs/CATALOG.md](https://github.com/spydisec/threatcull/blob/main/docs/CATALOG.md)
+        for what a Source needs.
+  - type: input
+    id: name
+    attributes:
+      label: Source name
+      description: Publisher and list, as people know it.
+      placeholder: "Example Security bad IPs (30 days)"
+    validations:
+      required: true
   - type: input
     id: url
     attributes:
       label: Feed URL
-    validations:
-      required: true
-  - type: input
-    id: licence
-    attributes:
-      label: Licence or terms of use (link)
-      description: The Catalog only lists Sources with published terms. Link them here.
+      description: The raw list itself (https), not the project page.
+      placeholder: "https://example.com/feeds/bad-ips.txt"
     validations:
       required: true
   - type: dropdown
@@ -24,7 +35,82 @@ body:
         - Allowlist
     validations:
       required: true
-  - type: textarea
-    id: why
+  - type: dropdown
+    id: kind
     attributes:
-      label: What does it cover, and how often is it updated?
+      label: Contains
+      options:
+        - IPs and CIDRs
+        - Domains
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Format
+      description: plain is one value per line; hosts is "0.0.0.0 domain"; adblock is "||domain^".
+      options:
+        - plain
+        - hosts
+        - adblock
+        - csv
+        - json
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: For allowlists, pick Infrastructure.
+      options:
+        - Malicious
+        - C2
+        - Scanners
+        - Phishing
+        - Spam / scam
+        - Ads / tracking
+        - Infrastructure
+    validations:
+      required: true
+  - type: input
+    id: licence
+    attributes:
+      label: Licence
+      description: The licence name or a one-line summary of the terms.
+      placeholder: "CC BY-SA 4.0"
+    validations:
+      required: true
+  - type: input
+    id: licence_url
+    attributes:
+      label: Licence link
+      description: The terms on the publisher's own site (https).
+      placeholder: "https://example.com/terms"
+    validations:
+      required: true
+  - type: dropdown
+    id: business_use
+    attributes:
+      label: Business use
+      description: Do the terms let a business use the list to protect its own network?
+      options:
+        - allowed
+        - forbidden
+        - unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: refresh
+    attributes:
+      label: Update frequency
+      options:
+        - Hourly
+        - Daily
+        - Weekly
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: What it covers, false-positive handling, CSV column or JSON keys if needed.

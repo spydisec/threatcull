@@ -97,7 +97,14 @@ Every value on an enabled allowlist is kept out of all Outputs.
 Open an issue with the
 [Add a Source to the Catalog](https://github.com/spydisec/threatcull/issues/new?template=source_request.yml)
 form. [Open requests](https://github.com/spydisec/threatcull/issues?q=is%3Aopen+label%3Acatalog)
-carry the `catalog` label.
+carry the `catalog` label. What happens next:
+
+1. **Automated check, within minutes.** A bot downloads the feed once, parses it the way
+   ThreatCull would, checks the licence link and looks for duplicates. It comments with the
+   result and labels the issue `catalog-valid` or `needs-info`. Edit the issue to run it again.
+2. **Review.** A maintainer reads the terms, sets the licence class and adds the `approved` label.
+3. **Pull request.** The `approved` label opens a pull request that adds the Source, raises the
+   Catalog revision and updates this page. Once merged, installs get it with **Check for updates**.
 
 A Source joins the Catalog when it has:
 
