@@ -13,7 +13,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    uses: $/.github/workflows/changes.yml
+    permissions:
+      contents: read
+      pull-requests: read
+
   lint:
+    needs: changes
+    # Runs when the change can affect it, and always if the changes check failed.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.python == 'true' || needs.changes.outputs.prose == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -23,19 +32,27 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           enable-cache: true
-      - run: uv sync --frozen
+      - if: ${{ needs.changes.result != 'success' || needs.changes.outputs.python == 'true' }}
+        run: uv sync --frozen
       - name: Ruff format
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.python == 'true' }}
         run: uv run ruff format --check .
       - name: Ruff lint
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.python == 'true' }}
         run: uv run ruff check .
       - name: mypy (strict)
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.python == 'true' }}
         run: uv run mypy src # tests/ is local only
       - name: Vale (prose in pushed Markdown)
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.prose == 'true' }}
         run: |
           uvx vale sync
           uvx vale README.md SECURITY.md CONTRIBUTING.md CHANGELOG.md .github
 
   islands:
+    needs: changes
+    # Runs when the change can affect it, and always if the changes check failed.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.frontend == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
