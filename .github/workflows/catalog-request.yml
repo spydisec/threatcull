@@ -5,8 +5,9 @@ name: Catalog request
 # validate: on open, edit or reopen, check the form, download the feed once and
 #   parse it with ThreatCull's own parser, then post one comment with the result
 #   and label the issue catalog-valid or needs-info.
-# propose: when a maintainer adds the "approved" label, open a pull request that
-#   adds the entry to catalog.yaml, raises the revision and updates the docs.
+# propose: when the repository owner adds the "approved" label, open a pull request
+#   that adds the entry to catalog.yaml, raises the revision and updates the docs, then
+#   close the issue. refuse: anyone else's "approved" label is removed again.
 #
 # The issue body is untrusted: it reaches the script only through a file, and the
 # script validates it against the Catalog schema before writing anything.
@@ -75,11 +76,36 @@ jobs:
             gh issue edit "$ISSUE" --repo "$REPO" --add-label needs-info --remove-label catalog-valid
           fi
 
+  # Only the repository owner approves Catalog additions; anyone else's "approved"
+  # label is taken off again.
+  refuse:
+    if: >-
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'approved' &&
+      contains(github.event.issue.labels.*.name, 'catalog') &&
+      github.event.sender.login != github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Remove the label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          gh issue edit "$ISSUE" --repo "$REPO" --remove-label approved
+          gh issue comment "$ISSUE" --repo "$REPO" \
+            --body "Only @$OWNER can approve Catalog additions, so the \`approved\` label was removed."
+
   propose:
     if: >-
       github.event.action == 'labeled' &&
       github.event.label.name == 'approved' &&
-      contains(github.event.issue.labels.*.name, 'catalog')
+      contains(github.event.issue.labels.*.name, 'catalog') &&
+      github.event.sender.login == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -129,4 +155,6 @@ jobs:
             "Pull requests opened by GitHub Actions don't start CI: close and reopen this one to run the checks.")
           url=$(gh pr create --repo "$REPO" --base dev --head "$branch" \
             --title "feat(catalog): add $SOURCE_ID" --body "$body")
-          gh issue comment "$ISSUE" --repo "$REPO" --body "Approved. Pull request: $url"
+          # The suggestion is done once approved: the pull request carries it from here.
+          gh issue close "$ISSUE" --repo "$REPO" --reason completed \
+            --comment "Approved. Pull request: $url"

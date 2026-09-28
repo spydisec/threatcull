@@ -7,7 +7,8 @@ body:
     attributes:
       value: |
         A bot downloads the feed within a few minutes, counts the entries ThreatCull would keep and
-        comments with what it found. A maintainer then reviews it; an approved Source arrives through a pull request.
+        comments with what it found. The project owner then reviews it; approval closes the issue and
+        opens a pull request that adds the Source.
         See [docs/CATALOG.md](https://github.com/spydisec/threatcull/blob/main/docs/CATALOG.md)
         for what a Source needs.
   - type: input
