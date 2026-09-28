@@ -1,7 +1,7 @@
 # ThreatCull
 
 [![Release](https://img.shields.io/github/v/release/spydisec/threatcull?sort=semver)](https://github.com/spydisec/threatcull/releases/latest)
-[![Tests](https://github.com/spydisec/threatcull/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/spydisec/threatcull/actions/workflows/test.yml)
+[![CodeRabbit Reviews](https://img.shields.io/coderabbit/prs/github/spydisec/threatcull?labelColor=171717&color=FF570A&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 [![Image scan](https://github.com/spydisec/threatcull/actions/workflows/image-scan.yml/badge.svg)](https://github.com/spydisec/threatcull/actions/workflows/image-scan.yml)
 [![Container image](https://img.shields.io/badge/ghcr.io-spydisec%2Fthreatcull-2496ED?logo=docker&logoColor=white)](https://github.com/spydisec/threatcull/pkgs/container/threatcull)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
