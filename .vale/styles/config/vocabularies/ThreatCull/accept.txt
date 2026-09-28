@@ -25,3 +25,4 @@ IPs
 CVEs
 SBOMs
 uid
+Dependabot

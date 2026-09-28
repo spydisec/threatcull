@@ -7,15 +7,15 @@
 # and package tools for the build stage; the runtime variant has neither, runs no
 # shell and ships signed SBOMs, provenance and VEX. Pulling needs `docker login dhi.io`
 # (a free Docker account); ThreatCull users pull the finished image from ghcr.io.
-# Building without a Docker account: pass python:3.13-slim for both build arguments;
+# Building without a Docker account: pass python:3.14-slim for both build arguments;
 # BuildKit then skips the dhi-* stages and never contacts dhi.io.
 # The DHI images sit in plain FROM lines, pinned by multi-arch digest, so Dependabot can
 # see and update them (it does not follow FROM ${ARG}).
 ARG PYTHON_BUILD_IMAGE=dhi-build
 ARG PYTHON_RUNTIME_IMAGE=dhi-runtime
 
-FROM dhi.io/python:3.13-dev@sha256:d13087cbaf5f8c68c4baac88ea22e4a5f87ac179a9e7004f3484558154b2e344 AS dhi-build
-FROM dhi.io/python:3.13@sha256:be3c790e05dd0a4b9f15c76846a2146a75833b3ed4d1fe11e7828fd27446cedd AS dhi-runtime
+FROM dhi.io/python:3.14-dev@sha256:42cd56dede69350b250398097287cbf1020d0ead0ad8cb4e179bd3bac1a98634 AS dhi-build
+FROM dhi.io/python:3.14@sha256:e1a5bd571d9585d7eb80c8278b54b69a0e0bf5a9bb2b1424b9e4576374df6659 AS dhi-runtime
 
 FROM ghcr.io/astral-sh/uv:0.12.19@sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424 AS uv
 
