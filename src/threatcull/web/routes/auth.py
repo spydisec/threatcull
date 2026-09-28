@@ -52,7 +52,7 @@ def login(
     request: Request,
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     username: Annotated[str, Form()] = "",
-    password: Annotated[str, Form()] = "",  # nosec B107 - empty default for a form field, not a credential
+    password: Annotated[str, Form()] = "",  # empty default for a form field, not a credential
 ) -> Response:
     limiter: LoginRateLimiter = request.app.state.login_limiter
     slots: threading.BoundedSemaphore = request.app.state.login_verify_slots

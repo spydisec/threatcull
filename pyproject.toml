@@ -1,6 +1,6 @@
 [project]
 name = "threatcull"
-version = "2.0.2"
+version = "2.1.0"
 description = "Self-hosted threat-feed compiler: cull the noise, block the threats."
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -24,7 +24,6 @@ threatcull = "threatcull.cli:main"
 
 [dependency-groups]
 dev = [
-    "bandit>=1.8",
     "mypy>=1.13",
     "pre-commit>=4.0",
     "pytest>=8.3",

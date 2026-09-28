@@ -22,3 +22,6 @@ semgrep
 gitleaks
 Grype
 IPs
+CVEs
+SBOMs
+uid
