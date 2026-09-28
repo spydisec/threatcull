@@ -3,11 +3,18 @@
 # ThreatCull: one container, data on the /data volume. The image holds the software
 # and the Catalog only: no threat data, database, session secret or configuration.
 
-ARG PYTHON_IMAGE=python:3.13-slim-trixie@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b
+# Docker Hardened Images (https://docs.docker.com/dhi/): the -dev variant has a shell
+# and package tools for the build stage; the runtime variant has neither, runs no
+# shell and ships signed SBOMs, provenance and VEX. Pulling needs `docker login dhi.io`
+# (a free Docker account); ThreatCull users pull the finished image from ghcr.io.
+# Building without a Docker account: pass python:3.13-slim for both build arguments.
+# Pinned by digest (multi-arch); Dependabot keeps them fresh.
+ARG PYTHON_BUILD_IMAGE=dhi.io/python:3.13-dev@sha256:d13087cbaf5f8c68c4baac88ea22e4a5f87ac179a9e7004f3484558154b2e344
+ARG PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13@sha256:be3c790e05dd0a4b9f15c76846a2146a75833b3ed4d1fe11e7828fd27446cedd
 
 FROM ghcr.io/astral-sh/uv:0.12.19@sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424 AS uv
 
-FROM ${PYTHON_IMAGE} AS build
+FROM ${PYTHON_BUILD_IMAGE} AS build
 COPY --link --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -21,20 +28,20 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
+# The runtime image has no shell: prepare the data directory here and copy it over.
+RUN install -d -m 0700 /rootfs/data
 
-FROM ${PYTHON_IMAGE} AS runtime
+FROM ${PYTHON_RUNTIME_IMAGE} AS runtime
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="ThreatCull" \
       org.opencontainers.image.description="Self-hosted threat-feed compiler" \
       org.opencontainers.image.source="https://github.com/spydisec/threatcull" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}"
-RUN groupadd --system --gid 10001 threatcull \
-    && useradd --system --uid 10001 --gid 10001 --no-create-home \
-        --home-dir /nonexistent --shell /usr/sbin/nologin threatcull \
-    && mkdir /data \
-    && chown 10001:10001 /data \
-    && chmod 0700 /data
+# uid 10001, as in 1.x and 2.0 images, so existing /data volumes stay writable. The
+# hardened image's own non-root user is 65532; any numeric uid works without an
+# /etc/passwd entry.
+COPY --link --from=build --chown=10001:10001 /rootfs/data /data
 # Root owns the code: the app user can read it but not change it.
 COPY --link --from=build /app/.venv /app/.venv
 WORKDIR /app

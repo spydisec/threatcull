@@ -36,6 +36,14 @@ jobs:
           < Dockerfile
       - name: Validate docker-compose.yaml
         run: docker compose -f docker-compose.yaml config --quiet
+      # The base images come from Docker Hardened Images (dhi.io), which needs a Docker
+      # account. DOCKERHUB_USERNAME / DOCKERHUB_TOKEN: a read-only access token.
+      - name: Log in to dhi.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build
         env:
           DOCKER_BUILDKIT: "1"
@@ -67,5 +75,13 @@ jobs:
           persist-credentials: false
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # The base images come from Docker Hardened Images (dhi.io), which needs a Docker
+      # account. DOCKERHUB_USERNAME / DOCKERHUB_TOKEN: a read-only access token.
+      - name: Log in to dhi.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build linux/arm64
         run: docker buildx build --platform linux/arm64 --build-arg VERSION=ci .

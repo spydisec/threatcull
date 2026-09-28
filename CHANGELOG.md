@@ -8,6 +8,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Changed
+
+- 🛡️ **Docker Hardened Images base.** The image builds on `dhi.io/python:3.13` (runtime) and
+  `dhi.io/python:3.13-dev` (build): no shell or package manager in the image, near-zero known CVEs,
+  signed SBOMs and provenance from Docker. It still runs as uid 10001, so existing `/data` volumes
+  keep working, and the image is still published to `ghcr.io/spydisec/threatcull`.
+  [#39](https://github.com/spydisec/threatcull/issues/39)
+
 ## [2.0.2] - 2026-09-28
 
 A security fix for domain feeds in `csv` or `json` format. Upgrading is recommended; nothing else

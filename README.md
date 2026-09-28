@@ -134,7 +134,8 @@ uv run threatcull serve --host <lan-ip> --port 6969
   lists one.
 - **Scripts:** create an API token with `threatcull api-token create <name> --user admin` and send it
   as `Authorization: Bearer <token>` to `/api/v1/`.
-- **Hardening:** the container runs as a non-root user, and the compose file drops all Linux
+- **Hardening:** the image is built on [Docker Hardened Images](https://docs.docker.com/dhi/) (no
+  shell or package manager inside) and runs as a non-root user. The compose file drops all Linux
   capabilities and blocks privilege escalation. It also works with `read_only: true` and
   `tmpfs: [/tmp]`.
 - **Reverse proxy with TLS:** start `serve` with `--secure-cookies` and `--trusted-proxy <proxy-ip>`.
