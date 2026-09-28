@@ -43,11 +43,14 @@ jobs:
       - name: mypy (strict)
         if: ${{ needs.changes.result != 'success' || needs.changes.outputs.python == 'true' }}
         run: uv run mypy src # tests/ is local only
+      - name: docs/CATALOG.md matches catalog.yaml
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.python == 'true' || needs.changes.outputs.prose == 'true' }}
+        run: uv run python scripts/catalog_docs.py --check
       - name: Vale (prose in pushed Markdown)
         if: ${{ needs.changes.result != 'success' || needs.changes.outputs.prose == 'true' }}
         run: |
           uvx vale sync
-          uvx vale README.md SECURITY.md CONTRIBUTING.md CHANGELOG.md .github
+          uvx vale README.md SECURITY.md CONTRIBUTING.md CHANGELOG.md docs/CATALOG.md .github
 
   islands:
     needs: changes

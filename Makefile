@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup lint format types test security audit prose ui ui-check check
+.PHONY: help setup lint format types test security audit prose catalog-docs ui ui-check check
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-10s %s\n", $$1, $$2}'
@@ -15,7 +15,11 @@ lint: ## Ruff lint and format check
 
 prose: ## Vale prose lint on pushed Markdown
 	uvx vale sync >/dev/null
-	uvx vale README.md SECURITY.md CONTRIBUTING.md CHANGELOG.md .github
+	uvx vale README.md SECURITY.md CONTRIBUTING.md CHANGELOG.md docs/CATALOG.md .github
+	uv run python scripts/catalog_docs.py --check
+
+catalog-docs: ## Rewrite the Source tables in docs/CATALOG.md from catalog.yaml
+	uv run python scripts/catalog_docs.py
 
 format: ## Apply Ruff formatting and safe fixes
 	uv run ruff format .

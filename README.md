@@ -16,7 +16,7 @@ serves the result to your firewalls, DNS servers and SIEM.
 sources ──> drop duplicates, private ranges, your allowlist ──> score by source agreement ──> feed URLs
 ```
 
-- Catalog of blocklist sources with licence details, plus your own sources (URL or local file)
+- [Catalog](docs/CATALOG.md) of blocklist sources with licence details, plus your own sources (URL or local file)
 - Built-in CDN allowlists, your own entries and your own allowlist URLs; mark your own network to
   get an alert when a source lists it
 - Confidence tiers (high, medium, low) from source agreement
