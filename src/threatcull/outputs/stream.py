@@ -146,7 +146,9 @@ def _attributions(
     source_ids: Collection[str], sources: Mapping[str, Source]
 ) -> tuple[Attribution, ...]:
     ordered = sorted(source_ids, key=lambda source_id: sources[source_id].name)
-    return tuple(
-        Attribution(sources[sid].name, sources[sid].licence, sources[sid].licence_url)
-        for sid in ordered
-    )
+    return tuple(Attribution(sources[sid].name, _public_url(sources[sid].url)) for sid in ordered)
+
+
+def _public_url(url: str) -> str:
+    """A feed URL safe to publish: never a path on the ThreatCull host."""
+    return "local file" if url.startswith("file://") else url

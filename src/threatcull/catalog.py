@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""The Catalog: curated Source definitions with licence evidence."""
+"""The Catalog: curated Source definitions (public threat feeds)."""
 
 from __future__ import annotations
 
 import re
 from collections import Counter
 from dataclasses import dataclass
-from enum import StrEnum
 from importlib import resources
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -23,24 +23,8 @@ Category = Literal[
 ]
 SourceRole = Literal["blocklist", "allowlist"]
 SLUG_PATTERN = r"^[a-z0-9][a-z0-9-]{0,62}$"
-
-
-class LicenceClass(StrEnum):
-    """What a Source's terms allow for redistribution."""
-
-    PERMISSIVE = "permissive"
-    COPYLEFT = "copyleft"
-    NONCOMMERCIAL = "noncommercial"
-    RESTRICTED = "restricted"
-    UNKNOWN = "unknown"
-
-
-class BusinessUse(StrEnum):
-    """Whether a business may use a Source to protect its own network."""
-
-    ALLOWED = "allowed"
-    FORBIDDEN = "forbidden"
-    UNKNOWN = "unknown"
+# Source fields removed in 2.0; older Catalog and configuration files still load.
+LEGACY_FIELDS = frozenset({"licence", "licence_url", "licence_class", "business_use"})
 
 
 class CatalogError(ValueError):
@@ -58,10 +42,6 @@ class CatalogEntry(BaseModel):
     kind: SourceKind
     role: SourceRole = "blocklist"
     category: Category
-    licence_class: LicenceClass
-    business_use: BusinessUse
-    licence: str = Field(min_length=1)
-    licence_url: str = Field(pattern=r"^https?://")
     refresh_minutes: int = Field(ge=15, le=10080)
     default_enabled: bool = False
     csv_column: int = Field(default=0, ge=0)
@@ -71,24 +51,19 @@ class CatalogEntry(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _default_family(cls, data: Any) -> Any:
-        if isinstance(data, dict) and not data.get("family"):
-            return {**data, "family": data.get("id", "")}
+        if not isinstance(data, dict):
+            return data
+        # Catalogs before 2.0 carried licence fields; they are accepted and dropped.
+        data = {key: value for key, value in data.items() if key not in LEGACY_FIELDS}
+        if not data.get("family"):
+            data["family"] = data.get("id", "")
         return data
 
     @model_validator(mode="after")
     def _check_consistency(self) -> CatalogEntry:
         if self.format == "json" and not self.json_keys:
             raise ValueError("json Sources need json_keys")
-        if self.default_enabled and not business_use_permitted(self.role, self.business_use):
-            raise ValueError("only Sources cleared for business use may be enabled by default")
-        if self.default_enabled and self.licence_class is LicenceClass.RESTRICTED:
-            raise ValueError("restricted Sources need acknowledgement, so no default enablement")
         return self
-
-
-def business_use_permitted(role: SourceRole, business_use: BusinessUse) -> bool:
-    """Curation rule for default-enabled Sources: a blocklist must allow business use."""
-    return role == "allowlist" or business_use is BusinessUse.ALLOWED
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +82,18 @@ class _NoAliasLoader(yaml.SafeLoader):
         if self.check_event(yaml.AliasEvent):
             raise CatalogError("the Catalog uses YAML aliases, which ThreatCull does not accept")
         return super().compose_node(parent, index)
+
+
+def feed_label(url: str) -> str:
+    """Who publishes a feed, for display: its host, or ``github.com/owner/repo`` for a
+    raw GitHub file, or "local file" for a file:// Source."""
+    if url.startswith("file://"):
+        return "local file"
+    parts = urlparse(url)
+    segments = [segment for segment in parts.path.split("/") if segment]
+    if parts.hostname == "raw.githubusercontent.com" and len(segments) >= 2:  # noqa: PLR2004
+        return f"github.com/{segments[0]}/{segments[1]}"
+    return parts.hostname or url
 
 
 def parse_catalog(text: str, *, allow_file_urls: bool = True) -> Catalog:

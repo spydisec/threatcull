@@ -19,8 +19,7 @@ _COMMENT = {"plain": "#", "hosts": "#", "adguard": "!", "rpz": ";"}
 @dataclass(frozen=True, slots=True)
 class Attribution:
     name: str
-    licence: str
-    licence_url: str
+    url: str  # the feed URL, or "local file" for a file:// Source
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,10 +47,7 @@ def head(fmt: OutputFormat, ctx: RenderContext, count: int) -> str:
             "output": ctx.output_name,
             "generated_at": ctx.generated_at,
             "count": count,
-            "attribution": [
-                {"name": a.name, "licence": a.licence, "licence_url": a.licence_url}
-                for a in ctx.attributions
-            ],
+            "attribution": [{"name": a.name, "url": a.url} for a in ctx.attributions],
         }
         # Reopen the object after "attribution" so the indicators array can be streamed.
         return json.dumps(document, indent=2).removesuffix("\n}") + ',\n  "indicators": ['
@@ -116,8 +112,8 @@ def _header(ctx: RenderContext, count: int) -> list[str]:
         f"ThreatCull output: {ctx.output_name}",
         f"Generated: {ctx.generated_at}",
         f"Entries: {count}",
-        "Sources (each under its own terms):",
-        *(f"  - {a.name} | {a.licence} | {a.licence_url}" for a in ctx.attributions),
+        "Sources:",
+        *(f"  - {a.name} | {a.url}" for a in ctx.attributions),
     ]
 
 

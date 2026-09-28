@@ -9,20 +9,13 @@ import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from threatcull.catalog import (
-    BusinessUse,
-    CatalogEntry,
-    Category,
-    LicenceClass,
-    SourceRole,
-)
+from threatcull.catalog import CatalogEntry, Category, SourceRole
 from threatcull.indicators import SourceKind
 from threatcull.parsers import SourceFormat
 from threatcull.store.db import transaction
-from threatcull.store.errors import NotFoundError, PolicyError
+from threatcull.store.errors import NotFoundError
 
 REMOVED_FROM_CATALOG_REASON = "Removed from the Catalog"
-RESTRICTED_TERMS_REASON = "Terms changed to restricted; acknowledge to re-enable"
 _CUSTOM_ID = re.compile(r"^custom-[a-z0-9][a-z0-9-]{0,54}$")
 _CUSTOM_SCHEMES = ("https://", "http://", "file://")
 # Source names end up in Output comment headers: a newline there could inject lines.
@@ -39,10 +32,6 @@ class Source:
     kind: SourceKind
     role: SourceRole
     category: str
-    licence_class: LicenceClass
-    business_use: BusinessUse
-    licence: str
-    licence_url: str
     refresh_minutes: int
     csv_column: int
     json_keys: tuple[str, ...]
@@ -66,10 +55,6 @@ def _to_source(row: sqlite3.Row) -> Source:
         kind=row["kind"],
         role=row["role"],
         category=row["category"],
-        licence_class=LicenceClass(row["licence_class"]),
-        business_use=BusinessUse(row["business_use"]),
-        licence=row["licence"],
-        licence_url=row["licence_url"],
         refresh_minutes=row["refresh_minutes"],
         csv_column=row["csv_column"],
         json_keys=tuple(json.loads(row["json_keys"])),
@@ -93,10 +78,6 @@ def sync_catalog(
     Catalog marks them ``default_enabled``: the operator decides.
     """
     with transaction(conn):
-        previous_class = {
-            row["id"]: row["licence_class"]
-            for row in conn.execute("SELECT id, licence_class FROM sources WHERE custom = 0")
-        }
         for entry in entries:
             enabled = entry.default_enabled and enable_new
             params = entry.model_dump(mode="json", exclude={"default_enabled", "notes"})
@@ -105,17 +86,13 @@ def sync_catalog(
             conn.execute(
                 """
                 INSERT INTO sources (id, name, family, url, format, kind, role, category,
-                    licence_class, business_use, licence, licence_url, refresh_minutes,
-                    csv_column, json_keys, custom, enabled)
+                    refresh_minutes, csv_column, json_keys, custom, enabled)
                 VALUES (:id, :name, :family, :url, :format, :kind, :role, :category,
-                    :licence_class, :business_use, :licence, :licence_url, :refresh_minutes,
-                    :csv_column, :json_keys, 0, :enabled)
+                    :refresh_minutes, :csv_column, :json_keys, 0, :enabled)
                 ON CONFLICT (id) DO UPDATE SET
                     name = excluded.name, family = excluded.family, url = excluded.url,
                     format = excluded.format, kind = excluded.kind, role = excluded.role,
-                    category = excluded.category, licence_class = excluded.licence_class,
-                    business_use = excluded.business_use, licence = excluded.licence,
-                    licence_url = excluded.licence_url, refresh_minutes = excluded.refresh_minutes,
+                    category = excluded.category, refresh_minutes = excluded.refresh_minutes,
                     csv_column = excluded.csv_column, json_keys = excluded.json_keys
                 """,
                 params,
@@ -129,16 +106,6 @@ def sync_catalog(
         conn.executemany(
             "UPDATE sources SET enabled = 0, disabled_reason = ? WHERE id = ?",
             [(REMOVED_FROM_CATALOG_REASON, source_id) for source_id in stale_ids],
-        )
-        newly_restricted = [
-            entry.id
-            for entry in entries
-            if entry.licence_class is LicenceClass.RESTRICTED
-            and previous_class.get(entry.id, LicenceClass.RESTRICTED) != LicenceClass.RESTRICTED
-        ]
-        conn.executemany(
-            "UPDATE sources SET enabled = 0, disabled_reason = ? WHERE id = ? AND enabled = 1",
-            [(RESTRICTED_TERMS_REASON, source_id) for source_id in newly_restricted],
         )
 
 
@@ -163,20 +130,8 @@ def get_source(conn: sqlite3.Connection, source_id: str) -> Source:
     return _to_source(row)
 
 
-def set_enabled(
-    conn: sqlite3.Connection,
-    source_id: str,
-    enabled: bool,
-    *,
-    acknowledge_restricted: bool = False,
-) -> Source:
-    source = get_source(conn, source_id)
-    restricted = source.licence_class is LicenceClass.RESTRICTED
-    if enabled and restricted and not acknowledge_restricted:
-        raise PolicyError(
-            f"{source.name} has restricted terms ({source.licence}); read "
-            f"{source.licence_url} and acknowledge them to enable it"
-        )
+def set_enabled(conn: sqlite3.Connection, source_id: str, enabled: bool) -> Source:
+    get_source(conn, source_id)  # NotFoundError for an unknown id
     conn.execute(
         "UPDATE sources SET enabled = ?, disabled_reason = NULL WHERE id = ?",
         (int(enabled), source_id),
@@ -195,7 +150,6 @@ def add_custom_source(
     category: Category,
     csv_column: int = 0,
     json_keys: tuple[str, ...] = (),
-    business_use: BusinessUse = BusinessUse.UNKNOWN,
     role: SourceRole = "blocklist",
 ) -> Source:
     """Add a custom Source, disabled. An allowlist Source feeds the Allowlist;
@@ -203,10 +157,9 @@ def add_custom_source(
     _check_custom(source_id, name, url)
     conn.execute(
         """
-        INSERT INTO sources (id, name, family, url, format, kind, role, category, licence_class,
-            business_use, licence, licence_url, refresh_minutes, csv_column, json_keys, custom,
-            enabled)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unknown', ?, 'Operator-supplied', '', 60, ?, ?, 1, 0)
+        INSERT INTO sources (id, name, family, url, format, kind, role, category,
+            refresh_minutes, csv_column, json_keys, custom, enabled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 60, ?, ?, 1, 0)
         """,
         (
             source_id,
@@ -217,7 +170,6 @@ def add_custom_source(
             kind,
             role,
             category,
-            str(business_use),
             csv_column,
             json.dumps(list(json_keys)),
         ),
@@ -259,14 +211,13 @@ def update_custom_source(
     category: Category,
     csv_column: int = 0,
     json_keys: tuple[str, ...] = (),
-    business_use: BusinessUse = BusinessUse.UNKNOWN,
     role: SourceRole = "blocklist",
 ) -> Source:
     """Replace the definition of an existing custom Source (its enabled state stays)."""
     _check_custom(source_id, name, url)
     updated = conn.execute(
         "UPDATE sources SET name = ?, url = ?, format = ?, kind = ?, role = ?, category = ?, "
-        "business_use = ?, csv_column = ?, json_keys = ? WHERE id = ? AND custom = 1",
+        "csv_column = ?, json_keys = ? WHERE id = ? AND custom = 1",
         (
             name,
             url,
@@ -274,7 +225,6 @@ def update_custom_source(
             kind,
             role,
             category,
-            str(business_use),
             csv_column,
             json.dumps(list(json_keys)),
             source_id,

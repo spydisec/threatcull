@@ -7,4 +7,4 @@ class NotFoundError(LookupError):
 
 
 class PolicyError(Exception):
-    """An operation needs an explicit acknowledgement (a restricted licence)."""
+    """An operation the current state does not allow (for example, fetching a disabled Source)."""

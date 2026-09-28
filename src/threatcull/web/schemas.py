@@ -14,7 +14,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from threatcull.catalog import BusinessUse, Category, SourceRole
+from threatcull.catalog import Category, SourceRole
 from threatcull.indicators import SourceKind
 from threatcull.parsers import SourceFormat
 from threatcull.policy.scoring import Tier
@@ -31,7 +31,6 @@ class SourceEnableIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool
-    acknowledge_restricted: bool = False
 
 
 class CustomSourceIn(BaseModel):
@@ -51,7 +50,6 @@ class CustomSourceIn(BaseModel):
     category: Category = "malicious"
     csv_column: int = Field(default=0, ge=0)
     json_keys: tuple[str, ...] = ()
-    business_use: BusinessUse = BusinessUse.UNKNOWN
 
     @field_validator("id")
     @classmethod

@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from starlette.responses import HTMLResponse, Response
 
+from threatcull.catalog import feed_label
 from threatcull.clock import local
 from threatcull.web.dashboard import CATEGORY_LABELS
 from threatcull.web.deps import session_user
@@ -42,6 +43,7 @@ def _when(value: str | None, missing: str = "never") -> Markup:
 
 
 _env.filters["when"] = _when
+_env.filters["feed_label"] = feed_label
 _env.globals["category_labels"] = CATEGORY_LABELS  # readable category names
 templates = Jinja2Templates(env=_env)
 
