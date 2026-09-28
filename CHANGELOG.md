@@ -8,6 +8,8 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-28
+
 ThreatCull no longer tracks licences: every Source is a public feed, and you decide which ones to
 use. The Catalog gets its own page, and Source suggestions are checked automatically.
 
@@ -201,7 +203,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/spydisec/threatcull/compare/v1.4.0...v2.0.0
 [1.4.0]: https://github.com/spydisec/threatcull/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/spydisec/threatcull/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/spydisec/threatcull/compare/v1.1.0...v1.2.0
