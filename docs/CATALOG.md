@@ -89,9 +89,11 @@ carry the `catalog` label. What happens next:
 1. **Automated check, within minutes.** A bot downloads the feed once, parses it the way
    ThreatCull would and looks for duplicates. It comments with the
    result and labels the issue `catalog-valid` or `needs-info`. Edit the issue to run it again.
-2. **Review.** A maintainer looks at the list and the publisher and adds the `approved` label.
-3. **Pull request.** The `approved` label opens a pull request that adds the Source, raises the
-   Catalog revision and updates this page. Once merged, installs get it with **Check for updates**.
+2. **Review.** The project owner looks at the list and the publisher and adds the `approved`
+   label. Only the owner can approve: the bot removes the label if anyone else adds it.
+3. **Pull request.** Approval opens a pull request that adds the Source, raises the Catalog
+   revision and updates this page, and closes the issue. Once merged, installs get the Source with
+   **Check for updates**.
 
 A Source joins the Catalog when it has:
 
