@@ -26,13 +26,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Pull requests from forks get no repository secrets: they build on the standard
-    # python:3.13-slim image (the Dockerfile's fallback) instead of Docker Hardened
+    # python:3.14-slim image (the Dockerfile's fallback) instead of Docker Hardened
     # Images, so outside contributions still pass. Nothing from these builds is published.
     env:
       DHI: ${{ secrets.DOCKERHUB_TOKEN != '' }}
       FALLBACK_ARGS: >-
-        --build-arg PYTHON_BUILD_IMAGE=python:3.13-slim
-        --build-arg PYTHON_RUNTIME_IMAGE=python:3.13-slim
+        --build-arg PYTHON_BUILD_IMAGE=python:3.14-slim
+        --build-arg PYTHON_RUNTIME_IMAGE=python:3.14-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,7 +65,7 @@ jobs:
           DOCKER_BUILDKIT: "1"
         run: |
           if [ "$DHI" = "true" ]; then extra=(); else
-            echo "::notice::No Docker Hub secrets (fork pull request): building on python:3.13-slim."
+            echo "::notice::No Docker Hub secrets (fork pull request): building on python:3.14-slim."
             read -ra extra <<< "$FALLBACK_ARGS"
           fi
           docker build "${extra[@]}" --build-arg VERSION=ci -t threatcull:ci .
@@ -93,13 +93,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Pull requests from forks get no repository secrets: they build on the standard
-    # python:3.13-slim image (the Dockerfile's fallback) instead of Docker Hardened
+    # python:3.14-slim image (the Dockerfile's fallback) instead of Docker Hardened
     # Images, so outside contributions still pass. Nothing from these builds is published.
     env:
       DHI: ${{ secrets.DOCKERHUB_TOKEN != '' }}
       FALLBACK_ARGS: >-
-        --build-arg PYTHON_BUILD_IMAGE=python:3.13-slim
-        --build-arg PYTHON_RUNTIME_IMAGE=python:3.13-slim
+        --build-arg PYTHON_BUILD_IMAGE=python:3.14-slim
+        --build-arg PYTHON_RUNTIME_IMAGE=python:3.14-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

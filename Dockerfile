@@ -7,7 +7,7 @@
 # and package tools for the build stage; the runtime variant has neither, runs no
 # shell and ships signed SBOMs, provenance and VEX. Pulling needs `docker login dhi.io`
 # (a free Docker account); ThreatCull users pull the finished image from ghcr.io.
-# Building without a Docker account: pass python:3.13-slim for both build arguments;
+# Building without a Docker account: pass python:3.14-slim for both build arguments;
 # BuildKit then skips the dhi-* stages and never contacts dhi.io.
 # The DHI images sit in plain FROM lines, pinned by multi-arch digest, so Dependabot can
 # see and update them (it does not follow FROM ${ARG}).

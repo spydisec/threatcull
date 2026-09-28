@@ -16,8 +16,8 @@ passwords, hostnames and addresses from your own network.
    rules), mypy strict, semgrep, CodeQL, pip-audit, gitleaks, Vale and the Docker build with a
    smoke test. To build the image yourself, run `docker login dhi.io` with a free Docker account
    first (the base is a Docker Hardened Image), or build on the standard image instead:
-   `docker build --build-arg PYTHON_BUILD_IMAGE=python:3.13-slim --build-arg
-   PYTHON_RUNTIME_IMAGE=python:3.13-slim .`
+   `docker build --build-arg PYTHON_BUILD_IMAGE=python:3.14-slim --build-arg
+   PYTHON_RUNTIME_IMAGE=python:3.14-slim .`
 4. The test suite is kept outside the repository and runs on the machine of the maintainer
    before each merge. Describe how you checked your change in the pull request.
 5. Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for anything a user
