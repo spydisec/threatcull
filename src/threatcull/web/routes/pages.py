@@ -17,6 +17,7 @@ from threatcull.catalog import CatalogError
 from threatcull.catalog_update import MAX_CATALOG_BYTES, active_catalog, apply_update
 from threatcull.clock import ts, utcnow
 from threatcull.compiling import stale_source_ids
+from threatcull.datadir import storage_bytes
 from threatcull.fetcher import FetchError
 from threatcull.home_detect import public_ip_candidate
 from threatcull.listfile import MAX_BYTES, parse_list_file, summary
@@ -138,6 +139,7 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
         "scheduler_on": scheduler is not None,
         "next_compile_at": ts(next_run) if next_run is not None else None,
         "refreshed_at": ts(now),
+        "storage": storage_bytes(request.app.state.data_dir),
         "stats": stats,
         **_run_status(request, conn),
     }
@@ -753,7 +755,18 @@ def settings_page(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
 ) -> Response:
-    return render(request, "settings.html", {"settings": load_settings(conn)})
+    return render(request, "settings.html", _settings_context(request, conn))
+
+
+def _settings_context(request: Request, conn: sqlite3.Connection, **extra: Any) -> dict[str, Any]:
+    database, outputs = storage_bytes(request.app.state.data_dir)
+    return {
+        "settings": load_settings(conn),
+        "database_bytes": database,
+        "outputs_bytes": outputs,
+        "sighting_count": conn.execute("SELECT COUNT(*) FROM sightings").fetchone()[0],
+        **extra,
+    }
 
 
 @router.get("/settings/export")
@@ -786,9 +799,7 @@ def import_settings(
             url_check=lambda url: web_file_url_error(url, data_dir),
         )
     except ValueError as exc:  # ConfigError, or no file chosen
-        context = {"settings": load_settings(conn), "import_error": str(exc)}
+        context = _settings_context(request, conn, import_error=str(exc))
         return render(request, "settings.html", context, status_code=400)
     _notify_sources_changed(request)
-    return render(
-        request, "settings.html", {"settings": load_settings(conn), "import_result": result}
-    )
+    return render(request, "settings.html", _settings_context(request, conn, import_result=result))

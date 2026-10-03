@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from threatcull.clock import utcnow
+from threatcull.datadir import storage_bytes
 from threatcull.home_detect import Candidate, public_ip_candidate
 from threatcull.lookup import LookupResult, lookup
 from threatcull.store.allowlist import AllowlistEntry, add_entry, builtin_entries, operator_entries
@@ -165,7 +166,8 @@ def api_status(
     status = build_status(
         conn, request.app.state.runner, getattr(request.app.state, "scheduler", None)
     )
-    return status.to_json()
+    database, outputs = storage_bytes(request.app.state.data_dir)
+    return {**status.to_json(), "database_bytes": database, "outputs_bytes": outputs}
 
 
 @router.get("/sources")
