@@ -267,7 +267,7 @@
 </section>
 
 <div class="dash-foot muted">
-  <span>Auto refresh every minute. Last refreshed: <strong>{{ refreshed_at | when }}</strong></span>
+  <span>Auto refresh every minute. Last refreshed: <strong>{{ refreshed_at | when }}</strong> · Database {{ storage[0] | size }}, Outputs {{ storage[1] | size }} · <a href="/settings#storage">Storage</a></span>
   <span><a href="/outputs">Feed URLs and tokens</a> | <a href="/runs">Run history</a></span>
 </div>
 </div>
