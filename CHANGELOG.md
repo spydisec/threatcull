@@ -8,6 +8,21 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-10-03
+
+Updated base images with OpenSSL security fixes. Upgrading is recommended; nothing else to do.
+
+### Security
+
+- 🔐 **OpenSSL fixes in the base image.** The Docker Hardened Images `python:3.14` and
+  `python:3.14-dev` bases move to new digests that ship OpenSSL `3.5.7-1~deb13u3`, which fixes
+  High-severity vulnerabilities in the 2.2.0 image (CVE-2026-54873, CVE-2026-84782, CVE-2026-84784,
+  CVE-2026-72897). The image scan finds no High or Critical vulnerabilities again.
+
+### Changed
+
+- 📦 **uv 0.12.22** builds the image (was 0.12.19).
+
 ## [2.2.0] - 2026-09-28
 
 The image runs on Python 3.14. Nothing to do when upgrading.
@@ -263,7 +278,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/spydisec/threatcull/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/spydisec/threatcull/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/spydisec/threatcull/compare/v2.0.2...v2.1.0
 [2.0.2]: https://github.com/spydisec/threatcull/compare/v2.0.1...v2.0.2
