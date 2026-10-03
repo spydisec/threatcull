@@ -74,6 +74,14 @@ def create_scored_table(conn: sqlite3.Connection, *, now: datetime, settings: Se
     """(Re)build the TEMP table ``scored``: one row per Indicator that has a Confidence Score."""
     conn.execute("DROP TABLE IF EXISTS temp.scored")
     conn.execute(_CREATE_SCORED, _window(now, settings))
+    # Every Output reads ``scored`` strongest first (see ``outputs.stream._SELECT``).
+    # Sorting once into a covering index, instead of once per Output, made writing a
+    # 600k-entry Output take about 1 s instead of 9 s in scripts/bench.py.
+    conn.execute(
+        "CREATE INDEX temp.scored_order ON scored "
+        "(score DESC, last_seen DESC, value, allowlisted, kind, categories, source_ids, "
+        "first_seen)"
+    )
 
 
 def drop_scored_table(conn: sqlite3.Connection) -> None:
