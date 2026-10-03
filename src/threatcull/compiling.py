@@ -7,6 +7,7 @@ so memory stays bounded however many Indicators the Sources list.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
@@ -48,13 +49,20 @@ HOME_HITS_CAP = 100
 def stale_source_ids(
     sources: Sequence[Source], *, now: datetime, settings: Settings
 ) -> tuple[str, ...]:
-    """Ids of ``sources`` whose last success is missing or older than ``stale_after_hours``.
+    """Ids of ``sources`` whose last success is older than ``stale_after_hours``.
+
+    A Source that never fetched successfully is not Stale: it has no Sightings,
+    so it can't leave old data in the Outputs. Newly enabled Sources wait for
+    the schedule (up to an hour) and must not block the Compile meanwhile; one
+    that keeps failing shows as failing instead.
 
     The Stale-Source rule Compile uses for its guard; the dashboard reuses this
     instead of re-deriving it.
     """
     cutoff = ts(now - timedelta(hours=settings.stale_after_hours))
-    return tuple(s.id for s in sources if s.last_success_at is None or s.last_success_at < cutoff)
+    return tuple(
+        s.id for s in sources if s.last_success_at is not None and s.last_success_at < cutoff
+    )
 
 
 def feeding_sources(spec: OutputSpec, blocklists: Sequence[Source]) -> frozenset[str]:
@@ -104,6 +112,29 @@ def shrink_reasons(
     return reasons
 
 
+# PRAGMA optimize reads at most this many rows per index when it re-analyses,
+# so its cost stays small however many Sightings there are. (A PRAGMA takes no
+# parameters, hence the literal.)
+ANALYSIS_LIMIT = 1000
+_SET_ANALYSIS_LIMIT = "PRAGMA analysis_limit = 1000"
+
+log = logging.getLogger(__name__)
+
+
+def optimize_database(conn: sqlite3.Connection) -> None:
+    """Refresh SQLite's query-planner statistics after a Compile.
+
+    The tables grow from nothing to millions of rows on a first run; without
+    statistics the planner keeps guessing from the empty database. Best effort:
+    a failure is logged and never fails the Compile.
+    """
+    try:
+        conn.execute(_SET_ANALYSIS_LIMIT)
+        conn.execute("PRAGMA optimize")
+    except sqlite3.Error:
+        log.warning("PRAGMA optimize after the Compile failed", exc_info=True)
+
+
 def compile_outputs(
     conn: sqlite3.Connection, out_dir: Path, *, now: datetime, force: bool = False
 ) -> CompileReport:
@@ -126,6 +157,7 @@ def compile_outputs(
         home_hits=report.home_hits,
         stats=report.stats.to_json() if report.stats else None,
     )
+    optimize_database(conn)
     return report
 
 
@@ -164,7 +196,8 @@ def _compile(
             {spec.name: spec.last_count for spec in specs},
             counts,
             stale=len(stale),
-            enabled=len(blocklists),
+            # Only Sources with data can be Stale, so only they count towards the ratio.
+            enabled=sum(1 for source in blocklists if source.last_success_at is not None),
             settings=settings,
             rebaselined=rebaselined,
         )

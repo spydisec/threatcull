@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from threatcull.clock import ts
@@ -32,6 +34,17 @@ class Run:
     stats: dict[str, Any] = field(default_factory=dict)
 
 
+# Fetch and Compile pass one logical ``now`` to both start_run and finish_run, so
+# the Sightings and Outputs of a run share a timestamp. The real elapsed time is
+# measured here with a monotonic clock and added at finish_run, so a run's
+# finished_at shows how long it actually took. Keyed by connection and run id;
+# a run is always started and finished on the same connection.
+_started: dict[tuple[int, int], tuple[datetime, float]] = {}
+_started_lock = threading.Lock()
+_MAX_TRACKED = 1000  # runs that never finish (a crash mid-run) must not pile up
+_monotonic = time.monotonic  # replaced in tests
+
+
 def start_run(
     conn: sqlite3.Connection, run_type: RunType, *, now: datetime, source_id: str | None = None
 ) -> int:
@@ -39,7 +52,22 @@ def start_run(
         "INSERT INTO runs (type, source_id, started_at, status) VALUES (?, ?, ?, 'running')",
         (run_type, source_id, ts(now)),
     )
-    return int(cursor.lastrowid or 0)
+    run_id = int(cursor.lastrowid or 0)
+    with _started_lock:
+        if len(_started) >= _MAX_TRACKED:
+            _started.clear()
+        _started[(id(conn), run_id)] = (now, _monotonic())
+    return run_id
+
+
+def _finished_at(conn: sqlite3.Connection, run_id: int, now: datetime) -> datetime:
+    """``now``, or the start plus the real elapsed time when that is later."""
+    with _started_lock:
+        started = _started.pop((id(conn), run_id), None)
+    if started is None:
+        return now
+    logical_start, mark = started
+    return max(now, logical_start + timedelta(seconds=_monotonic() - mark))
 
 
 def finish_run(
@@ -57,7 +85,7 @@ def finish_run(
         "UPDATE runs SET finished_at = ?, status = ?, counts = ?, error = ?, home_hits = ?, "
         "stats = ? WHERE id = ?",
         (
-            ts(now),
+            ts(_finished_at(conn, run_id, now)),
             status,
             json.dumps(dict(counts or {})),
             error,
@@ -176,3 +204,41 @@ def recent_fetches(conn: sqlite3.Connection, limit: int = 500) -> list[Run]:
         (limit,),
     )
     return [_to_run(row) for row in rows]
+
+
+def running_run(conn: sqlite3.Connection, *, after_id: int = 0) -> Run | None:
+    """The newest Run still marked ``running`` with an id above ``after_id``, if any."""
+    row = conn.execute(
+        "SELECT * FROM runs WHERE status = 'running' AND id > ? ORDER BY id DESC LIMIT 1",
+        (after_id,),
+    ).fetchone()
+    return _to_run(row) if row is not None else None
+
+
+def previous_duration(
+    conn: sqlite3.Connection, run_type: RunType, *, source_id: str | None, before_id: int
+) -> int | None:
+    """Seconds the last finished Run of the same kind took, or ``None`` if unknown.
+
+    Runs recorded before finish times were real (finished_at == started_at)
+    don't count: their 0 s would be a wrong guide.
+    """
+    row = conn.execute(
+        "SELECT started_at, finished_at FROM runs "
+        "WHERE type = ? AND source_id IS ? AND id < ? AND status != 'running' "
+        "AND finished_at IS NOT NULL AND finished_at > started_at "
+        "ORDER BY id DESC LIMIT 1",
+        (run_type, source_id, before_id),
+    ).fetchone()
+    if row is None:
+        return None
+    took = datetime.fromisoformat(row["finished_at"]) - datetime.fromisoformat(row["started_at"])
+    return int(took.total_seconds())
+
+
+def runs_after(conn: sqlite3.Connection, run_type: RunType, after_id: int) -> int:
+    """How many Runs of ``run_type`` have an id above ``after_id``."""
+    count: int = conn.execute(
+        "SELECT COUNT(*) FROM runs WHERE type = ? AND id > ?", (run_type, after_id)
+    ).fetchone()[0]
+    return count

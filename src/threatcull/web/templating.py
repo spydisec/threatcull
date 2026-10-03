@@ -42,7 +42,24 @@ def _when(value: str | None, missing: str = "never") -> Markup:
     )
 
 
+_PER_UNIT = 60  # seconds per minute, minutes per hour
+
+
+def _duration(seconds: int | None) -> str:
+    """``45 s``, ``3 min 20 s``, ``1 h 5 min``: a run's length, for people."""
+    if seconds is None:
+        return ""
+    if seconds < _PER_UNIT:
+        return f"{seconds} s"
+    minutes, secs = divmod(seconds, _PER_UNIT)
+    if minutes < _PER_UNIT:
+        return f"{minutes} min {secs} s" if secs else f"{minutes} min"
+    hours, minutes = divmod(minutes, _PER_UNIT)
+    return f"{hours} h {minutes} min" if minutes else f"{hours} h"
+
+
 _env.filters["when"] = _when
+_env.filters["duration"] = _duration
 _env.filters["feed_label"] = feed_label
 _env.globals["category_labels"] = CATEGORY_LABELS  # readable category names
 templates = Jinja2Templates(env=_env)

@@ -65,6 +65,7 @@ from threatcull.web.deps import (
 from threatcull.web.jobs import PipelineRunner
 from threatcull.web.scheduler import Scheduler
 from threatcull.web.schemas import AllowlistEntryIn, CustomSourceIn, OutputCreateIn
+from threatcull.web.status import build_status
 from threatcull.web.templating import flash, render, render_fragment
 
 router = APIRouter()
@@ -73,6 +74,7 @@ RUNS_PAGE_LIMIT = 50
 LOOKUP_MAX_LENGTH = 512  # same cap as /api/v1/lookup
 RUN_STARTED = "Run started."
 ALREADY_RUNNING = "A run is already in progress."
+FORCED_COMPILE_STARTED = "Forced Compile started. The status below shows when it finishes."
 
 
 def _runner(request: Request) -> PipelineRunner:
@@ -80,9 +82,11 @@ def _runner(request: Request) -> PipelineRunner:
     return runner
 
 
-def _run_status(request: Request) -> dict[str, Any]:
+def _run_status(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
     runner = _runner(request)
-    return {"running": runner.is_running(), "last_result": runner.last_result}
+    scheduler: Scheduler | None = getattr(request.app.state, "scheduler", None)
+    status = build_status(conn, runner, scheduler)
+    return {"running": status.running, "last_result": runner.last_result, "status": status}
 
 
 def _notify_sources_changed(request: Request) -> None:
@@ -120,6 +124,9 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
         "enabled_blocklist_count": len(blocklists),
         "failing_count": sum(1 for s in blocklists if s.last_error),
         "stale_count": len(stale_ids),
+        "waiting_count": sum(
+            1 for s in blocklists if s.last_success_at is None and not s.last_error
+        ),
         "allowlist_count": sum(1 for s in sources if s.role == "allowlist"),
         "last_compile": last_compile,
         "health": health(last_compile, blocklists, len(stale_ids)),
@@ -132,7 +139,7 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
         "next_compile_at": ts(next_run) if next_run is not None else None,
         "refreshed_at": ts(now),
         "stats": stats,
-        **_run_status(request),
+        **_run_status(request, conn),
     }
     if stats is not None:
         context.update(
@@ -181,7 +188,7 @@ def status_fragment(
     """
     if current_user(request, conn) is None:
         return render_fragment(request, "_session_expired.html", status_code=HTMX_STOP_POLLING)
-    return render_fragment(request, "_status.html", _run_status(request))
+    return render_fragment(request, "_status.html", _run_status(request, conn))
 
 
 @router.get("/sources")
@@ -195,6 +202,14 @@ def sources_page(
     return _render_sources(request, conn, {"open_add": add})
 
 
+def _next_fetches(request: Request) -> dict[str, str]:
+    """Each enabled Source's next scheduled Fetch (stored-time format), if a scheduler runs."""
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is None:
+        return {}
+    return {source_id: ts(at) for source_id, at in scheduler.next_fetch_times().items()}
+
+
 def _render_sources(
     request: Request,
     conn: sqlite3.Connection,
@@ -203,7 +218,11 @@ def _render_sources(
     status_code: int = 200,
 ) -> Response:
     """The Sources page, with the Catalog in use shown in its Catalog card."""
-    page = {"sources": list_sources(conn), "catalog": active_catalog(request.app.state.data_dir)}
+    page = {
+        "sources": list_sources(conn),
+        "catalog": active_catalog(request.app.state.data_dir),
+        "next_fetches": _next_fetches(request),
+    }
     page.update(context)
     return render(request, "sources.html", page, status_code=status_code)
 
@@ -315,7 +334,7 @@ def _runs_context(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
     return {
         "runs": recent_runs(conn, RUNS_PAGE_LIMIT),
         "last_compile_status": last_compile.status if last_compile else None,
-        **_run_status(request),
+        **_run_status(request, conn),
     }
 
 
@@ -341,11 +360,8 @@ def compile_force(
         context = _runs_context(request, conn)
         context["force_error"] = "Tick the confirm box to force a Compile."
         return render(request, "runs.html", context, status_code=400)
-    result = _runner(request).compile_only(force=True)
-    if result.status == "already_running":
-        flash(request, ALREADY_RUNNING)
-    else:
-        flash(request, f"Compile forced: {result.status}.")
+    started = _runner(request).start_background(force=True, fetch=False)
+    flash(request, FORCED_COMPILE_STARTED if started else ALREADY_RUNNING)
     return RedirectResponse("/runs", status_code=303)
 
 
@@ -554,7 +570,11 @@ def _apply_enabled_change(
         )
     _notify_sources_changed(request)
     if htmx:
-        return render_fragment(request, "_source_row.html", {"source": source})
+        return render_fragment(
+            request,
+            "_source_row.html",
+            {"source": source, "next_fetches": _next_fetches(request)},
+        )
     return RedirectResponse("/sources", status_code=303)
 
 
@@ -711,7 +731,11 @@ def add_custom_source_page(
         )
     _notify_sources_changed(request)
     list_name = "Allowlist" if payload.role == "allowlist" else "blocklist"
-    flash(request, f"Added {payload.name} as a {list_name} Source. The next fetch downloads it.")
+    flash(
+        request,
+        f"Added {payload.name} as a {list_name} Source. "
+        "ThreatCull fetches it at the next scheduled run, or click Run now.",
+    )
     return RedirectResponse("/sources", status_code=303)
 
 

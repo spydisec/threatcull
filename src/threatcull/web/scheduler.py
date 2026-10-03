@@ -21,12 +21,16 @@ failures as failed Runs, so the scheduler keeps all its jobs.
 from __future__ import annotations
 
 import logging
+import socket
 import threading
+import time
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from secrets import SystemRandom
 from typing import Any
+from urllib.parse import urlparse
 
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -34,8 +38,9 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from threatcull.clock import utcnow
+from threatcull.store.errors import NotFoundError
 from threatcull.store.runs import last_run
-from threatcull.store.sources import Source, list_sources
+from threatcull.store.sources import Source, get_source, list_sources
 from threatcull.web.deps import open_db
 from threatcull.web.jobs import PipelineRunner
 
@@ -52,11 +57,24 @@ OVERDUE_STAGGER = timedelta(seconds=45)
 # A Fetch tick that finds a run in progress retries after 3 min plus up to 30 s.
 BUSY_RETRY_DELAY = timedelta(minutes=3)
 BUSY_RETRY_JITTER_SECONDS = 30.0
+# The network can come up after the container (a power cut where the Pi boots
+# before the router): the first scheduled Fetch waits up to this long for DNS.
+NETWORK_WAIT_SECONDS = 120.0
+NETWORK_POLL_SECONDS = 2.0
 _FETCH_PREFIX = "fetch:"
 _RETRY_PREFIX = "fetch-retry:"
 
 log = logging.getLogger(__name__)
 _random = SystemRandom()  # jitter only; SystemRandom keeps the linters quiet
+
+
+def resolves(host: str) -> bool:
+    """True when ``host`` resolves (DNS works, or it is an IP literal)."""
+    try:
+        socket.getaddrinfo(host, None)
+    except OSError:
+        return False
+    return True
 
 
 def fetch_job_id(source_id: str) -> str:
@@ -106,9 +124,23 @@ def _next_run_time(job: Any) -> datetime | None:
 class Scheduler:
     """Owns the APScheduler instance and keeps its jobs in step with the Sources."""
 
-    def __init__(self, data_dir: Path, runner: PipelineRunner) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        runner: PipelineRunner,
+        *,
+        resolve: Callable[[str], bool] = resolves,
+        sleep: Callable[[float], None] = time.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
         self.data_dir = data_dir
         self.runner = runner
+        self._resolve = resolve
+        self._sleep = sleep
+        self._monotonic = monotonic
+        # Set once the first scheduled Fetch has waited for DNS (or found it working).
+        self._network_checked = False
+        self._network_lock = threading.Lock()
         self.scheduler = BackgroundScheduler(
             timezone=UTC,
             # A missed tick (busy executor, suspended host) runs once, late,
@@ -148,13 +180,20 @@ class Scheduler:
         if self.scheduler.running:
             self.scheduler.shutdown(wait=False)
 
-    def rescan(self) -> None:
+    def rescan(self, *, catch_up: bool = True) -> None:
         """Add, update and remove per-Source Fetch jobs to match the enabled Sources.
 
         Jobs whose interval is unchanged are left alone (their timing too), so
         calling this again is harmless. A new or changed job's first run is
-        ``refresh_minutes`` after the Source's last attempt (plus jitter), or,
-        when that is already past, within minutes, staggered in due order.
+        ``refresh_minutes`` after the Source's last attempt (plus jitter).
+        When that is already past (never fetched, or overdue):
+
+        - ``catch_up=True`` (start-up) fetches within minutes, staggered in due
+          order, so a restart after downtime catches up;
+        - ``catch_up=False`` (a Source enabled in the UI, the API, the CLI or a
+          Catalog update) waits for the regular schedule: one interval from
+          now, at most an hour. Enabling several Sources in a row then starts
+          no Fetches; Run now fetches them all at once.
         """
         conn = open_db(self.data_dir)
         try:
@@ -183,9 +222,15 @@ class Scheduler:
             dues = {job_id: _due(source, now) for job_id, source in to_add}
             for job_id, source in sorted(to_add, key=lambda item: dues[item[0]]):
                 due = dues[job_id]
-                if due <= now:
+                if due <= now and catch_up:
                     first = now + OVERDUE_FIRST_DELAY + overdue * OVERDUE_STAGGER
                     overdue += 1
+                elif due <= now:
+                    # Spread new Sources out, but never past the hour: the jitter is
+                    # taken off the wait, not added to it.
+                    wait = min(timedelta(minutes=source.refresh_minutes), COMPILE_INTERVAL)
+                    jitter = min(_jitter_seconds(source.refresh_minutes), wait.total_seconds())
+                    first = now + wait - timedelta(seconds=_random.uniform(0, jitter))
                 else:
                     jitter = _jitter_seconds(source.refresh_minutes)
                     first = due + timedelta(seconds=_random.uniform(0, jitter))
@@ -199,9 +244,32 @@ class Scheduler:
                     next_run_time=first,
                 )
 
+    def source_changed(self) -> None:
+        """The app's hook for a Source change: rescan without catching up."""
+        self.rescan(catch_up=False)
+
+    def next_fetch_times(self) -> dict[str, datetime]:
+        """When each enabled Source is fetched next (its job or a pending retry)."""
+        times: dict[str, datetime] = {}
+        with self._lock:
+            jobs = self.scheduler.get_jobs()
+        for job in jobs:
+            for prefix in (_FETCH_PREFIX, _RETRY_PREFIX):
+                if job.id.startswith(prefix) and (run_at := _next_run_time(job)) is not None:
+                    source_id = job.id.removeprefix(prefix)
+                    if source_id not in times or run_at < times[source_id]:
+                        times[source_id] = run_at
+        return times
+
+    def retries_waiting(self) -> int:
+        """Fetches that found a run in progress and wait to try again."""
+        with self._lock:
+            return sum(1 for job in self.scheduler.get_jobs() if job.id.startswith(_RETRY_PREFIX))
+
     def fetch_job(self, source_id: str) -> None:
         """Fetch one Source (regular tick or busy retry); then debounce a Compile."""
         try:
+            self._await_network(source_id)
             result = self.runner.run_source(source_id)
             if result.status == "already_running":
                 log.info("Fetch of %s deferred: a run is in progress", source_id)
@@ -215,6 +283,45 @@ class Scheduler:
         except Exception:
             # run_source never raises; this only guards the scheduler itself.
             log.exception("scheduled Fetch job for %s failed", source_id)
+
+    def _await_network(self, source_id: str) -> None:
+        """Before the first scheduled Fetch since start-up, wait until DNS resolves.
+
+        Waits at most ``NETWORK_WAIT_SECONDS``, then fetches anyway (a real
+        failure is then recorded as usual). Fetches queued behind the first one
+        wait on the same lock instead of failing one by one.
+        """
+        if self._network_checked:
+            return
+        with self._network_lock:
+            if self._network_checked:
+                return
+            host = self._source_host(source_id)
+            if host is None:
+                return  # a file:// Source needs no network; the next one checks
+            deadline = self._monotonic() + NETWORK_WAIT_SECONDS
+            while not self._resolve(host):
+                if self._monotonic() >= deadline:
+                    log.warning(
+                        "DNS for %s still fails after %.0f s; fetching anyway",
+                        host,
+                        NETWORK_WAIT_SECONDS,
+                    )
+                    break
+                self._sleep(NETWORK_POLL_SECONDS)
+            self._network_checked = True
+
+    def _source_host(self, source_id: str) -> str | None:
+        """The host an http(s) Source is fetched from, else ``None``."""
+        conn = open_db(self.data_dir)
+        try:
+            url = get_source(conn, source_id).url
+        except NotFoundError:
+            return None
+        finally:
+            conn.close()
+        parsed = urlparse(url)
+        return parsed.hostname if parsed.scheme in ("http", "https") else None
 
     def compile_job(self) -> None:
         try:
@@ -232,7 +339,7 @@ class Scheduler:
         (e.g. ``threatcull sources enable`` while ``serve`` runs) within the hour.
         """
         try:
-            self.rescan()
+            self.rescan(catch_up=False)
         except Exception:
             log.exception("hourly rescan of the Sources failed")
         self.compile_job()

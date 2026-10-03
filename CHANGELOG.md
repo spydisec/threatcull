@@ -8,6 +8,70 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-03
+
+The status line shows what a run is doing, unchanged lists refresh in seconds, and enabling Sources
+no longer starts a burst of Fetches. ThreatCull upgrades its database on the first start (new
+columns only). After the upgrade, the first Fetch of each Source parses its list in full once;
+on a Raspberry Pi with multi-million-line lists, expect that first run to take as long as it did
+on a new install.
+
+### Changed
+
+- 📡 **See what a run is doing.** The status line on the dashboard and Runs page names the step
+  ("Fetching *Source* (3 of 10)" or "Compiling the Outputs"), how long it has run, how long it
+  took last time and what started it (Run now, Force Compile or the schedule). While idle it shows
+  the next Fetch and Compile, and it now refreshes every 20 s, so a scheduled run shows up without
+  a reload. Outputs that no Compile has written yet say "not published yet" on the Outputs page
+  and in the status line, since their feed URLs answer 404 until then. `GET /api/v1/status`
+  returns the same information. The elapsed time counts up every second between refreshes.
+  [#58](https://github.com/spydisec/threatcull/issues/58)
+- ⚡ **Unchanged lists skip parsing.** A Fetch hashes each download and compares it with the list
+  it last applied. When nothing changed, ThreatCull refreshes the Source's entries without parsing
+  them again, even if the server sends no `ETag` header. A 3 million-line list re-fetched in 5 s
+  instead of 4 min in testing. An upgrade, or a change to a Source's URL or format, parses every
+  list in full once.
+- 🌐 **The first Fetch waits for DNS.** After a restart, the first scheduled Fetch waits up to two
+  minutes for the Source's host to resolve, so a server that boots before the router no longer
+  records a row of failed Fetches.
+- 🗄️ **SQLite tuning.** ThreatCull refreshes the query planner's statistics after each Compile
+  (`PRAGMA optimize`) and keeps its temporary tables on disk, so large Compiles don't depend
+  on how the Python image's SQLite was built.
+
+- 🐳 **`docker exec` needs no `--data-dir`.** The image sets `THREATCULL_DATA_DIR=/data`, so
+  `docker exec threatcull threatcull api-token create <name> --user admin` works as written. It
+  also sets `SQLITE_TMPDIR=/data`, so SQLite's temporary files stay on the data volume even when
+  `/tmp` is a `tmpfs` mount.
+- 🔗 **`feed_path` in `/api/v1/outputs`.** Each Output lists its feed URL path (`/o/<name>`); add
+  the Feed Token to get a working URL.
+- 📖 **API and sizing docs.** [docs/API.md](docs/API.md) covers every endpoint with curl examples,
+  feed URLs and the difference between a feed URL and the Download button. The README has a
+  Sizing section with measured numbers and advice for a Raspberry Pi, and `docker-compose.yaml`
+  has a commented `mem_limit` example.
+- 🗓️ **Enabling a Source no longer starts a Fetch.** A Source enabled in the web UI, the API, the
+  CLI or by a Catalog update waits for the regular schedule (at most an hour for its first Fetch),
+  so enabling several Sources in a row doesn't start a Fetch and a Compile for each one. Click
+  **Run now** to fetch them at once. The Sources page shows when a new Source's first Fetch is
+  due. After a restart, ThreatCull still catches up on overdue Sources within minutes.
+  [#60](https://github.com/spydisec/threatcull/issues/60)
+
+### Fixed
+
+- 🕒 **New Sources are not Stale.** A Source that has never fetched counted as Stale, so enabling
+  several new Sources could push the Stale share over `max_stale_ratio` and block the Compile until
+  they had fetched. Only a Source whose last success is older than `stale_after_hours` counts now;
+  the dashboard lists new ones as "waiting for first Fetch".
+- 🔁 **Re-enabled Sources fill up again.** A Source disabled for longer than the retention period
+  lost its entries to pruning, and when it was re-enabled the server's `304 Not Modified` kept it
+  empty until the upstream list changed. ThreatCull now notices the missing entries and downloads
+  the full list.
+- ⏱️ **Runs show how long they took.** Every Fetch and Compile stored its start time as its finish
+  time, so the run history and `/api/v1/runs` showed 0 s for every run. ThreatCull now records the
+  real finish time. [#59](https://github.com/spydisec/threatcull/issues/59)
+- 🧭 **Force Compile no longer hangs the page.** The page waited until the whole Compile finished,
+  which takes minutes with large lists. Force Compile now starts in the background like Run now,
+  and the run status shows when it ends. [#57](https://github.com/spydisec/threatcull/issues/57)
+
 ## [2.2.1] - 2026-10-03
 
 Updated base images with OpenSSL security fixes. Upgrading is recommended; nothing else to do.
@@ -278,7 +342,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.2.1...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/spydisec/threatcull/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/spydisec/threatcull/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/spydisec/threatcull/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/spydisec/threatcull/compare/v2.0.2...v2.1.0

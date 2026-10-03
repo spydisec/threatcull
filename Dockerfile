@@ -50,9 +50,15 @@ COPY --link --from=build --chown=10001:10001 /rootfs/data /data
 # Root owns the code: the app user can read it but not change it.
 COPY --link --from=build /app/.venv /app/.venv
 WORKDIR /app
+# THREATCULL_DATA_DIR is the CLI's default --data-dir, so
+# `docker exec threatcull threatcull <command>` works without --data-dir.
+# SQLITE_TMPDIR puts SQLite's temporary files (millions of rows during a Fetch or
+# Compile) on the data volume, not in /tmp, which may be a tmpfs counted as RAM.
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    THREATCULL_DATA_DIR=/data \
+    SQLITE_TMPDIR=/data
 VOLUME ["/data"]
 EXPOSE 6969
 USER 10001:10001

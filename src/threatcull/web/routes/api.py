@@ -36,6 +36,7 @@ from threatcull.web.deps import (
     require_api_user,
 )
 from threatcull.web.schemas import AllowlistEntryIn, SourceEnableIn
+from threatcull.web.status import build_status
 
 router = APIRouter(prefix="/api/v1")
 
@@ -74,6 +75,8 @@ def _output_json(output: OutputSpec) -> dict[str, Any]:
         "format": output.format,
         "last_count": output.last_count,
         "last_published_at": output.last_published_at,
+        # The Feed Token is never readable: append "/<feed-token>" or "?token=<feed-token>".
+        "feed_path": f"/o/{output.name}",
     }
 
 
@@ -148,6 +151,19 @@ def _settings_json(settings: Settings) -> dict[str, Any]:
 @router.get("/me")
 def me(user: Annotated[str, Depends(require_api_user)]) -> dict[str, str]:
     return {"username": user}
+
+
+@router.get("/status")
+def api_status(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_api_user)],
+) -> dict[str, Any]:
+    """What runs now (step, Source, elapsed, trigger) and what comes next."""
+    status = build_status(
+        conn, request.app.state.runner, getattr(request.app.state, "scheduler", None)
+    )
+    return status.to_json()
 
 
 @router.get("/sources")

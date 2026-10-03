@@ -70,7 +70,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         scheduler = Scheduler(app.state.data_dir, app.state.runner)
         scheduler.start()
         app.state.scheduler = scheduler
-        app.state.on_sources_changed = scheduler.rescan
+        app.state.on_sources_changed = scheduler.source_changed
     try:
         yield
     finally:

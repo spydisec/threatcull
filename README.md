@@ -88,6 +88,23 @@ Set these under `environment:` in `docker-compose.yaml`.
 ThreatCull stores and schedules everything in UTC, so you can change `TZ` at any time. Hover a time
 in the web UI to see its UTC value.
 
+### Sizing
+
+The number of lines your Sources list decides how much CPU, memory and disk ThreatCull needs. On
+an 8-core x86 machine, the first Fetch of a 6.5 million-line list took about 9 minutes with a
+300 MB memory peak, and a Compile over 9.7 million entries took about 4.5 minutes with 70 MB. The
+database grew to 1.5 GB.
+
+A Raspberry Pi 4 (4 GB) ran the smaller catalog Sources without trouble. With about 9.4 million
+domain lines from large lists (a 4 million-line custom list, `blocklistproject-malware` and
+`hagezi-tif-domains`), next to other containers on the same SD card, it became unresponsive
+during the first run. On a Pi:
+
+- start with the smaller Sources and add large lists one at a time;
+- remove the `#` in front of `mem_limit: 1g` in `docker-compose.yaml`, so Docker stops ThreatCull
+  before the host runs out of memory;
+- watch `docker stats` during the first Fetch of a large list.
+
 ## Upgrade
 
 ```bash
@@ -134,12 +151,13 @@ uv run threatcull serve --host <lan-ip> --port 6969
 - **Your network:** add your public addresses to the allowlist with **My network** ticked (or run
   `threatcull allow detect`). ThreatCull keeps them out of every output and warns you when a source
   lists one.
-- **Scripts:** create an API token with `threatcull api-token create <name> --user admin` and send it
-  as `Authorization: Bearer <token>` to `/api/v1/`.
+- **Scripts:** create an API token with
+  `docker exec threatcull threatcull api-token create <name> --user admin` and send it as
+  `Authorization: Bearer <token>` to `/api/v1/`. [docs/API.md](docs/API.md) lists every endpoint.
 - **Hardening:** the image is built on [Docker Hardened Images](https://docs.docker.com/dhi/) (no
   shell or package manager inside) and runs as a non-root user. The compose file drops all Linux
   capabilities and blocks privilege escalation. It also works with `read_only: true` and
-  `tmpfs: [/tmp]`.
+  `tmpfs: [/tmp]`: SQLite writes its temporary files to `/data`, so they don't use RAM.
 - **Reverse proxy with TLS:** start `serve` with `--secure-cookies` and `--trusted-proxy <proxy-ip>`.
 - **Scheduling:** `serve` runs fetches and compiles itself. Don't also run `threatcull run` from `cron`
   on the same data directory.

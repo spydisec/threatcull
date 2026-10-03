@@ -3,9 +3,11 @@
 import { initCharts } from "./charts";
 import { initCopy } from "./copy";
 import { initCsrf } from "./csrf";
+import { initElapsed } from "./elapsed";
 import { initFilters } from "./filter";
 
 initCsrf();
 initCopy();
 initFilters();
 initCharts();
+initElapsed();
