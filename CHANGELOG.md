@@ -8,6 +8,12 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-03
+
+Fetch and Compile are about twice as fast, runs show how long each stage took, and Settings shows
+how much disk the database and Outputs use. Nothing to do when upgrading. After the upgrade, the
+first Fetch of each Source parses its list in full once.
+
 ### Changed
 
 - 🚀 **Faster Fetch and Compile.** Domain validation skips steps that can't change its result, the
@@ -372,7 +378,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.3.1...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/spydisec/threatcull/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/spydisec/threatcull/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/spydisec/threatcull/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/spydisec/threatcull/compare/v2.2.0...v2.2.1
