@@ -8,6 +8,12 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-10-03
+
+Fetches keep large lists on disk instead of in memory, so a big Source no longer needs hundreds of
+MB of RAM. Nothing to do when upgrading. After the upgrade, the first Fetch of each Source parses
+its list in full once.
+
 ### Changed
 
 - 💾 **Large downloads go to disk.** A Fetch writes the download to a temporary file on the data
@@ -350,7 +356,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.3.1...HEAD
+[2.3.1]: https://github.com/spydisec/threatcull/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/spydisec/threatcull/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/spydisec/threatcull/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/spydisec/threatcull/compare/v2.1.0...v2.2.0
