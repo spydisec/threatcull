@@ -101,6 +101,8 @@ def _run_json(run: Run) -> dict[str, Any]:
         "source_id": run.source_id,
         "started_at": run.started_at,
         "finished_at": run.finished_at,
+        "duration_seconds": run.duration_seconds,
+        "timings": run.timings,
         "status": run.status,
         "counts": run.counts,
         "error": run.error,

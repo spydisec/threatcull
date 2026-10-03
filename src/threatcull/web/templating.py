@@ -45,10 +45,13 @@ def _when(value: str | None, missing: str = "never") -> Markup:
 _PER_UNIT = 60  # seconds per minute, minutes per hour
 
 
-def _duration(seconds: int | None) -> str:
+def _duration(value: float | None) -> str:
     """``45 s``, ``3 min 20 s``, ``1 h 5 min``: a run's length, for people."""
-    if seconds is None:
+    if value is None:
         return ""
+    if 0 < value < 1:
+        return "<1 s"
+    seconds = round(value)
     if seconds < _PER_UNIT:
         return f"{seconds} s"
     minutes, secs = divmod(seconds, _PER_UNIT)

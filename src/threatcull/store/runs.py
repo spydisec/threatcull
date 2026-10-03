@@ -30,8 +30,23 @@ class Run:
     error: str | None
     # A Compile's hits on the operator's own network: (value, comma-joined Source ids), capped.
     home_hits: tuple[tuple[str, str], ...] = ()
-    # A Compile's cleanup numbers (``policy.stats.CompileStats.to_json``); {} otherwise.
+    # A Compile's cleanup numbers (``policy.stats.CompileStats.to_json``) and, for every
+    # Run since 2.4, ``timings``: seconds per stage (``timing.StageTimer``).
     stats: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def duration_seconds(self) -> int | None:
+        """How long the Run took; ``None`` while it runs."""
+        if self.finished_at is None:
+            return None
+        took = datetime.fromisoformat(self.finished_at) - datetime.fromisoformat(self.started_at)
+        return max(0, int(took.total_seconds()))
+
+    @property
+    def timings(self) -> dict[str, float]:
+        """Seconds per stage, in the order the stages ran; {} for older Runs."""
+        timings: dict[str, float] = self.stats.get("timings", {})
+        return timings
 
 
 # Fetch and Compile pass one logical ``now`` to both start_run and finish_run, so
