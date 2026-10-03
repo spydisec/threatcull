@@ -65,6 +65,7 @@ from threatcull.web.deps import (
 from threatcull.web.jobs import PipelineRunner
 from threatcull.web.scheduler import Scheduler
 from threatcull.web.schemas import AllowlistEntryIn, CustomSourceIn, OutputCreateIn
+from threatcull.web.status import build_status
 from threatcull.web.templating import flash, render, render_fragment
 
 router = APIRouter()
@@ -81,9 +82,11 @@ def _runner(request: Request) -> PipelineRunner:
     return runner
 
 
-def _run_status(request: Request) -> dict[str, Any]:
+def _run_status(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
     runner = _runner(request)
-    return {"running": runner.is_running(), "last_result": runner.last_result}
+    scheduler: Scheduler | None = getattr(request.app.state, "scheduler", None)
+    status = build_status(conn, runner, scheduler)
+    return {"running": status.running, "last_result": runner.last_result, "status": status}
 
 
 def _notify_sources_changed(request: Request) -> None:
@@ -133,7 +136,7 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
         "next_compile_at": ts(next_run) if next_run is not None else None,
         "refreshed_at": ts(now),
         "stats": stats,
-        **_run_status(request),
+        **_run_status(request, conn),
     }
     if stats is not None:
         context.update(
@@ -182,7 +185,7 @@ def status_fragment(
     """
     if current_user(request, conn) is None:
         return render_fragment(request, "_session_expired.html", status_code=HTMX_STOP_POLLING)
-    return render_fragment(request, "_status.html", _run_status(request))
+    return render_fragment(request, "_status.html", _run_status(request, conn))
 
 
 @router.get("/sources")
@@ -328,7 +331,7 @@ def _runs_context(request: Request, conn: sqlite3.Connection) -> dict[str, Any]:
     return {
         "runs": recent_runs(conn, RUNS_PAGE_LIMIT),
         "last_compile_status": last_compile.status if last_compile else None,
-        **_run_status(request),
+        **_run_status(request, conn),
     }
 
 

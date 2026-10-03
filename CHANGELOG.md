@@ -10,6 +10,13 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ### Changed
 
+- 📡 **See what a run is doing.** The status line on the dashboard and Runs page names the step
+  ("Fetching *Source* (3 of 10)" or "Compiling the Outputs"), how long it has run, how long it
+  took last time and what started it (Run now, Force Compile or the schedule). While idle it shows
+  the next Fetch and Compile, and it now refreshes every 20 s, so a scheduled run shows up without
+  a reload. Outputs that no Compile has written yet say "not published yet" on the Outputs page
+  and in the status line, since their feed URLs answer 404 until then. `GET /api/v1/status`
+  returns the same information. [#58](https://github.com/spydisec/threatcull/issues/58)
 - ⚡ **Unchanged lists skip parsing.** A Fetch hashes each download and compares it with the list
   it last applied. When nothing changed, ThreatCull refreshes the Source's entries without parsing
   them again, even if the server sends no `ETag` header. A 3 million-line list re-fetched in 5 s

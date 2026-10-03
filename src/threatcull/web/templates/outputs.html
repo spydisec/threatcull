@@ -46,7 +46,7 @@
         <td>{{ output.min_tier }}</td>
         <td class="num nowrap">{{ "{:,}".format(output.max_entries) if output.max_entries else "no cap" }}</td>
         <td class="num">{{ "{:,}".format(output.last_count) if output.last_count is not none else "never" }}</td>
-        <td class="nowrap">{{ output.last_published_at | when }}</td>
+        <td class="nowrap">{% if output.last_published_at %}{{ output.last_published_at | when }}{% else %}<span class="pill pill-off">not published yet</span><div class="sub">The next Compile writes it; its feed URL answers 404 until then.</div>{% endif %}</td>
         <td class="actions">
           {% if output.last_published_at %}<a class="button btn-secondary btn-small" href="/outputs/{{ output.name }}/download" download>Download</a>{% endif %}
           <form method="post" action="/outputs/{{ output.name }}/rotate">

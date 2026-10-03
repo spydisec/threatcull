@@ -133,11 +133,30 @@ public IP, CIDR or domain returns `400`.
 curl -H "Authorization: Bearer $TOKEN" "http://<server-ip>:6969/api/v1/lookup?q=example.org"
 ```
 
+### `GET /api/v1/status`
+
+What ThreatCull is doing now and what comes next, as the status line in the web UI shows it.
+
+- `running`: `true` while a Fetch or Compile runs.
+- `trigger`: what started it: `run_now`, `force_compile`, `scheduled_fetch` or
+  `scheduled_compile`.
+- `step`: `fetch` or `compile`, with `step_started_at`, `elapsed_seconds` and `previous_seconds`
+  (how long the same step took last time, or `null` when unknown).
+- `source_id` and `source_name`: the Source being fetched. During Run now, `position` and `total`
+  give "3 of 10".
+- `next_compile_at`, `next_fetch` (`source_id`, `source_name`, `at`) and `retries_waiting`
+  (Fetches that found a run in progress and will retry). `scheduler_on` is `false` when ThreatCull
+  runs without its scheduler.
+- `unpublished_outputs`: Outputs no Compile has written yet. Their feed URLs answer `404`.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://<server-ip>:6969/api/v1/status
+```
+
 ### Starting a run
 
 The API has no endpoint that starts a Fetch or Compile yet. Use **Run now** in the web UI, or wait
-for the schedule. Issue [#58](https://github.com/spydisec/threatcull/issues/58) tracks a status
-endpoint.
+for the schedule.
 
 ## Feed URLs
 

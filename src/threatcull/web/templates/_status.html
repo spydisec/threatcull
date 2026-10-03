@@ -1,16 +1,32 @@
-{# Run status. While a run is going this fragment asks htmx to fetch it again
-   every 3 s (replacing itself); once idle it renders without hx-* attributes,
-   so the polling stops by itself. #}
-{% if running %}
-<div id="run-status" class="run-status" hx-get="/partials/status" hx-trigger="every 3s" hx-swap="outerHTML">
-  <p><strong>Running…</strong> A run is in progress.</p>
-</div>
-{% else %}
-<div id="run-status" class="run-status">
-  {% if last_result %}
-  <p>Idle. Last run from this server: {{ last_result.status }}, finished {{ last_result.finished_at | when }}.</p>
+{# Run status. htmx re-fetches this fragment and replaces it: every 3 s while a
+   run is going, every 20 s while idle (so a scheduled run shows up without a
+   reload). An expired session answers 286, which stops the polling. #}
+{% set s = status %}
+<div id="run-status" class="run-status" hx-get="/partials/status" hx-trigger="every {{ '3s' if s.running else '20s' }}" hx-swap="outerHTML">
+  {% if s.running %}
+  <p>
+    <strong>Running…</strong>
+    {% if s.step == "fetch" %}
+    Fetching <strong>{{ s.source_name }}</strong>{% if s.position and s.total %} ({{ s.position }} of {{ s.total }}){% endif %}
+    {% elif s.step == "compile" %}
+    Compiling the Outputs
+    {% else %}
+    Starting
+    {% endif %}
+    {% if s.elapsed_seconds is not none %}· {{ s.elapsed_seconds | duration }}{% if s.previous_seconds %} (last time {{ s.previous_seconds | duration }}){% endif %}{% endif %}
+    {% if s.trigger_label %}· started by {{ s.trigger_label }}{% endif %}
+  </p>
   {% else %}
-  <p>Idle.</p>
+  <p>
+    Idle.
+    {% if last_result %}Last run from this server: {{ last_result.status }}, finished {{ last_result.finished_at | when }}.{% endif %}
+    {% if s.next_fetch %}Next: Fetch of {{ s.next_fetch.source_name }} at {{ s.next_fetch.at | when }}{% if s.next_compile_at %}, Compile at {{ s.next_compile_at | when }}{% endif %}.{% elif s.next_compile_at %}Next Compile at {{ s.next_compile_at | when }}.{% endif %}
+  </p>
+  {% endif %}
+  {% if s.retries_waiting %}
+  <p class="muted">{{ s.retries_waiting }} Fetch{{ "es" if s.retries_waiting != 1 else "" }} waiting to retry after the current run.</p>
+  {% endif %}
+  {% if s.unpublished_outputs %}
+  <p class="muted">Not published yet: {{ s.unpublished_outputs | join(", ") }}. The next Compile writes {{ "them" if s.unpublished_outputs | length > 1 else "it" }}; their feed URLs answer 404 until then.</p>
   {% endif %}
 </div>
-{% endif %}

@@ -49,6 +49,20 @@ class RunResult:
     finished_at: str | None = None
 
 
+# What started the run in progress, for the status line.
+Trigger = Literal["run_now", "force_compile", "scheduled_fetch", "scheduled_compile"]
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRun:
+    """The run holding the lock right now."""
+
+    trigger: Trigger
+    started_at: str
+    fetch: bool  # True: fetches Sources (all of them, or ``source_id`` only)
+    source_id: str | None = None
+
+
 ALREADY_RUNNING = RunResult("already_running")
 SKIPPED = RunResult("skipped")
 
@@ -66,6 +80,8 @@ class PipelineRunner:
         # the run was started (background thread, or a synchronous caller).
         self._idle = threading.Condition()
         self.last_result: RunResult | None = None
+        # Set while a run holds the lock; read by the status line on other threads.
+        self.active: ActiveRun | None = None
 
     def is_running(self) -> bool:
         return self._lock.locked()
@@ -74,6 +90,7 @@ class PipelineRunner:
         """Fetch every enabled Source, then Compile; ``already_running`` if busy."""
         if not self._lock.acquire(blocking=False):
             return ALREADY_RUNNING
+        self._begin("run_now", fetch=True)
         try:
             return self._run_locked(fetch=True, force=force)
         finally:
@@ -83,6 +100,7 @@ class PipelineRunner:
         """Compile without fetching (``force`` overrides a blocked Shrink Guard)."""
         if not self._lock.acquire(blocking=False):
             return ALREADY_RUNNING
+        self._begin("force_compile" if force else "scheduled_compile", fetch=False)
         try:
             return self._run_locked(fetch=False, force=force)
         finally:
@@ -99,6 +117,7 @@ class PipelineRunner:
         """
         if not self._lock.acquire(blocking=False):
             return ALREADY_RUNNING
+        self._begin("scheduled_fetch", fetch=True, source_id=source_id)
         try:
             return self._fetch_one_locked(source_id)
         finally:
@@ -114,6 +133,7 @@ class PipelineRunner:
         """
         if not self._lock.acquire(blocking=False):
             return False
+        self._begin("run_now" if fetch else "force_compile", fetch=fetch)
         try:
             thread = Thread(
                 target=self._background, args=(force, fetch), name="threatcull-run", daemon=True
@@ -133,8 +153,13 @@ class PipelineRunner:
         with self._idle:
             return self._idle.wait_for(lambda: not self._lock.locked(), timeout)
 
+    def _begin(self, trigger: Trigger, *, fetch: bool, source_id: str | None = None) -> None:
+        """Record the run that just took the lock."""
+        self.active = ActiveRun(trigger, ts(utcnow()), fetch, source_id)
+
     def _release(self) -> None:
         with self._idle:
+            self.active = None
             self._lock.release()
             self._idle.notify_all()
 

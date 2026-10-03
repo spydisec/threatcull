@@ -259,6 +259,11 @@ class Scheduler:
                         times[source_id] = run_at
         return times
 
+    def retries_waiting(self) -> int:
+        """Fetches that found a run in progress and wait to try again."""
+        with self._lock:
+            return sum(1 for job in self.scheduler.get_jobs() if job.id.startswith(_RETRY_PREFIX))
+
     def fetch_job(self, source_id: str) -> None:
         """Fetch one Source (regular tick or busy retry); then debounce a Compile."""
         try:
