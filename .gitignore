@@ -41,5 +41,9 @@ compose.yaml
 # Claude Code settings (local only)
 .claude/
 
+# Launch video renders and their working files (/brag-slim)
+brag-output/
+brag-output-*/
+
 # Tests run locally only (make check); they are not part of the repository.
 tests/

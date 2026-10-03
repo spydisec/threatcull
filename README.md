@@ -24,6 +24,8 @@ sources ──> drop duplicates, private ranges, your allowlist ──> score by
 - Web UI with a dashboard, lookup, run history and a built-in scheduler
 - Works offline and on a bare LAN IP
 
+https://github.com/user-attachments/assets/d78a93ce-2fdb-4fbf-9664-20ed0162c54a
+
 <table>
   <tr>
     <td width="33%" align="center">
