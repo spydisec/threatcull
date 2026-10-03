@@ -22,12 +22,29 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   (`PRAGMA optimize`) and keeps its temporary tables on disk, so large Compiles don't depend
   on how the Python image's SQLite was built.
 
+- 🐳 **`docker exec` needs no `--data-dir`.** The image sets `THREATCULL_DATA_DIR=/data`, so
+  `docker exec threatcull threatcull api-token create <name> --user admin` works as written. It
+  also sets `SQLITE_TMPDIR=/data`, so SQLite's temporary files stay on the data volume even when
+  `/tmp` is a `tmpfs` mount.
+- 🔗 **`feed_path` in `/api/v1/outputs`.** Each Output lists its feed URL path (`/o/<name>`); add
+  the Feed Token to get a working URL.
+- 📖 **API and sizing docs.** [docs/API.md](docs/API.md) covers every endpoint with curl examples,
+  feed URLs and the difference between a feed URL and the Download button. The README has a
+  Sizing section with measured numbers and advice for a Raspberry Pi, and `docker-compose.yaml`
+  has a commented `mem_limit` example.
+
 ### Fixed
 
 - 🔁 **Re-enabled Sources fill up again.** A Source disabled for longer than the retention period
   lost its entries to pruning, and when it was re-enabled the server's `304 Not Modified` kept it
   empty until the upstream list changed. ThreatCull now notices the missing entries and downloads
   the full list.
+- ⏱️ **Runs show how long they took.** Every Fetch and Compile stored its start time as its finish
+  time, so the run history and `/api/v1/runs` showed 0 s for every run. ThreatCull now records the
+  real finish time. [#59](https://github.com/spydisec/threatcull/issues/59)
+- 🧭 **Force Compile no longer hangs the page.** The page waited until the whole Compile finished,
+  which takes minutes with large lists. Force Compile now starts in the background like Run now,
+  and the run status shows when it ends. [#57](https://github.com/spydisec/threatcull/issues/57)
 
 ## [2.2.1] - 2026-10-03
 
