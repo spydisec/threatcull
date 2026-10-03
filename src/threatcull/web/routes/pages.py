@@ -73,6 +73,7 @@ RUNS_PAGE_LIMIT = 50
 LOOKUP_MAX_LENGTH = 512  # same cap as /api/v1/lookup
 RUN_STARTED = "Run started."
 ALREADY_RUNNING = "A run is already in progress."
+FORCED_COMPILE_STARTED = "Forced Compile started. The status below shows when it finishes."
 
 
 def _runner(request: Request) -> PipelineRunner:
@@ -341,11 +342,8 @@ def compile_force(
         context = _runs_context(request, conn)
         context["force_error"] = "Tick the confirm box to force a Compile."
         return render(request, "runs.html", context, status_code=400)
-    result = _runner(request).compile_only(force=True)
-    if result.status == "already_running":
-        flash(request, ALREADY_RUNNING)
-    else:
-        flash(request, f"Compile forced: {result.status}.")
+    started = _runner(request).start_background(force=True, fetch=False)
+    flash(request, FORCED_COMPILE_STARTED if started else ALREADY_RUNNING)
     return RedirectResponse("/runs", status_code=303)
 
 

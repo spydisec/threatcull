@@ -104,17 +104,19 @@ class PipelineRunner:
         finally:
             self._release()
 
-    def start_background(self, force: bool = False) -> bool:
+    def start_background(self, force: bool = False, *, fetch: bool = True) -> bool:
         """Start :meth:`run` in a daemon thread; ``False`` if a run is in progress.
 
-        The lock is taken here, before the thread starts, so a second call
-        straight after this one already sees the run as in progress.
+        ``fetch=False`` starts :meth:`compile_only` instead (Force Compile), so a
+        long Compile never holds a web request open. The lock is taken here,
+        before the thread starts, so a second call straight after this one
+        already sees the run as in progress.
         """
         if not self._lock.acquire(blocking=False):
             return False
         try:
             thread = Thread(
-                target=self._background, args=(force,), name="threatcull-run", daemon=True
+                target=self._background, args=(force, fetch), name="threatcull-run", daemon=True
             )
             thread.start()
         except BaseException:
@@ -136,9 +138,9 @@ class PipelineRunner:
             self._lock.release()
             self._idle.notify_all()
 
-    def _background(self, force: bool) -> None:
+    def _background(self, force: bool, fetch: bool) -> None:
         try:
-            self._run_locked(fetch=True, force=force)
+            self._run_locked(fetch=fetch, force=force)
         finally:
             self._release()
 

@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from threatcull.clock import ts
@@ -32,6 +34,17 @@ class Run:
     stats: dict[str, Any] = field(default_factory=dict)
 
 
+# Fetch and Compile pass one logical ``now`` to both start_run and finish_run, so
+# the Sightings and Outputs of a run share a timestamp. The real elapsed time is
+# measured here with a monotonic clock and added at finish_run, so a run's
+# finished_at shows how long it actually took. Keyed by connection and run id;
+# a run is always started and finished on the same connection.
+_started: dict[tuple[int, int], tuple[datetime, float]] = {}
+_started_lock = threading.Lock()
+_MAX_TRACKED = 1000  # runs that never finish (a crash mid-run) must not pile up
+_monotonic = time.monotonic  # replaced in tests
+
+
 def start_run(
     conn: sqlite3.Connection, run_type: RunType, *, now: datetime, source_id: str | None = None
 ) -> int:
@@ -39,7 +52,22 @@ def start_run(
         "INSERT INTO runs (type, source_id, started_at, status) VALUES (?, ?, ?, 'running')",
         (run_type, source_id, ts(now)),
     )
-    return int(cursor.lastrowid or 0)
+    run_id = int(cursor.lastrowid or 0)
+    with _started_lock:
+        if len(_started) >= _MAX_TRACKED:
+            _started.clear()
+        _started[(id(conn), run_id)] = (now, _monotonic())
+    return run_id
+
+
+def _finished_at(conn: sqlite3.Connection, run_id: int, now: datetime) -> datetime:
+    """``now``, or the start plus the real elapsed time when that is later."""
+    with _started_lock:
+        started = _started.pop((id(conn), run_id), None)
+    if started is None:
+        return now
+    logical_start, mark = started
+    return max(now, logical_start + timedelta(seconds=_monotonic() - mark))
 
 
 def finish_run(
@@ -57,7 +85,7 @@ def finish_run(
         "UPDATE runs SET finished_at = ?, status = ?, counts = ?, error = ?, home_hits = ?, "
         "stats = ? WHERE id = ?",
         (
-            ts(now),
+            ts(_finished_at(conn, run_id, now)),
             status,
             json.dumps(dict(counts or {})),
             error,
