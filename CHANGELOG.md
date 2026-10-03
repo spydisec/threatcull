@@ -8,6 +8,27 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Changed
+
+- ⚡ **Unchanged lists skip parsing.** A Fetch hashes each download and compares it with the list
+  it last applied. When nothing changed, ThreatCull refreshes the Source's entries without parsing
+  them again, even if the server sends no `ETag` header. A 3 million-line list re-fetched in 5 s
+  instead of 4 min in testing. An upgrade, or a change to a Source's URL or format, parses every
+  list in full once.
+- 🌐 **The first Fetch waits for DNS.** After a restart, the first scheduled Fetch waits up to two
+  minutes for the Source's host to resolve, so a server that boots before the router no longer
+  records a row of failed Fetches.
+- 🗄️ **SQLite tuning.** ThreatCull refreshes the query planner's statistics after each Compile
+  (`PRAGMA optimize`) and keeps its temporary tables on disk, so large Compiles don't depend
+  on how the Python image's SQLite was built.
+
+### Fixed
+
+- 🔁 **Re-enabled Sources fill up again.** A Source disabled for longer than the retention period
+  lost its entries to pruning, and when it was re-enabled the server's `304 Not Modified` kept it
+  empty until the upstream list changed. ThreatCull now notices the missing entries and downloads
+  the full list.
+
 ## [2.2.1] - 2026-10-03
 
 Updated base images with OpenSSL security fixes. Upgrading is recommended; nothing else to do.
