@@ -66,6 +66,11 @@ class ActiveRun:
     after_run_id: int = 0
 
 
+def spooling_fetcher() -> Fetcher:
+    """The fetcher for Source Fetches: large downloads go to disk, not RAM."""
+    return HttpFetcher(spool=True)
+
+
 ALREADY_RUNNING = RunResult("already_running")
 SKIPPED = RunResult("skipped")
 
@@ -74,7 +79,7 @@ class PipelineRunner:
     """Runs the Plan 1 pipeline for the web app, never two at once."""
 
     def __init__(
-        self, data_dir: Path, *, fetcher_factory: Callable[[], Fetcher] = HttpFetcher
+        self, data_dir: Path, *, fetcher_factory: Callable[[], Fetcher] = spooling_fetcher
     ) -> None:
         self._data_dir = data_dir
         self._fetcher_factory = fetcher_factory
