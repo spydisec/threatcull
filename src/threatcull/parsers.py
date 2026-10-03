@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Parsers: turn a Source's raw text into candidate indicator strings."""
+"""Parsers: turn a Source's raw text into candidate indicator strings.
+
+The text is a ``str`` or a text stream (a download spooled to disk). Both are
+read one line at a time, so a Source of millions of lines never sits in memory
+as a list.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +13,7 @@ import io
 import json
 import re
 from collections.abc import Iterator
-from typing import Literal
+from typing import Literal, TextIO
 
 SourceFormat = Literal["plain", "hosts", "adblock", "csv", "json"]
 
@@ -36,7 +41,7 @@ class ParseError(ValueError):
 
 def parse(
     fmt: SourceFormat,
-    text: str,
+    text: str | TextIO,
     *,
     csv_column: int = 0,
     json_keys: tuple[str, ...] = (),
@@ -54,28 +59,35 @@ def parse(
         yield from _json(text, json_keys)
 
 
-def _content_lines(text: str) -> Iterator[str]:
+def _stream(text: str | TextIO) -> TextIO:
+    """A text stream over ``text``; newline="" keeps line endings for the splitting below."""
+    return io.StringIO(text, newline="") if isinstance(text, str) else text
+
+
+def _content_lines(text: str | TextIO) -> Iterator[str]:
     # Lazy equivalent of text.splitlines() (minus empty lines, which are skipped anyway):
-    # a list of every line of a 70 MB Source would cost hundreds of MB.
-    for match in _LINE.finditer(text):
-        line = match.group().split("#", 1)[0].strip()
-        if line and not line.startswith(_COMMENT_PREFIXES):
-            yield line
+    # a list of every line of a 70 MB Source would cost hundreds of MB. The stream
+    # splits at \n, \r and \r\n; _LINE also splits the rarer boundaries splitlines() knows.
+    for raw in _stream(text):
+        for match in _LINE.finditer(raw):
+            line = match.group().split("#", 1)[0].strip()
+            if line and not line.startswith(_COMMENT_PREFIXES):
+                yield line
 
 
-def _plain(text: str) -> Iterator[str]:
+def _plain(text: str | TextIO) -> Iterator[str]:
     for line in _content_lines(text):
         yield line.split()[0]
 
 
-def _hosts(text: str) -> Iterator[str]:
+def _hosts(text: str | TextIO) -> Iterator[str]:
     for line in _content_lines(text):
         tokens = line.split()
         names = tokens[1:] if len(tokens) > 1 else tokens
         yield from (name for name in names if name.lower() not in _HOSTS_SKIP)
 
 
-def _adblock(text: str) -> Iterator[str]:
+def _adblock(text: str | TextIO) -> Iterator[str]:
     for line in _content_lines(text):
         if not line.startswith("||"):
             continue
@@ -86,8 +98,8 @@ def _adblock(text: str) -> Iterator[str]:
             yield host
 
 
-def _csv(text: str, column: int) -> Iterator[str]:
-    rows = csv.reader(io.StringIO(text))
+def _csv(text: str | TextIO, column: int) -> Iterator[str]:
+    rows = csv.reader(_stream(text))
     while True:
         try:
             row = next(rows)
@@ -101,9 +113,9 @@ def _csv(text: str, column: int) -> Iterator[str]:
             yield row[column].strip()
 
 
-def _json(text: str, keys: tuple[str, ...]) -> Iterator[str]:
+def _json(text: str | TextIO, keys: tuple[str, ...]) -> Iterator[str]:
     try:
-        data = json.loads(text)
+        data = json.load(_stream(text))
     except json.JSONDecodeError as exc:
         raise ParseError(f"invalid JSON: {exc}") from exc
     except RecursionError as exc:

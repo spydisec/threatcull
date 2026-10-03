@@ -393,7 +393,8 @@ def _allow_detect(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
 
 def _fetch(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     failed = False
-    for outcome in fetch_all(conn, HttpFetcher(), now=utcnow(), source_ids=args.source_ids or None):
+    fetcher = HttpFetcher(spool=True)  # large lists go to a temporary file, not RAM
+    for outcome in fetch_all(conn, fetcher, now=utcnow(), source_ids=args.source_ids or None):
         if outcome.status == "failed":
             failed = True
             print(f"FAIL {outcome.source_id}: {outcome.error}", file=sys.stderr)

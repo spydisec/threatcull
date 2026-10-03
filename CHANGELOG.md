@@ -8,6 +8,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Changed
+
+- 💾 **Large downloads go to disk.** A Fetch writes the download to a temporary file on the data
+  volume (anything over 8 MB) and parses it line by line, instead of holding the whole list in
+  memory twice (as bytes and as text). On a 3 million-line, 49 MB list the peak memory of a Fetch
+  fell from 165 MB to 76 MB, and it no longer grows with the list's size. The image sets
+  `TMPDIR=/data` so the temporary file stays on the volume.
+
 ## [2.3.0] - 2026-10-03
 
 The status line shows what a run is doing, unchanged lists refresh in seconds, and enabling Sources

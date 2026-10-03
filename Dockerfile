@@ -52,13 +52,15 @@ COPY --link --from=build /app/.venv /app/.venv
 WORKDIR /app
 # THREATCULL_DATA_DIR is the CLI's default --data-dir, so
 # `docker exec threatcull threatcull <command>` works without --data-dir.
-# SQLITE_TMPDIR puts SQLite's temporary files (millions of rows during a Fetch or
-# Compile) on the data volume, not in /tmp, which may be a tmpfs counted as RAM.
+# SQLITE_TMPDIR and TMPDIR put SQLite's temporary files (millions of rows during a
+# Fetch or Compile) and spooled downloads on the data volume, not in /tmp, which
+# may be a tmpfs counted as RAM.
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     THREATCULL_DATA_DIR=/data \
-    SQLITE_TMPDIR=/data
+    SQLITE_TMPDIR=/data \
+    TMPDIR=/data
 VOLUME ["/data"]
 EXPOSE 6969
 USER 10001:10001
