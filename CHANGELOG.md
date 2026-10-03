@@ -8,6 +8,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-03
+
+The status line shows what a run is doing, unchanged lists refresh in seconds, and enabling Sources
+no longer starts a burst of Fetches. ThreatCull upgrades its database on the first start (new
+columns only). After the upgrade, the first Fetch of each Source parses its list in full once;
+on a Raspberry Pi with multi-million-line lists, expect that first run to take as long as it did
+on a new install.
+
 ### Changed
 
 - 📡 **See what a run is doing.** The status line on the dashboard and Runs page names the step
@@ -334,7 +342,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.2.1...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/spydisec/threatcull/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/spydisec/threatcull/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/spydisec/threatcull/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/spydisec/threatcull/compare/v2.0.2...v2.1.0
