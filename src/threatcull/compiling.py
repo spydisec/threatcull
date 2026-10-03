@@ -49,13 +49,20 @@ HOME_HITS_CAP = 100
 def stale_source_ids(
     sources: Sequence[Source], *, now: datetime, settings: Settings
 ) -> tuple[str, ...]:
-    """Ids of ``sources`` whose last success is missing or older than ``stale_after_hours``.
+    """Ids of ``sources`` whose last success is older than ``stale_after_hours``.
+
+    A Source that never fetched successfully is not Stale: it has no Sightings,
+    so it can't leave old data in the Outputs. Newly enabled Sources wait for
+    the schedule (up to an hour) and must not block the Compile meanwhile; one
+    that keeps failing shows as failing instead.
 
     The Stale-Source rule Compile uses for its guard; the dashboard reuses this
     instead of re-deriving it.
     """
     cutoff = ts(now - timedelta(hours=settings.stale_after_hours))
-    return tuple(s.id for s in sources if s.last_success_at is None or s.last_success_at < cutoff)
+    return tuple(
+        s.id for s in sources if s.last_success_at is not None and s.last_success_at < cutoff
+    )
 
 
 def feeding_sources(spec: OutputSpec, blocklists: Sequence[Source]) -> frozenset[str]:
@@ -189,7 +196,8 @@ def _compile(
             {spec.name: spec.last_count for spec in specs},
             counts,
             stale=len(stale),
-            enabled=len(blocklists),
+            # Only Sources with data can be Stale, so only they count towards the ratio.
+            enabled=sum(1 for source in blocklists if source.last_success_at is not None),
             settings=settings,
             rebaselined=rebaselined,
         )

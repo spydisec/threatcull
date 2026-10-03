@@ -13,7 +13,7 @@
     {% else %}
     Starting
     {% endif %}
-    {% if s.elapsed_seconds is not none %}· {{ s.elapsed_seconds | duration }}{% if s.previous_seconds %} (last time {{ s.previous_seconds | duration }}){% endif %}{% endif %}
+    {% if s.elapsed_seconds is not none %}· <span data-elapsed="{{ s.elapsed_seconds }}">{{ s.elapsed_seconds | duration }}</span>{% if s.previous_seconds %} (last time {{ s.previous_seconds | duration }}){% endif %}{% endif %}
     {% if s.trigger_label %}· started by {{ s.trigger_label }}{% endif %}
   </p>
   {% else %}

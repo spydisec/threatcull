@@ -16,7 +16,8 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   the next Fetch and Compile, and it now refreshes every 20 s, so a scheduled run shows up without
   a reload. Outputs that no Compile has written yet say "not published yet" on the Outputs page
   and in the status line, since their feed URLs answer 404 until then. `GET /api/v1/status`
-  returns the same information. [#58](https://github.com/spydisec/threatcull/issues/58)
+  returns the same information. The elapsed time counts up every second between refreshes.
+  [#58](https://github.com/spydisec/threatcull/issues/58)
 - ⚡ **Unchanged lists skip parsing.** A Fetch hashes each download and compares it with the list
   it last applied. When nothing changed, ThreatCull refreshes the Source's entries without parsing
   them again, even if the server sends no `ETag` header. A 3 million-line list re-fetched in 5 s
@@ -48,6 +49,10 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ### Fixed
 
+- 🕒 **New Sources are not Stale.** A Source that has never fetched counted as Stale, so enabling
+  several new Sources could push the Stale share over `max_stale_ratio` and block the Compile until
+  they had fetched. Only a Source whose last success is older than `stale_after_hours` counts now;
+  the dashboard lists new ones as "waiting for first Fetch".
 - 🔁 **Re-enabled Sources fill up again.** A Source disabled for longer than the retention period
   lost its entries to pruning, and when it was re-enabled the server's `304 Not Modified` kept it
   empty until the upstream list changed. ThreatCull now notices the missing entries and downloads

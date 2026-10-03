@@ -124,6 +124,9 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
         "enabled_blocklist_count": len(blocklists),
         "failing_count": sum(1 for s in blocklists if s.last_error),
         "stale_count": len(stale_ids),
+        "waiting_count": sum(
+            1 for s in blocklists if s.last_success_at is None and not s.last_error
+        ),
         "allowlist_count": sum(1 for s in sources if s.role == "allowlist"),
         "last_compile": last_compile,
         "health": health(last_compile, blocklists, len(stale_ids)),
