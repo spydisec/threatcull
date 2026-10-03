@@ -7,13 +7,15 @@ millions of Indicators never needs a Python list or set of them.
 
 from __future__ import annotations
 
+import codecs
 import hashlib
+import io
 import re
 import sqlite3
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Literal, TextIO
 
 from threatcull import __version__
 from threatcull.fetcher import Fetcher, FetchError, FetchResult
@@ -70,19 +72,55 @@ class _Tally:
                 yield indicator
 
 
-def content_digest(source: Source, text: str) -> str:
+# The HTML check reads the download in chunks of this size, past any leading whitespace.
+_HEAD_BYTES = 4096
+_LEADING_SPACE = " \t\r\n\x0b\x0c\ufeff"
+
+
+def content_digest(source: Source, result: FetchResult) -> str:
     """SHA-256 of a download plus everything that decides how it parses.
 
-    The ThreatCull version is part of it, so an upgrade that changes parsing or
-    validation reprocesses every list once instead of trusting the old result.
+    A spooled download brings the hash of its bytes (computed while
+    downloading); a small one is hashed here. The ThreatCull version is part of
+    it, so an upgrade that changes parsing or validation reprocesses every list
+    once instead of trusting the old result.
     """
+    body = result.sha256
+    if body is None:
+        body = hashlib.sha256(result.text.encode("utf-8", "surrogatepass")).hexdigest()
     digest = hashlib.sha256()
     parts = (__version__, source.url, source.format, source.kind, str(source.csv_column))
-    for part in (*parts, *source.json_keys):
+    for part in (*parts, *source.json_keys, body):
         digest.update(part.encode())
         digest.update(b"\0")
-    digest.update(text.encode("utf-8", "surrogatepass"))
     return digest.hexdigest()
+
+
+def _text_of(result: FetchResult) -> str | TextIO:
+    """The download as text: the string, or a decoding stream over the spooled file."""
+    if result.body is None:
+        return result.text
+    return io.TextIOWrapper(result.body, encoding="utf-8", errors="replace", newline="")
+
+
+def _head(result: FetchResult) -> str:
+    """The download from its first non-whitespace character on (a few KB), for the HTML check.
+
+    However much whitespace comes first, the check must see the opening ``<`` of
+    an error page served as text/plain. A spooled body is read in chunks and
+    rewound afterwards.
+    """
+    if result.body is None:
+        return result.text.lstrip(_LEADING_SPACE)[:_HEAD_BYTES]
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    try:
+        while chunk := result.body.read(_HEAD_BYTES):
+            content = decoder.decode(chunk).lstrip(_LEADING_SPACE)
+            if content:
+                return content
+        return decoder.decode(b"", final=True).lstrip(_LEADING_SPACE)
+    finally:
+        result.body.seek(0)
 
 
 def fetch_source(
@@ -91,6 +129,7 @@ def fetch_source(
     run_id = start_run(conn, "fetch", now=now, source_id=source.id)
     tally = _Tally()
     valid = 0
+    result: FetchResult | None = None
     try:
         # A 304 only refreshes the Sightings already there: when some were pruned
         # meanwhile, ask for the whole list so they come back.
@@ -104,7 +143,7 @@ def fetch_source(
             record_not_modified(conn, source.id, now=now)
             finish_run(conn, run_id, "not_modified", now=now)
             return FetchOutcome(source.id, "not_modified")
-        digest = content_digest(source, result.text)
+        digest = content_digest(source, result)
         if same_content(conn, source.id, digest):
             # Same bytes as the list already applied (a server without ETags, or
             # one that ignores them): skip parsing millions of lines again.
@@ -117,7 +156,7 @@ def fetch_source(
         if error is None:
             candidates = parse(
                 source.format,
-                result.text,
+                _text_of(result),
                 csv_column=source.csv_column,
                 json_keys=source.json_keys,
             )
@@ -128,8 +167,12 @@ def fetch_source(
     except Exception as exc:
         # One bad Source must not abort the whole Fetch (KeyboardInterrupt still does).
         error = f"{type(exc).__name__}: {exc}"
+    finally:
+        if result is not None:
+            result.close()  # a spooled download's temporary file goes now
     if error is not None:
         return _fail(conn, run_id, source.id, error, now=now)
+    assert result is not None  # no error means the download arrived  # noqa: S101
     try:
         added, removed = apply_fetched(
             conn,
@@ -183,7 +226,7 @@ def _looks_like_html(source: Source, result: FetchResult) -> bool:
     if source.format not in _LINE_FORMATS:
         return False
     media_type = (result.content_type or "").split(";", 1)[0].strip().lower()
-    return media_type == "text/html" or _HTML_START.match(result.text) is not None
+    return media_type == "text/html" or _HTML_START.match(_head(result)) is not None
 
 
 def _count_rejection(
