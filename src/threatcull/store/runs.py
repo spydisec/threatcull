@@ -206,10 +206,11 @@ def recent_fetches(conn: sqlite3.Connection, limit: int = 500) -> list[Run]:
     return [_to_run(row) for row in rows]
 
 
-def running_run(conn: sqlite3.Connection) -> Run | None:
-    """The newest Run still marked ``running`` (the step in progress), if any."""
+def running_run(conn: sqlite3.Connection, *, after_id: int = 0) -> Run | None:
+    """The newest Run still marked ``running`` with an id above ``after_id``, if any."""
     row = conn.execute(
-        "SELECT * FROM runs WHERE status = 'running' ORDER BY id DESC LIMIT 1"
+        "SELECT * FROM runs WHERE status = 'running' AND id > ? ORDER BY id DESC LIMIT 1",
+        (after_id,),
     ).fetchone()
     return _to_run(row) if row is not None else None
 
@@ -235,9 +236,9 @@ def previous_duration(
     return int(took.total_seconds())
 
 
-def runs_started_since(conn: sqlite3.Connection, run_type: RunType, started_at: str) -> int:
-    """How many Runs of ``run_type`` started at or after ``started_at``."""
+def runs_after(conn: sqlite3.Connection, run_type: RunType, after_id: int) -> int:
+    """How many Runs of ``run_type`` have an id above ``after_id``."""
     count: int = conn.execute(
-        "SELECT COUNT(*) FROM runs WHERE type = ? AND started_at >= ?", (run_type, started_at)
+        "SELECT COUNT(*) FROM runs WHERE type = ? AND id > ?", (run_type, after_id)
     ).fetchone()[0]
     return count

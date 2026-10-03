@@ -16,7 +16,7 @@ from typing import Any
 from threatcull.clock import ts, utcnow
 from threatcull.store.errors import NotFoundError
 from threatcull.store.outputs import list_outputs
-from threatcull.store.runs import previous_duration, running_run, runs_started_since
+from threatcull.store.runs import previous_duration, running_run, runs_after
 from threatcull.store.sources import get_source, list_sources
 from threatcull.web.jobs import PipelineRunner
 from threatcull.web.scheduler import Scheduler
@@ -77,8 +77,8 @@ def build_status(
     upcoming = _upcoming(scheduler, names)
     if active is None:
         return StatusView(running=False, unpublished_outputs=unpublished, **upcoming)
-    step = running_run(conn)
-    if step is None or step.started_at < active.started_at:
+    step = running_run(conn, after_id=active.after_run_id)
+    if step is None:
         # The lock is held but the first step hasn't written its row yet.
         return StatusView(
             running=True,
@@ -91,7 +91,7 @@ def build_status(
     position = total = None
     if step.type == "fetch" and active.trigger == "run_now":
         total = sum(1 for source in list_sources(conn, enabled_only=True))
-        position = runs_started_since(conn, "fetch", active.started_at)
+        position = runs_after(conn, "fetch", active.after_run_id)
     return StatusView(
         running=True,
         trigger=active.trigger,

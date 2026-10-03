@@ -226,9 +226,11 @@ class Scheduler:
                     first = now + OVERDUE_FIRST_DELAY + overdue * OVERDUE_STAGGER
                     overdue += 1
                 elif due <= now:
+                    # Spread new Sources out, but never past the hour: the jitter is
+                    # taken off the wait, not added to it.
                     wait = min(timedelta(minutes=source.refresh_minutes), COMPILE_INTERVAL)
-                    jitter = _jitter_seconds(source.refresh_minutes)
-                    first = now + wait + timedelta(seconds=_random.uniform(0, jitter))
+                    jitter = min(_jitter_seconds(source.refresh_minutes), wait.total_seconds())
+                    first = now + wait - timedelta(seconds=_random.uniform(0, jitter))
                 else:
                     jitter = _jitter_seconds(source.refresh_minutes)
                     first = due + timedelta(seconds=_random.uniform(0, jitter))

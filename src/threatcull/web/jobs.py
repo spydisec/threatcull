@@ -61,6 +61,9 @@ class ActiveRun:
     started_at: str
     fetch: bool  # True: fetches Sources (all of them, or ``source_id`` only)
     source_id: str | None = None
+    # The highest Run id when this run began: its own Run rows come after it, so
+    # a row left "running" by an earlier, interrupted run is never mistaken for it.
+    after_run_id: int = 0
 
 
 ALREADY_RUNNING = RunResult("already_running")
@@ -154,8 +157,17 @@ class PipelineRunner:
             return self._idle.wait_for(lambda: not self._lock.locked(), timeout)
 
     def _begin(self, trigger: Trigger, *, fetch: bool, source_id: str | None = None) -> None:
-        """Record the run that just took the lock."""
-        self.active = ActiveRun(trigger, ts(utcnow()), fetch, source_id)
+        """Record the run that just took the lock (best effort: only the status line reads it)."""
+        mark = 0
+        try:
+            conn = open_db(self._data_dir)
+            try:
+                mark = latest_run_id(conn) or 0
+            finally:
+                conn.close()
+        except Exception:
+            log.warning("could not read the latest Run id for the status line", exc_info=True)
+        self.active = ActiveRun(trigger, ts(utcnow()), fetch, source_id, mark)
 
     def _release(self) -> None:
         with self._idle:
