@@ -74,6 +74,8 @@ def _output_json(output: OutputSpec) -> dict[str, Any]:
         "format": output.format,
         "last_count": output.last_count,
         "last_published_at": output.last_published_at,
+        # The Feed Token is never readable: append "/<feed-token>" or "?token=<feed-token>".
+        "feed_path": f"/o/{output.name}",
     }
 
 
