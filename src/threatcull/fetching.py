@@ -7,6 +7,7 @@ millions of Indicators never needs a Python list or set of them.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import sqlite3
 from collections.abc import Iterable, Iterator, Sequence
@@ -14,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from threatcull import __version__
 from threatcull.fetcher import Fetcher, FetchError, FetchResult
 from threatcull.indicators import Indicator, SourceKind, normalize
 from threatcull.parsers import ParseError, parse
@@ -23,6 +25,7 @@ from threatcull.store.sightings import (
     apply_fetched,
     record_fetch_failure,
     record_not_modified,
+    same_content,
     stage_fetched,
 )
 from threatcull.store.sources import Source, get_source, list_sources
@@ -66,6 +69,21 @@ class _Tally:
                 yield indicator
 
 
+def content_digest(source: Source, text: str) -> str:
+    """SHA-256 of a download plus everything that decides how it parses.
+
+    The ThreatCull version is part of it, so an upgrade that changes parsing or
+    validation reprocesses every list once instead of trusting the old result.
+    """
+    digest = hashlib.sha256()
+    parts = (__version__, source.url, source.format, source.kind, str(source.csv_column))
+    for part in (*parts, *source.json_keys):
+        digest.update(part.encode())
+        digest.update(b"\0")
+    digest.update(text.encode("utf-8", "surrogatepass"))
+    return digest.hexdigest()
+
+
 def fetch_source(
     conn: sqlite3.Connection, source: Source, fetcher: Fetcher, *, now: datetime
 ) -> FetchOutcome:
@@ -76,6 +94,15 @@ def fetch_source(
         result = fetcher(source.url, etag=source.etag, last_modified=source.last_modified)
         if result.status == "not_modified":
             record_not_modified(conn, source.id, now=now)
+            finish_run(conn, run_id, "not_modified", now=now)
+            return FetchOutcome(source.id, "not_modified")
+        digest = content_digest(source, result.text)
+        if same_content(conn, source.id, digest):
+            # Same bytes as the list already applied (a server without ETags, or
+            # one that ignores them): skip parsing millions of lines again.
+            record_not_modified(
+                conn, source.id, now=now, validators=(result.etag, result.last_modified)
+            )
             finish_run(conn, run_id, "not_modified", now=now)
             return FetchOutcome(source.id, "not_modified")
         error = NOT_A_LIST if _looks_like_html(source, result) else None
@@ -97,7 +124,12 @@ def fetch_source(
         return _fail(conn, run_id, source.id, error, now=now)
     try:
         added, removed = apply_fetched(
-            conn, source.id, now=now, etag=result.etag, last_modified=result.last_modified
+            conn,
+            source.id,
+            now=now,
+            etag=result.etag,
+            last_modified=result.last_modified,
+            content_sha256=digest,
         )
     except Exception as exc:
         return _fail(conn, run_id, source.id, f"{type(exc).__name__}: {exc}", now=now)

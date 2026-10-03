@@ -43,8 +43,14 @@ def apply_fetched(
     now: datetime,
     etag: str | None,
     last_modified: str | None,
+    content_sha256: str | None = None,
 ) -> tuple[int, int]:
-    """Make the staged Indicators the Source's current Sightings. Returns (added, removed)."""
+    """Make the staged Indicators the Source's current Sightings. Returns (added, removed).
+
+    ``content_sha256`` is the digest of the download these Indicators came from,
+    stored with the resulting current count for :func:`same_content`. Leaving
+    it out clears any stored digest, so the next Fetch parses in full.
+    """
     stamp = ts(now)
     with transaction(conn):
         conn.execute(
@@ -80,13 +86,33 @@ def apply_fetched(
         conn.execute(
             """
             UPDATE sources SET etag = ?, last_modified = ?, last_success_at = ?,
-                last_attempt_at = ?, last_error = NULL
+                last_attempt_at = ?, last_error = NULL, content_sha256 = ?,
+                content_current = (
+                    SELECT COUNT(*) FROM sightings WHERE source_id = ? AND current = 1
+                )
             WHERE id = ?
             """,
-            (etag, last_modified, stamp, stamp, source_id),
+            (etag, last_modified, stamp, stamp, content_sha256, source_id, source_id),
         )
         conn.execute("DELETE FROM fetched")
     return added, removed
+
+
+def same_content(conn: sqlite3.Connection, source_id: str, content_sha256: str) -> bool:
+    """True when ``content_sha256`` matches the download last applied for the Source.
+
+    The Source's current Sightings must also still number what that apply left,
+    so Sightings pruned or changed since then force a full parse.
+    """
+    row = conn.execute(
+        "SELECT content_sha256, content_current FROM sources WHERE id = ?", (source_id,)
+    ).fetchone()
+    if row is None or row["content_sha256"] != content_sha256:
+        return False
+    current: int = conn.execute(
+        "SELECT COUNT(*) FROM sightings WHERE source_id = ? AND current = 1", (source_id,)
+    ).fetchone()[0]
+    return bool(current == row["content_current"])
 
 
 def record_fetch_success(
@@ -104,7 +130,18 @@ def record_fetch_success(
         return apply_fetched(conn, source_id, now=now, etag=etag, last_modified=last_modified)
 
 
-def record_not_modified(conn: sqlite3.Connection, source_id: str, *, now: datetime) -> None:
+def record_not_modified(
+    conn: sqlite3.Connection,
+    source_id: str,
+    *,
+    now: datetime,
+    validators: tuple[str | None, str | None] | None = None,
+) -> None:
+    """Refresh the Source's current Sightings without changing them.
+
+    ``validators`` is a new (ETag, Last-Modified) pair to store: a download whose
+    content was unchanged still carries the server's latest validators.
+    """
     stamp = ts(now)
     with transaction(conn):
         conn.execute(
@@ -116,6 +153,11 @@ def record_not_modified(conn: sqlite3.Connection, source_id: str, *, now: dateti
             "WHERE id = ?",
             (stamp, stamp, source_id),
         )
+        if validators is not None:
+            conn.execute(
+                "UPDATE sources SET etag = ?, last_modified = ? WHERE id = ?",
+                (*validators, source_id),
+            )
 
 
 def record_fetch_failure(

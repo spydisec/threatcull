@@ -7,6 +7,7 @@ so memory stays bounded however many Indicators the Sources list.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
@@ -104,6 +105,29 @@ def shrink_reasons(
     return reasons
 
 
+# PRAGMA optimize reads at most this many rows per index when it re-analyses,
+# so its cost stays small however many Sightings there are. (A PRAGMA takes no
+# parameters, hence the literal.)
+ANALYSIS_LIMIT = 1000
+_SET_ANALYSIS_LIMIT = "PRAGMA analysis_limit = 1000"
+
+log = logging.getLogger(__name__)
+
+
+def optimize_database(conn: sqlite3.Connection) -> None:
+    """Refresh SQLite's query-planner statistics after a Compile.
+
+    The tables grow from nothing to millions of rows on a first run; without
+    statistics the planner keeps guessing from the empty database. Best effort:
+    a failure is logged and never fails the Compile.
+    """
+    try:
+        conn.execute(_SET_ANALYSIS_LIMIT)
+        conn.execute("PRAGMA optimize")
+    except sqlite3.Error:
+        log.warning("PRAGMA optimize after the Compile failed", exc_info=True)
+
+
 def compile_outputs(
     conn: sqlite3.Connection, out_dir: Path, *, now: datetime, force: bool = False
 ) -> CompileReport:
@@ -126,6 +150,7 @@ def compile_outputs(
         home_hits=report.home_hits,
         stats=report.stats.to_json() if report.stats else None,
     )
+    optimize_database(conn)
     return report
 
 

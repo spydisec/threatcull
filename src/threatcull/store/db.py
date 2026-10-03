@@ -152,6 +152,13 @@ _MIGRATIONS: tuple[str, ...] = (
         WHERE disabled_reason = 'Terms changed to restricted; acknowledge to re-enable';
     PRAGMA user_version = 9;
     """,
+    # 2.3: a Fetch whose download hashes the same as the last applied one skips
+    # parsing; content_current guards against Sightings changed since (prune).
+    """
+    ALTER TABLE sources ADD COLUMN content_sha256 TEXT;
+    ALTER TABLE sources ADD COLUMN content_current INTEGER;
+    PRAGMA user_version = 10;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
@@ -170,6 +177,9 @@ def connect(path: Path | str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
+    # Temp tables (the Fetch staging table, the Compile's scored table) hold
+    # millions of rows; keep them on disk whatever the SQLite build defaults to.
+    conn.execute("PRAGMA temp_store = FILE")
     migrate(conn)
     return conn
 
