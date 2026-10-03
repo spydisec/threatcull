@@ -180,13 +180,20 @@ class Scheduler:
         if self.scheduler.running:
             self.scheduler.shutdown(wait=False)
 
-    def rescan(self) -> None:
+    def rescan(self, *, catch_up: bool = True) -> None:
         """Add, update and remove per-Source Fetch jobs to match the enabled Sources.
 
         Jobs whose interval is unchanged are left alone (their timing too), so
         calling this again is harmless. A new or changed job's first run is
-        ``refresh_minutes`` after the Source's last attempt (plus jitter), or,
-        when that is already past, within minutes, staggered in due order.
+        ``refresh_minutes`` after the Source's last attempt (plus jitter).
+        When that is already past (never fetched, or overdue):
+
+        - ``catch_up=True`` (start-up) fetches within minutes, staggered in due
+          order, so a restart after downtime catches up;
+        - ``catch_up=False`` (a Source enabled in the UI, the API, the CLI or a
+          Catalog update) waits for the regular schedule: one interval from
+          now, at most an hour. Enabling several Sources in a row then starts
+          no Fetches; Run now fetches them all at once.
         """
         conn = open_db(self.data_dir)
         try:
@@ -215,9 +222,15 @@ class Scheduler:
             dues = {job_id: _due(source, now) for job_id, source in to_add}
             for job_id, source in sorted(to_add, key=lambda item: dues[item[0]]):
                 due = dues[job_id]
-                if due <= now:
+                if due <= now and catch_up:
                     first = now + OVERDUE_FIRST_DELAY + overdue * OVERDUE_STAGGER
                     overdue += 1
+                elif due <= now:
+                    # Spread new Sources out, but never past the hour: the jitter is
+                    # taken off the wait, not added to it.
+                    wait = min(timedelta(minutes=source.refresh_minutes), COMPILE_INTERVAL)
+                    jitter = min(_jitter_seconds(source.refresh_minutes), wait.total_seconds())
+                    first = now + wait - timedelta(seconds=_random.uniform(0, jitter))
                 else:
                     jitter = _jitter_seconds(source.refresh_minutes)
                     first = due + timedelta(seconds=_random.uniform(0, jitter))
@@ -230,6 +243,28 @@ class Scheduler:
                     name=f"Fetch {source.id}",
                     next_run_time=first,
                 )
+
+    def source_changed(self) -> None:
+        """The app's hook for a Source change: rescan without catching up."""
+        self.rescan(catch_up=False)
+
+    def next_fetch_times(self) -> dict[str, datetime]:
+        """When each enabled Source is fetched next (its job or a pending retry)."""
+        times: dict[str, datetime] = {}
+        with self._lock:
+            jobs = self.scheduler.get_jobs()
+        for job in jobs:
+            for prefix in (_FETCH_PREFIX, _RETRY_PREFIX):
+                if job.id.startswith(prefix) and (run_at := _next_run_time(job)) is not None:
+                    source_id = job.id.removeprefix(prefix)
+                    if source_id not in times or run_at < times[source_id]:
+                        times[source_id] = run_at
+        return times
+
+    def retries_waiting(self) -> int:
+        """Fetches that found a run in progress and wait to try again."""
+        with self._lock:
+            return sum(1 for job in self.scheduler.get_jobs() if job.id.startswith(_RETRY_PREFIX))
 
     def fetch_job(self, source_id: str) -> None:
         """Fetch one Source (regular tick or busy retry); then debounce a Compile."""
@@ -304,7 +339,7 @@ class Scheduler:
         (e.g. ``threatcull sources enable`` while ``serve`` runs) within the hour.
         """
         try:
-            self.rescan()
+            self.rescan(catch_up=False)
         except Exception:
             log.exception("hourly rescan of the Sources failed")
         self.compile_job()

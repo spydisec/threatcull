@@ -82,7 +82,7 @@
   <div class="tile{% if failing_count or stale_count %} is-warn{% endif %}">
     <p class="tile-label">Blocklist Sources</p>
     <p class="tile-value">{{ enabled_blocklist_count }}</p>
-    <p class="tile-note">{{ failing_count }} failing, {{ stale_count }} Stale · <a href="/sources">Sources</a></p>
+    <p class="tile-note">{{ failing_count }} failing, {{ stale_count }} Stale{% if waiting_count %}, {{ waiting_count }} waiting for first Fetch{% endif %} · <a href="/sources">Sources</a></p>
   </div>
   <div class="tile tile-keep">
     <p class="tile-label">Cleaned up</p>

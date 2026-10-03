@@ -27,6 +27,8 @@
     {{ pill("ok") }}
     {% else %}
     <span class="pill pill-off">never fetched</span>
+    {% set next_fetch = (next_fetches if next_fetches is defined else {}).get(source.id) %}
+    <div class="sub">First fetch {% if next_fetch %}at {{ next_fetch | when }}{% else %}at the next scheduled run{% endif %}, or click Run now.</div>
     {% endif %}
     {% if source.last_success_at %}<div class="sub nowrap">{{ source.last_success_at | when }}</div>{% endif %}
   </td>

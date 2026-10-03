@@ -10,6 +10,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ### Changed
 
+- 📡 **See what a run is doing.** The status line on the dashboard and Runs page names the step
+  ("Fetching *Source* (3 of 10)" or "Compiling the Outputs"), how long it has run, how long it
+  took last time and what started it (Run now, Force Compile or the schedule). While idle it shows
+  the next Fetch and Compile, and it now refreshes every 20 s, so a scheduled run shows up without
+  a reload. Outputs that no Compile has written yet say "not published yet" on the Outputs page
+  and in the status line, since their feed URLs answer 404 until then. `GET /api/v1/status`
+  returns the same information. The elapsed time counts up every second between refreshes.
+  [#58](https://github.com/spydisec/threatcull/issues/58)
 - ⚡ **Unchanged lists skip parsing.** A Fetch hashes each download and compares it with the list
   it last applied. When nothing changed, ThreatCull refreshes the Source's entries without parsing
   them again, even if the server sends no `ETag` header. A 3 million-line list re-fetched in 5 s
@@ -32,9 +40,19 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   feed URLs and the difference between a feed URL and the Download button. The README has a
   Sizing section with measured numbers and advice for a Raspberry Pi, and `docker-compose.yaml`
   has a commented `mem_limit` example.
+- 🗓️ **Enabling a Source no longer starts a Fetch.** A Source enabled in the web UI, the API, the
+  CLI or by a Catalog update waits for the regular schedule (at most an hour for its first Fetch),
+  so enabling several Sources in a row doesn't start a Fetch and a Compile for each one. Click
+  **Run now** to fetch them at once. The Sources page shows when a new Source's first Fetch is
+  due. After a restart, ThreatCull still catches up on overdue Sources within minutes.
+  [#60](https://github.com/spydisec/threatcull/issues/60)
 
 ### Fixed
 
+- 🕒 **New Sources are not Stale.** A Source that has never fetched counted as Stale, so enabling
+  several new Sources could push the Stale share over `max_stale_ratio` and block the Compile until
+  they had fetched. Only a Source whose last success is older than `stale_after_hours` counts now;
+  the dashboard lists new ones as "waiting for first Fetch".
 - 🔁 **Re-enabled Sources fill up again.** A Source disabled for longer than the retention period
   lost its entries to pruning, and when it was re-enabled the server's `304 Not Modified` kept it
   empty until the upstream list changed. ThreatCull now notices the missing entries and downloads

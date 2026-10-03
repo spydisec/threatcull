@@ -204,3 +204,41 @@ def recent_fetches(conn: sqlite3.Connection, limit: int = 500) -> list[Run]:
         (limit,),
     )
     return [_to_run(row) for row in rows]
+
+
+def running_run(conn: sqlite3.Connection, *, after_id: int = 0) -> Run | None:
+    """The newest Run still marked ``running`` with an id above ``after_id``, if any."""
+    row = conn.execute(
+        "SELECT * FROM runs WHERE status = 'running' AND id > ? ORDER BY id DESC LIMIT 1",
+        (after_id,),
+    ).fetchone()
+    return _to_run(row) if row is not None else None
+
+
+def previous_duration(
+    conn: sqlite3.Connection, run_type: RunType, *, source_id: str | None, before_id: int
+) -> int | None:
+    """Seconds the last finished Run of the same kind took, or ``None`` if unknown.
+
+    Runs recorded before finish times were real (finished_at == started_at)
+    don't count: their 0 s would be a wrong guide.
+    """
+    row = conn.execute(
+        "SELECT started_at, finished_at FROM runs "
+        "WHERE type = ? AND source_id IS ? AND id < ? AND status != 'running' "
+        "AND finished_at IS NOT NULL AND finished_at > started_at "
+        "ORDER BY id DESC LIMIT 1",
+        (run_type, source_id, before_id),
+    ).fetchone()
+    if row is None:
+        return None
+    took = datetime.fromisoformat(row["finished_at"]) - datetime.fromisoformat(row["started_at"])
+    return int(took.total_seconds())
+
+
+def runs_after(conn: sqlite3.Connection, run_type: RunType, after_id: int) -> int:
+    """How many Runs of ``run_type`` have an id above ``after_id``."""
+    count: int = conn.execute(
+        "SELECT COUNT(*) FROM runs WHERE type = ? AND id > ?", (run_type, after_id)
+    ).fetchone()[0]
+    return count
