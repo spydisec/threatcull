@@ -65,11 +65,12 @@ _SPECIAL_BOUNDS: dict[int, tuple[tuple[int, int], ...]] = {
 
 # Used with fullmatch: "$" alone also matches before a trailing newline.
 _LABEL = re.compile(r"(?!-)[a-z0-9_-]{1,63}(?<!-)")
+# Two or more _LABELs joined by dots, checked in one call instead of one per label.
+_DOMAIN = re.compile(rf"(?:{_LABEL.pattern}\.)+{_LABEL.pattern}")
 # Whitespace or control characters inside a value (after trimming the ends) would
 # become extra lines in a published Output.
 _INNER_SPACE_OR_CONTROL = re.compile(r"[\s\x00-\x1f\x7f]")
 _MAX_DOMAIN_LENGTH = 253
-_MIN_LABELS = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,20 +125,29 @@ def _is_special(version: int, first: int, last: int) -> bool:
 
 
 def _normalize_domain(text: str) -> Indicator | None:
+    # Runs once per line of every domain Source (millions per Fetch), so the two
+    # costly steps are skipped when they can't change the result:
+    # - ip_address() only accepts ASCII digits and dots (IPv4) or text with ":" (IPv6);
+    # - the "idna" codec returns ASCII text unchanged and only rejects empty or
+    #   64+ character labels, which _DOMAIN rejects too.
     candidate = text.lower().rstrip(".").removeprefix("*.")
-    try:
-        ipaddress.ip_address(candidate)
-    except ValueError:
-        pass
-    else:
+    if (":" in candidate or candidate.replace(".", "").isdigit()) and _is_ip_address(candidate):
         return None
-    try:
-        candidate = candidate.encode("idna").decode("ascii")
-    except UnicodeError:
+    if not candidate.isascii():
+        try:
+            candidate = candidate.encode("idna").decode("ascii")
+        except UnicodeError:
+            return None
+    if len(candidate) > _MAX_DOMAIN_LENGTH or not _DOMAIN.fullmatch(candidate):
         return None
-    labels = candidate.split(".")
-    if len(candidate) > _MAX_DOMAIN_LENGTH or len(labels) < _MIN_LABELS:
-        return None
-    if not all(_LABEL.fullmatch(label) for label in labels) or labels[-1].isdigit():
+    if candidate.rsplit(".", 1)[-1].isdigit():
         return None
     return Indicator(candidate, "domain")
+
+
+def _is_ip_address(text: str) -> bool:
+    try:
+        ipaddress.ip_address(text)
+    except ValueError:
+        return False
+    return True
