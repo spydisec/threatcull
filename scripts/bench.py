@@ -17,9 +17,9 @@ real code, in-process through the library API:
 
 Each step runs in a fresh child process (multiprocessing, spawn), so one step's
 memory high-water mark never carries over to the next. The child reports its own
-peak resident set size with ``getrusage(RUSAGE_SELF)``: kilobytes on Linux,
-bytes on macOS (converted here). The numbers are comparable between hosts of
-any size: a single-board computer, a small VM or a large server.
+peak resident set size: VmHWM from /proc on Linux (``ru_maxrss`` would carry the
+parent's peak across exec), ``getrusage`` elsewhere. The numbers are comparable
+between hosts of any size: a single-board computer, a small VM or a large server.
 
 The table goes to stdout; ``--json`` prints one JSON object instead, for
 comparing runs. ``--keep`` keeps the temporary directory and prints its path.
@@ -168,8 +168,18 @@ def prepare_data_dir(data_dir: Path, list_path: Path, kind: Kind, fmt: Format) -
 
 
 def _peak_rss_mb() -> float:
+    """This process's peak resident set size in MB.
+
+    On Linux, VmHWM in /proc/self/status: ru_maxrss survives exec, so a spawned
+    child would report its parent's peak (the parent that generated the list).
+    Elsewhere ru_maxrss, which is bytes on macOS and kilobytes on Linux.
+    """
+    status = Path("/proc/self/status")
+    if status.exists():
+        for line in status.read_text().splitlines():
+            if line.startswith("VmHWM:"):
+                return int(line.split()[1]) / 1024
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    # ru_maxrss is bytes on macOS and kilobytes on Linux.
     return peak / MB if sys.platform == "darwin" else peak / 1024
 
 
