@@ -32,6 +32,12 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   feed URLs and the difference between a feed URL and the Download button. The README has a
   Sizing section with measured numbers and advice for a Raspberry Pi, and `docker-compose.yaml`
   has a commented `mem_limit` example.
+- 🗓️ **Enabling a Source no longer starts a Fetch.** A Source enabled in the web UI, the API, the
+  CLI or by a Catalog update waits for the regular schedule (at most an hour for its first Fetch),
+  so enabling several Sources in a row doesn't start a Fetch and a Compile for each one. Click
+  **Run now** to fetch them at once. The Sources page shows when a new Source's first Fetch is
+  due. After a restart, ThreatCull still catches up on overdue Sources within minutes.
+  [#60](https://github.com/spydisec/threatcull/issues/60)
 
 ### Fixed
 

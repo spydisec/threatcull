@@ -196,6 +196,14 @@ def sources_page(
     return _render_sources(request, conn, {"open_add": add})
 
 
+def _next_fetches(request: Request) -> dict[str, str]:
+    """Each enabled Source's next scheduled Fetch (stored-time format), if a scheduler runs."""
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is None:
+        return {}
+    return {source_id: ts(at) for source_id, at in scheduler.next_fetch_times().items()}
+
+
 def _render_sources(
     request: Request,
     conn: sqlite3.Connection,
@@ -204,7 +212,11 @@ def _render_sources(
     status_code: int = 200,
 ) -> Response:
     """The Sources page, with the Catalog in use shown in its Catalog card."""
-    page = {"sources": list_sources(conn), "catalog": active_catalog(request.app.state.data_dir)}
+    page = {
+        "sources": list_sources(conn),
+        "catalog": active_catalog(request.app.state.data_dir),
+        "next_fetches": _next_fetches(request),
+    }
     page.update(context)
     return render(request, "sources.html", page, status_code=status_code)
 
@@ -552,7 +564,11 @@ def _apply_enabled_change(
         )
     _notify_sources_changed(request)
     if htmx:
-        return render_fragment(request, "_source_row.html", {"source": source})
+        return render_fragment(
+            request,
+            "_source_row.html",
+            {"source": source, "next_fetches": _next_fetches(request)},
+        )
     return RedirectResponse("/sources", status_code=303)
 
 
@@ -709,7 +725,11 @@ def add_custom_source_page(
         )
     _notify_sources_changed(request)
     list_name = "Allowlist" if payload.role == "allowlist" else "blocklist"
-    flash(request, f"Added {payload.name} as a {list_name} Source. The next fetch downloads it.")
+    flash(
+        request,
+        f"Added {payload.name} as a {list_name} Source. "
+        "ThreatCull fetches it at the next scheduled run, or click Run now.",
+    )
     return RedirectResponse("/sources", status_code=303)
 
 
