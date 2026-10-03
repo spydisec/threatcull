@@ -90,20 +90,34 @@ in the web UI to see its UTC value.
 
 ### Sizing
 
-The number of lines your Sources list decides how much CPU, memory and disk ThreatCull needs. On
-an 8-core x86 machine, the first Fetch of a 6.5 million-line list took about 9 minutes with a
-300 MB memory peak, and a Compile over 9.7 million entries took about 4.5 minutes with 70 MB. The
-database grew to 1.5 GB.
+What ThreatCull needs depends on how many lines your enabled Sources list, not on the platform. It
+runs the same on a single-board computer, a small VM or a large server; bigger lists take
+longer on slower processors and disks.
 
-A Raspberry Pi 4 (4 GB) ran the smaller catalog Sources without trouble. With about 9.4 million
-domain lines from large lists (a 4 million-line custom list, `blocklistproject-malware` and
-`hagezi-tif-domains`), next to other containers on the same SD card, it became unresponsive
-during the first run. On a Pi:
+Measured with `scripts/bench.py` on an 8-core x86 machine with an SSD:
 
-- start with the smaller Sources and add large lists one at a time;
+| Lines (unique) | First Fetch | Unchanged re-Fetch | Compile | Peak memory | Database |
+|---|---|---|---|---|---|
+| 500,000 IPs (300,000) | 14 s | 1 s | 8 s | 79 MB | 45 MB |
+| 1,000,000 domains (600,000) | 19 s | 1 s | 16 s | 79 MB | 96 MB |
+| 3,000,000 domains (1,800,000) | 79 s | 3 s | 56 s | 79 MB | 287 MB |
+
+- **Memory** stays under about 100 MB for lists of any size: downloads go to a temporary
+  file and are read line by line.
+- **Disk:** plan on about 100 MB of database per million unique entries, plus the Output files.
+  Settings and the dashboard show the current sizes.
+- **Time** grows with the number of lines. A Source whose list hasn't changed is skipped in
+  seconds, so only the first Fetch, and Fetches of lists that change, take long.
+
+Run `uv run python scripts/bench.py --lines 1000000` on your own host for numbers that apply to it.
+On a small host (1 to 2 GB of RAM, an SD card or a slow disk, as on a Raspberry Pi or a small
+VPS):
+
+- start with the catalog's default Sources and add large lists one at a time;
 - remove the `#` in front of `mem_limit: 1g` in `docker-compose.yaml`, so Docker stops ThreatCull
-  before the host runs out of memory;
-- watch `docker stats` during the first Fetch of a large list.
+  before the host runs out of memory, and watch `docker stats` during the first Fetch of a large
+  list;
+- keep other busy containers off the same SD card if you can: database writes compete for it.
 
 ## Upgrade
 

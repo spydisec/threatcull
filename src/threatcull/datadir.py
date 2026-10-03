@@ -54,3 +54,22 @@ def ensure_data_dir(path: Path) -> None:
             path,
             mode & 0o777,
         )
+
+
+DATABASE_FILES = ("threatcull.db", "threatcull.db-wal", "threatcull.db-shm")
+OUTPUTS_DIRNAME = "outputs"
+
+
+def storage_bytes(path: Path) -> tuple[int, int]:
+    """Disk used by the database (with its WAL files) and by the published Outputs."""
+    database = sum(_size(path / name) for name in DATABASE_FILES)
+    outputs_dir = path / OUTPUTS_DIRNAME
+    outputs = sum(_size(entry) for entry in outputs_dir.iterdir()) if outputs_dir.is_dir() else 0
+    return database, outputs
+
+
+def _size(path: Path) -> int:
+    try:
+        return path.stat().st_size if path.is_file() else 0
+    except OSError:
+        return 0

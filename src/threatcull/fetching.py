@@ -32,6 +32,7 @@ from threatcull.store.sightings import (
     stage_fetched,
 )
 from threatcull.store.sources import Source, get_source, list_sources
+from threatcull.timing import StageTimer
 
 # Line-oriented formats where an HTML page can still yield a few hostname-like lines.
 _LINE_FORMATS = frozenset({"plain", "hosts", "adblock"})
@@ -127,6 +128,7 @@ def fetch_source(
     conn: sqlite3.Connection, source: Source, fetcher: Fetcher, *, now: datetime
 ) -> FetchOutcome:
     run_id = start_run(conn, "fetch", now=now, source_id=source.id)
+    timer = StageTimer()
     tally = _Tally()
     valid = 0
     result: FetchResult | None = None
@@ -134,14 +136,15 @@ def fetch_source(
         # A 304 only refreshes the Sightings already there: when some were pruned
         # meanwhile, ask for the whole list so they come back.
         trusted = sightings_unchanged(conn, source.id)
-        result = fetcher(
-            source.url,
-            etag=source.etag if trusted else None,
-            last_modified=source.last_modified if trusted else None,
-        )
+        with timer.stage("download"):
+            result = fetcher(
+                source.url,
+                etag=source.etag if trusted else None,
+                last_modified=source.last_modified if trusted else None,
+            )
         if result.status == "not_modified":
             record_not_modified(conn, source.id, now=now)
-            finish_run(conn, run_id, "not_modified", now=now)
+            finish_run(conn, run_id, "not_modified", now=now, stats=_timings(timer))
             return FetchOutcome(source.id, "not_modified")
         digest = content_digest(source, result)
         if same_content(conn, source.id, digest):
@@ -150,7 +153,7 @@ def fetch_source(
             record_not_modified(
                 conn, source.id, now=now, validators=(result.etag, result.last_modified)
             )
-            finish_run(conn, run_id, "not_modified", now=now)
+            finish_run(conn, run_id, "not_modified", now=now, stats=_timings(timer))
             return FetchOutcome(source.id, "not_modified")
         error = NOT_A_LIST if _looks_like_html(source, result) else None
         if error is None:
@@ -160,7 +163,8 @@ def fetch_source(
                 csv_column=source.csv_column,
                 json_keys=source.json_keys,
             )
-            valid = stage_fetched(conn, tally.normalised(candidates, source.kind))
+            with timer.stage("parse"):  # parse, validate and stage, one line at a time
+                valid = stage_fetched(conn, tally.normalised(candidates, source.kind))
             error = _count_rejection(conn, source.id, valid, tally.parsed)
     except (FetchError, ParseError) as exc:
         error = str(exc)
@@ -171,19 +175,20 @@ def fetch_source(
         if result is not None:
             result.close()  # a spooled download's temporary file goes now
     if error is not None:
-        return _fail(conn, run_id, source.id, error, now=now)
+        return _fail(conn, run_id, source.id, error, now=now, timer=timer)
     assert result is not None  # no error means the download arrived  # noqa: S101
     try:
-        added, removed = apply_fetched(
-            conn,
-            source.id,
-            now=now,
-            etag=result.etag,
-            last_modified=result.last_modified,
-            content_sha256=digest,
-        )
+        with timer.stage("apply"):
+            added, removed = apply_fetched(
+                conn,
+                source.id,
+                now=now,
+                etag=result.etag,
+                last_modified=result.last_modified,
+                content_sha256=digest,
+            )
     except Exception as exc:
-        return _fail(conn, run_id, source.id, f"{type(exc).__name__}: {exc}", now=now)
+        return _fail(conn, run_id, source.id, f"{type(exc).__name__}: {exc}", now=now, timer=timer)
     outcome = FetchOutcome(
         source.id,
         "ok",
@@ -200,7 +205,7 @@ def fetch_source(
         "added": added,
         "removed": removed,
     }
-    finish_run(conn, run_id, "ok", now=now, counts=counts)
+    finish_run(conn, run_id, "ok", now=now, counts=counts, stats=_timings(timer))
     return outcome
 
 
@@ -249,9 +254,20 @@ def _count_rejection(
     return None
 
 
+def _timings(timer: StageTimer) -> dict[str, dict[str, float]]:
+    return {"timings": timer.to_json()}
+
+
 def _fail(
-    conn: sqlite3.Connection, run_id: int, source_id: str, error: str, *, now: datetime
+    conn: sqlite3.Connection,
+    run_id: int,
+    source_id: str,
+    error: str,
+    *,
+    now: datetime,
+    timer: StageTimer | None = None,
 ) -> FetchOutcome:
     record_fetch_failure(conn, source_id, error, now=now)
-    finish_run(conn, run_id, "failed", now=now, error=error)
+    stats = _timings(timer) if timer is not None else None
+    finish_run(conn, run_id, "failed", now=now, error=error, stats=stats)
     return FetchOutcome(source_id, "failed", error=error)

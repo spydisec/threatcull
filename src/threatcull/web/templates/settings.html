@@ -20,6 +20,17 @@
   </dl>
 </section>
 
+<section class="card" id="storage">
+  <h2>Storage</h2>
+  <dl class="settings-list">
+    <dt>Database</dt>
+    <dd><strong>{{ database_bytes | size }}</strong><span class="sub">{{ "{:,}".format(sighting_count) }} Sightings. It grows with the lines your Sources list; Sightings older than the retention period are deleted at each Compile.</span></dd>
+    <dt>Outputs</dt>
+    <dd><strong>{{ outputs_bytes | size }}</strong><span class="sub">The published feed files.</span></dd>
+  </dl>
+  <p class="muted">Sizing for different hosts: see "Sizing" in the README.</p>
+</section>
+
 <section class="card" id="configuration">
   <h2>Configuration file</h2>
   <p>Settings, Source choices, custom Sources, the allowlist (including your network) and

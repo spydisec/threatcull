@@ -62,7 +62,7 @@
   <table class="table" id="runs-table">
     <thead>
       <tr>
-        <th>Type</th><th>Source</th><th>Started</th><th>Finished</th><th>Status</th>
+        <th>Type</th><th>Source</th><th>Started</th><th>Finished</th><th>Took</th><th>Status</th>
         <th>Counts</th>
       </tr>
     </thead>
@@ -73,6 +73,10 @@
         <td class="nowrap mono">{{ run.source_id or "" }}</td>
         <td class="nowrap">{{ run.started_at | when }}</td>
         <td class="nowrap">{{ run.finished_at | when("running") }}</td>
+        <td class="nowrap">
+          {{ run.duration_seconds | duration }}
+          {% if run.timings %}<div class="sub">{% for stage, seconds in run.timings.items() %}{{ stage }} {{ seconds | duration }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+        </td>
         <td>{{ pill(run.status) }}</td>
         <td>
           {{ counts(run.counts) }}

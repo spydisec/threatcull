@@ -45,10 +45,13 @@ def _when(value: str | None, missing: str = "never") -> Markup:
 _PER_UNIT = 60  # seconds per minute, minutes per hour
 
 
-def _duration(seconds: int | None) -> str:
+def _duration(value: float | None) -> str:
     """``45 s``, ``3 min 20 s``, ``1 h 5 min``: a run's length, for people."""
-    if seconds is None:
+    if value is None:
         return ""
+    if 0 < value < 1:
+        return "<1 s"
+    seconds = round(value)
     if seconds < _PER_UNIT:
         return f"{seconds} s"
     minutes, secs = divmod(seconds, _PER_UNIT)
@@ -58,7 +61,24 @@ def _duration(seconds: int | None) -> str:
     return f"{hours} h {minutes} min" if minutes else f"{hours} h"
 
 
+_BYTE_UNITS = ("B", "KB", "MB", "GB", "TB")
+_KILO = 1024
+
+
+def _size(value: int | None) -> str:
+    """``950 B``, ``95.7 MB``, ``1.5 GB``: a file or database size, for people."""
+    if value is None:
+        return ""
+    size = float(value)
+    for unit in _BYTE_UNITS[:-1]:
+        if size < _KILO:
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= _KILO
+    return f"{size:.1f} {_BYTE_UNITS[-1]}"
+
+
 _env.filters["when"] = _when
+_env.filters["size"] = _size
 _env.filters["duration"] = _duration
 _env.filters["feed_label"] = feed_label
 _env.globals["category_labels"] = CATEGORY_LABELS  # readable category names

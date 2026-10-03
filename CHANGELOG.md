@@ -8,6 +8,28 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-03
+
+Fetch and Compile are about twice as fast, runs show how long each stage took, and Settings shows
+how much disk the database and Outputs use. Nothing to do when upgrading. After the upgrade, the
+first Fetch of each Source parses its list in full once.
+
+### Changed
+
+- 🚀 **Faster Fetch and Compile.** Domain validation skips steps that can't change its result, the
+  database looks each new entry up once instead of three times, and Outputs read from one sorted
+  index instead of sorting once each. Measured with `scripts/bench.py` on 1 million lines: the first
+  Fetch went from 45 s to 19 s and a Compile from 29 s to 16 s. What counts as a valid entry is
+  unchanged.
+- ⏱️ **Run timings per stage.** The run history has a "Took" column with the time each stage took
+  (download, parse, apply for a Fetch; prune, score, allowlist, stats, outputs, publish for a
+  Compile), and `/api/v1/runs` returns `duration_seconds` and `timings`.
+- 💽 **Storage shown.** Settings and the dashboard footer show the size of the database and of the
+  Outputs; `/api/v1/status` returns `database_bytes` and `outputs_bytes`.
+- 📏 **Sizing guide for any host.** The Sizing section of the README gives measured times, memory and
+  database sizes for lists of 0.5 to 3 million lines and advice for small hosts.
+  `scripts/bench.py` measures your own host.
+
 ## [2.3.1] - 2026-10-03
 
 Fetches keep large lists on disk instead of in memory, so a big Source no longer needs hundreds of
@@ -356,7 +378,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.3.1...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/spydisec/threatcull/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/spydisec/threatcull/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/spydisec/threatcull/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/spydisec/threatcull/compare/v2.2.0...v2.2.1

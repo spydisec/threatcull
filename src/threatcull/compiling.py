@@ -26,6 +26,7 @@ from threatcull.store.runs import finish_run, start_run
 from threatcull.store.settings import Settings, load_settings
 from threatcull.store.sightings import prune
 from threatcull.store.sources import Source, list_sources
+from threatcull.timing import StageTimer
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,10 +140,18 @@ def compile_outputs(
     conn: sqlite3.Connection, out_dir: Path, *, now: datetime, force: bool = False
 ) -> CompileReport:
     run_id = start_run(conn, "compile", now=now)
+    timer = StageTimer()
     try:
-        report = _compile(conn, out_dir, now=now, force=force)
+        report = _compile(conn, out_dir, now=now, force=force, timer=timer)
     except Exception as exc:
-        finish_run(conn, run_id, "failed", now=now, error=f"{type(exc).__name__}: {exc}")
+        finish_run(
+            conn,
+            run_id,
+            "failed",
+            now=now,
+            error=f"{type(exc).__name__}: {exc}",
+            stats={"timings": timer.to_json()},
+        )
         raise
     counts = dict(report.counts)
     if report.home_hit_count:
@@ -155,41 +164,51 @@ def compile_outputs(
         counts=counts,
         error="; ".join(report.reasons) or None,
         home_hits=report.home_hits,
-        stats=report.stats.to_json() if report.stats else None,
+        stats={**(report.stats.to_json() if report.stats else {}), "timings": timer.to_json()},
     )
     optimize_database(conn)
     return report
 
 
 def _compile(
-    conn: sqlite3.Connection, out_dir: Path, *, now: datetime, force: bool
+    conn: sqlite3.Connection, out_dir: Path, *, now: datetime, force: bool, timer: StageTimer
 ) -> CompileReport:
     settings = load_settings(conn)
-    prune(conn, now=now, retention_days=settings.retention_days)
+    with timer.stage("prune"):
+        prune(conn, now=now, retention_days=settings.retention_days)
     blocklists = list_sources(conn, enabled_only=True, role="blocklist")
     stale = stale_source_ids(blocklists, now=now, settings=settings)
-    create_scored_table(conn, now=now, settings=settings)
+    with timer.stage("score"):
+        create_scored_table(conn, now=now, settings=settings)
     staged: list[StagedOutput] = []
     try:
-        excluded = mark_allowlisted(
-            conn,
-            Allowlist([*operator_entries(conn), *builtin_entries(conn)]),
-            home=Allowlist(mine_entries(conn)),
-        )
-        hit_count, hits = home_hits(conn, HOME_HITS_CAP)
+        with timer.stage("allowlist"):
+            excluded = mark_allowlisted(
+                conn,
+                Allowlist([*operator_entries(conn), *builtin_entries(conn)]),
+                home=Allowlist(mine_entries(conn)),
+            )
+            hit_count, hits = home_hits(conn, HOME_HITS_CAP)
         # `excluded` counts every excluded row, own-network entries included; the Allowlist
         # count operators see (CLI, dashboard) must name only Allowlist exclusions.
         allowlisted = excluded - hit_count
-        stats = compile_stats(conn, settings)
+        with timer.stage("stats"):
+            stats = compile_stats(conn, settings)
         sources = {source.id: source for source in list_sources(conn)}
         specs = list_outputs(conn)
         out_dir.mkdir(parents=True, exist_ok=True)
-        for spec in specs:
-            staged.append(
-                stage_output(
-                    conn, spec, out_dir, generated_at=ts(now), sources=sources, settings=settings
+        with timer.stage("outputs"):
+            for spec in specs:
+                staged.append(
+                    stage_output(
+                        conn,
+                        spec,
+                        out_dir,
+                        generated_at=ts(now),
+                        sources=sources,
+                        settings=settings,
+                    )
                 )
-            )
         counts = {output.name: output.count for output in staged}
         rebaselined = rebaselined_outputs(specs, blocklists)
         reasons = shrink_reasons(
@@ -206,9 +225,12 @@ def _compile(
                 "blocked", counts, tuple(reasons), allowlisted, stale, hit_count, hits, stats
             )
         feeds = {spec.name: feeding_sources(spec, blocklists) for spec in specs}
-        for output in staged:
-            output.tmp.replace(output.path)
-            record_published(conn, output.name, output.count, now=now, sources=feeds[output.name])
+        with timer.stage("publish"):
+            for output in staged:
+                output.tmp.replace(output.path)
+                record_published(
+                    conn, output.name, output.count, now=now, sources=feeds[output.name]
+                )
         return CompileReport(
             "ok",
             counts,

@@ -110,8 +110,10 @@ Add `?public_ip=true` to also ask `api.ipify.org` for the address your traffic l
 ### `GET /api/v1/runs?limit=50`
 
 The newest Fetches and Compiles first. `limit` is 1 to 200 (default 50). Each run has `id`, `type`
-(`fetch` or `compile`), `source_id`, `started_at`, `finished_at`, `status` (`running`, `ok`,
-`not_modified`, `failed` or `blocked`), `counts`, `error` and `home_hits`.
+(`fetch` or `compile`), `source_id`, `started_at`, `finished_at`, `duration_seconds` (`null`
+while running), `timings` (seconds per stage, such as `{"download": 0.4, "parse": 12.1,
+"apply": 8.3}`; `{}` for runs recorded before 2.4), `status` (`running`, `ok`, `not_modified`,
+`failed` or `blocked`), `counts`, `error` and `home_hits`.
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" "http://<server-ip>:6969/api/v1/runs?limit=10"
@@ -148,6 +150,8 @@ What ThreatCull is doing now and what comes next, as the status line in the web 
   (Fetches that found a run in progress and will retry). `scheduler_on` is `false` when ThreatCull
   runs without its scheduler.
 - `unpublished_outputs`: Outputs no Compile has written yet. Their feed URLs answer `404`.
+- `database_bytes` and `outputs_bytes`: disk used by the database (with its WAL files) and by the
+  published Outputs.
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" http://<server-ip>:6969/api/v1/status
@@ -183,5 +187,5 @@ A device given that URL gets redirected to the login page. AdGuard Home, for exa
 
 ## Health check
 
-`GET /healthz` needs no token and returns `{"status": "ok", "version": "2.3.1"}`. The container's
+`GET /healthz` needs no token and returns `{"status": "ok", "version": "2.4.0"}`. The container's
 health check uses it.
