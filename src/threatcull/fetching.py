@@ -7,6 +7,7 @@ millions of Indicators never needs a Python list or set of them.
 
 from __future__ import annotations
 
+import codecs
 import hashlib
 import io
 import re
@@ -71,8 +72,9 @@ class _Tally:
                 yield indicator
 
 
-# How much of a download the HTML check looks at.
+# The HTML check reads the download in chunks of this size, past any leading whitespace.
 _HEAD_BYTES = 4096
+_LEADING_SPACE = " \t\r\n\x0b\x0c\ufeff"
 
 
 def content_digest(source: Source, result: FetchResult) -> str:
@@ -102,12 +104,23 @@ def _text_of(result: FetchResult) -> str | TextIO:
 
 
 def _head(result: FetchResult) -> str:
-    """The start of the download, for the HTML check."""
+    """The download from its first non-whitespace character on (a few KB), for the HTML check.
+
+    However much whitespace comes first, the check must see the opening ``<`` of
+    an error page served as text/plain. A spooled body is read in chunks and
+    rewound afterwards.
+    """
     if result.body is None:
-        return result.text[:_HEAD_BYTES]
-    start = result.body.read(_HEAD_BYTES)
-    result.body.seek(0)
-    return start.decode("utf-8", errors="replace")
+        return result.text.lstrip(_LEADING_SPACE)[:_HEAD_BYTES]
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    try:
+        while chunk := result.body.read(_HEAD_BYTES):
+            content = decoder.decode(chunk).lstrip(_LEADING_SPACE)
+            if content:
+                return content
+        return decoder.decode(b"", final=True).lstrip(_LEADING_SPACE)
+    finally:
+        result.body.seek(0)
 
 
 def fetch_source(
