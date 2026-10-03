@@ -98,21 +98,33 @@ def apply_fetched(
     return added, removed
 
 
+def sightings_unchanged(conn: sqlite3.Connection, source_id: str) -> bool:
+    """True when the Source still has the current Sightings its last apply left.
+
+    False after a prune removed some (a Source disabled past the retention
+    period), or when no apply has recorded a count yet (lists applied before
+    2.3). The Fetch then asks for the full list instead of trusting a 304 or
+    an unchanged hash.
+    """
+    row = conn.execute(
+        "SELECT content_current, "
+        "(SELECT COUNT(*) FROM sightings WHERE source_id = ? AND current = 1) AS current_count "
+        "FROM sources WHERE id = ?",
+        (source_id, source_id),
+    ).fetchone()
+    return row is not None and row["content_current"] == row["current_count"]
+
+
 def same_content(conn: sqlite3.Connection, source_id: str, content_sha256: str) -> bool:
     """True when ``content_sha256`` matches the download last applied for the Source.
 
-    The Source's current Sightings must also still number what that apply left,
-    so Sightings pruned or changed since then force a full parse.
+    The Source's current Sightings must also still number what that apply left
+    (:func:`sightings_unchanged`), so Sightings pruned since force a full parse.
     """
-    row = conn.execute(
-        "SELECT content_sha256, content_current FROM sources WHERE id = ?", (source_id,)
-    ).fetchone()
+    row = conn.execute("SELECT content_sha256 FROM sources WHERE id = ?", (source_id,)).fetchone()
     if row is None or row["content_sha256"] != content_sha256:
         return False
-    current: int = conn.execute(
-        "SELECT COUNT(*) FROM sightings WHERE source_id = ? AND current = 1", (source_id,)
-    ).fetchone()[0]
-    return bool(current == row["content_current"])
+    return sightings_unchanged(conn, source_id)
 
 
 def record_fetch_success(

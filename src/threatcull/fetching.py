@@ -26,6 +26,7 @@ from threatcull.store.sightings import (
     record_fetch_failure,
     record_not_modified,
     same_content,
+    sightings_unchanged,
     stage_fetched,
 )
 from threatcull.store.sources import Source, get_source, list_sources
@@ -91,7 +92,14 @@ def fetch_source(
     tally = _Tally()
     valid = 0
     try:
-        result = fetcher(source.url, etag=source.etag, last_modified=source.last_modified)
+        # A 304 only refreshes the Sightings already there: when some were pruned
+        # meanwhile, ask for the whole list so they come back.
+        trusted = sightings_unchanged(conn, source.id)
+        result = fetcher(
+            source.url,
+            etag=source.etag if trusted else None,
+            last_modified=source.last_modified if trusted else None,
+        )
         if result.status == "not_modified":
             record_not_modified(conn, source.id, now=now)
             finish_run(conn, run_id, "not_modified", now=now)

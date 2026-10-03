@@ -22,6 +22,13 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   (`PRAGMA optimize`) and keeps its temporary tables on disk, so large Compiles don't depend
   on how the Python image's SQLite was built.
 
+### Fixed
+
+- 🔁 **Re-enabled Sources fill up again.** A Source disabled for longer than the retention period
+  lost its entries to pruning, and when it was re-enabled the server's `304 Not Modified` kept it
+  empty until the upstream list changed. ThreatCull now notices the missing entries and downloads
+  the full list.
+
 ## [2.2.1] - 2026-10-03
 
 Updated base images with OpenSSL security fixes. Upgrading is recommended; nothing else to do.
