@@ -46,11 +46,12 @@ change with **Check for updates**, and only a higher revision replaces the Catal
 `requires` when the change needs a newer ThreatCull. Run `make catalog-docs` to refresh the tables
 in [the Catalog page](docs/CATALOG.md); CI fails when they don't match.
 
-A weekly workflow (`.github/workflows/catalog-health.yml`) downloads every Catalog Source and keeps
+A workflow (`.github/workflows/catalog-health.yml`) downloads every Catalog Source and keeps
 one open issue, "Catalog health: Sources need attention", listing Sources that failed, served an
 HTML page or had no valid entries two weeks in a row, and blocklists whose entries have not changed
 for 30 days. Its history lives in `state.json` on the `catalog-health` branch; never merge that
-branch. Run it by hand from the Actions tab with **Run workflow**.
+branch. Its weekly schedule is paused until #90; run it by hand from the Actions tab with
+**Run workflow**.
 
 ## Licence
 

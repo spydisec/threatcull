@@ -1,13 +1,12 @@
 name: Catalog health
 
-# Weekly check of every Catalog Source (ADR-0010). Each Source is downloaded once with
+# Check of every Catalog Source (ADR-0010). Each Source is downloaded once with
 # ThreatCull's own fetcher and parser; the history lives in state.json on the
 # catalog-health branch. One open issue labelled "catalog" lists dead and frozen
 # Sources; it is rewritten each run and closed when every Source is healthy.
 
+# The weekly schedule (cron '0 5 * * 1') is paused until #90: run it by hand for now.
 on:
-  schedule:
-    - cron: '0 5 * * 1'
   workflow_dispatch:
 
 permissions:
