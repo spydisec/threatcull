@@ -4,7 +4,7 @@
 # revision: raise it by one with every change. ThreatCull uses the newest revision
 # it has: the one it shipped with, or one saved by `threatcull catalog update`.
 # requires: the oldest ThreatCull version that understands this file.
-revision: 3
+revision: 4
 requires: "2.0.0"
 sources:
   # ---------------------------------------------------------------- IP blocklists
@@ -55,6 +55,7 @@ sources:
 
   - id: threatview-ip-high
     name: ThreatView high-confidence IPs
+    family: threatview
     url: https://threatview.io/Downloads/IP-High-Confidence-Feed.txt
     format: plain
     kind: ip
@@ -79,6 +80,7 @@ sources:
 
   - id: c2intelfeeds-ip-30d
     name: C2IntelFeeds C2 IPs (30 days)
+    family: c2intelfeeds
     url: https://raw.githubusercontent.com/drb-ra/C2IntelFeeds/master/feeds/IPC2s-30day.csv
     format: csv
     csv_column: 0
@@ -102,6 +104,32 @@ sources:
     kind: ip
     category: malicious
     refresh_minutes: 1440
+
+  - id: binarydefense-banlist
+    name: Binary Defense Artillery ban list
+    url: https://www.binarydefense.com/banlist.txt
+    format: plain
+    kind: ip
+    category: malicious
+    refresh_minutes: 1440
+
+  - id: threatcluster-ips
+    name: ThreatCluster high-confidence IPs (30 days)
+    family: threatcluster
+    url: https://threatcluster.io/api/iocs/public/ips.txt
+    format: plain
+    kind: ip
+    category: malicious
+    refresh_minutes: 360
+
+  - id: siberkapan-ips
+    name: SiberKapan honeypot IPs
+    family: siberkapan
+    url: https://siberkapan.org/api/v1/list/txt
+    format: plain
+    kind: ip
+    category: scanner
+    refresh_minutes: 360
 
   # ------------------------------------------------------------ Domain blocklists
   - id: blocklistproject-malware
@@ -225,6 +253,52 @@ sources:
     kind: domain
     category: spam
     refresh_minutes: 1440
+
+  - id: threatfox-hostfile
+    name: abuse.ch ThreatFox domains
+    family: abuse-ch
+    url: https://threatfox.abuse.ch/downloads/hostfile/
+    format: hosts
+    kind: domain
+    category: malicious
+    refresh_minutes: 360
+
+  - id: c2intelfeeds-domain-30d
+    name: C2IntelFeeds C2 domains (30 days)
+    family: c2intelfeeds
+    url: https://raw.githubusercontent.com/drb-ra/C2IntelFeeds/master/feeds/domainC2swithURLwithIP-30day-filter-abused.csv
+    format: csv
+    csv_column: 0
+    kind: domain
+    category: c2
+    refresh_minutes: 360
+
+  - id: threatview-domain-high
+    name: ThreatView high-confidence domains
+    family: threatview
+    url: https://threatview.io/Downloads/DOMAIN-High-Confidence-Feed.txt
+    format: plain
+    kind: domain
+    category: malicious
+    refresh_minutes: 1440
+
+  - id: threatcluster-domains
+    name: ThreatCluster high-confidence domains (30 days)
+    family: threatcluster
+    url: https://threatcluster.io/api/iocs/public/domains.txt
+    format: plain
+    kind: domain
+    category: malicious
+    refresh_minutes: 360
+
+  - id: siberkapan-domains
+    name: SiberKapan phishing domains
+    family: siberkapan
+    url: https://siberkapan.org/domains/siberkapan/txt
+    format: plain
+    kind: domain
+    category: phishing
+    refresh_minutes: 360
 
   - id: blackhole-today-ips
     name: BlackHole TODAY IPs

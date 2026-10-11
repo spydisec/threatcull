@@ -8,6 +8,21 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Added
+
+- 🆕 **Eight new Catalog Sources**, all disabled until you enable them. IP blocklists: Binary
+  Defense Artillery ban list (`binarydefense-banlist`), ThreatCluster IPs (`threatcluster-ips`) and
+  SiberKapan honeypot IPs (`siberkapan-ips`). Domain blocklists: abuse.ch ThreatFox
+  (`threatfox-hostfile`), C2IntelFeeds C2 domains (`c2intelfeeds-domain-30d`), ThreatView
+  high-confidence domains (`threatview-domain-high`), ThreatCluster domains
+  (`threatcluster-domains`) and SiberKapan phishing domains (`siberkapan-domains`).
+
+### Changed
+
+- 👪 **Source Families for C2IntelFeeds and ThreatView.** The IP and domain Sources from each
+  publisher now share a Family (`c2intelfeeds`, `threatview`), so together they count once towards
+  a Confidence Score.
+
 ## [2.4.0] - 2026-10-03
 
 Fetch and Compile are about twice as fast, runs show how long each stage took, and Settings shows
