@@ -35,7 +35,7 @@
     <div class="sub">First fetch {% if next_fetch %}at {{ next_fetch | when }}{% else %}at the next scheduled run{% endif %}, or click Run now.</div>
     {% endif %}
     {% if source.last_success_at %}<div class="sub nowrap">{{ source.last_success_at | when }}</div>{% endif %}
-    {% if source.last_changed_at %}<div class="sub nowrap">changed {{ source.last_changed_at | age }} ago</div>{% endif %}
+    {% if source.last_changed_at and not frozen %}<div class="sub nowrap">changed {{ source.last_changed_at | age }} ago</div>{% endif %}
   </td>
   <td class="actions">
     {% if source.enabled %}

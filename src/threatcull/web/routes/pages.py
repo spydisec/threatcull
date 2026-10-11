@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from typing import Annotated, Any
 
@@ -38,6 +38,7 @@ from threatcull.store.outputs import OutputSpec, create_output, list_outputs, ro
 from threatcull.store.runs import compile_history, last_run, recent_fetches, recent_runs
 from threatcull.store.settings import load_settings
 from threatcull.store.sources import (
+    Source,
     add_custom_source,
     get_source,
     list_sources,
@@ -214,11 +215,9 @@ def _next_fetches(request: Request) -> dict[str, str]:
     return {source_id: ts(at) for source_id, at in scheduler.next_fetch_times().items()}
 
 
-def _frozen_ids(conn: sqlite3.Connection) -> frozenset[str]:
-    """Ids of the Frozen Sources, for the Sources page rows."""
-    return frozenset(
-        frozen_source_ids(list_sources(conn), now=utcnow(), settings=load_settings(conn))
-    )
+def _frozen_ids(conn: sqlite3.Connection, sources: Sequence[Source]) -> frozenset[str]:
+    """Ids of the Frozen Sources among ``sources``, for the Sources page rows."""
+    return frozenset(frozen_source_ids(sources, now=utcnow(), settings=load_settings(conn)))
 
 
 def _render_sources(
@@ -229,11 +228,12 @@ def _render_sources(
     status_code: int = 200,
 ) -> Response:
     """The Sources page, with the Catalog in use shown in its Catalog card."""
+    sources = list_sources(conn)
     page = {
-        "sources": list_sources(conn),
+        "sources": sources,
         "catalog": active_catalog(request.app.state.data_dir),
         "next_fetches": _next_fetches(request),
-        "frozen_ids": _frozen_ids(conn),
+        "frozen_ids": _frozen_ids(conn, sources),
     }
     page.update(context)
     return render(request, "sources.html", page, status_code=status_code)
@@ -588,7 +588,7 @@ def _apply_enabled_change(
             {
                 "source": source,
                 "next_fetches": _next_fetches(request),
-                "frozen_ids": _frozen_ids(conn),
+                "frozen_ids": _frozen_ids(conn, [source]),
             },
         )
     return RedirectResponse("/sources", status_code=303)

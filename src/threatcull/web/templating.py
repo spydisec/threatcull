@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +70,8 @@ def _age(value: str | None) -> Markup:
         then = datetime.fromisoformat(value)
     except ValueError:
         return Markup("{}").format(value)
+    if then.tzinfo is None:  # stored times are UTC; a hand-edited one may lack the zone
+        then = then.replace(tzinfo=UTC)
     return Markup('<time datetime="{}" title="{}">{}</time>').format(
         value, value, age_label(then, utcnow())
     )
