@@ -26,9 +26,8 @@ import yaml
 from pydantic import ValidationError
 
 from threatcull.catalog import Catalog, CatalogEntry, shipped_catalog
-from threatcull.fetcher import USER_AGENT, Fetcher, FetchError, HttpFetcher
-from threatcull.indicators import SourceKind, normalize
-from threatcull.parsers import SourceFormat, parse
+from threatcull.feedcheck import Feed, FeedProbe, probe_feed
+from threatcull.fetcher import USER_AGENT, Fetcher, HttpFetcher
 from threatcull.web.dashboard import CATEGORY_LABELS
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,17 +44,6 @@ _REFRESH = {"Hourly": 60, "Daily": 1440, "Weekly": 10080}
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
-@dataclass(frozen=True)
-class Feed:
-    """What probe_feed needs: enough to download and parse a list."""
-
-    url: str
-    format: SourceFormat
-    kind: SourceKind
-    csv_column: int = 0
-    json_keys: tuple[str, ...] = ()
-
-
 @dataclass
 class Request:
     fields: dict[str, str]
@@ -63,13 +51,6 @@ class Request:
     feed: Feed | None = None  # set whenever the feed itself can be checked
     problems: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class FeedProbe:
-    valid: int
-    rejected: int
-    error: str | None
 
 
 @dataclass(frozen=True)
@@ -155,23 +136,6 @@ def build_request(fields: dict[str, str], catalog: Catalog) -> Request:
     return request
 
 
-def probe_feed(entry: Feed | CatalogEntry, fetch: Fetcher) -> FeedProbe:
-    """Download the feed once and count what ThreatCull would keep from it."""
-    try:
-        result = fetch(entry.url, etag=None, last_modified=None)
-    except FetchError as exc:
-        return FeedProbe(0, 0, str(exc))
-    valid = rejected = 0
-    for raw in parse(
-        entry.format, result.text, csv_column=entry.csv_column, json_keys=entry.json_keys
-    ):
-        if normalize(raw, entry.kind) is None:
-            rejected += 1
-        else:
-            valid += 1
-    return FeedProbe(valid, rejected, None)
-
-
 def entry_yaml(entry: CatalogEntry) -> str:
     data = entry.model_dump(mode="json", exclude={"notes", "json_keys", "csv_column"})
     if entry.json_keys:
@@ -190,6 +154,11 @@ def report(request: Request, probe: FeedProbe | None) -> Report:
     if probe is not None:
         if probe.error:
             problems.append(f"The feed could not be downloaded: `{_code(probe.error)}`.")
+        elif probe.html:
+            problems.append(
+                "The feed returned an HTML page, not a list. "
+                "Check the URL points at the raw list, not a web page about it."
+            )
         elif probe.valid == 0:
             problems.append(
                 f"The feed has no usable entries ({probe.rejected} lines rejected). "
