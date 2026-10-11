@@ -1,0 +1,93 @@
+name: Catalog health
+
+# Weekly check of every Catalog Source (ADR-0010). Each Source is downloaded once with
+# ThreatCull's own fetcher and parser; the history lives in state.json on the
+# catalog-health branch. One open issue labelled "catalog" lists dead and frozen
+# Sources; it is rewritten each run and closed when every Source is healthy.
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-health
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write  # push state.json to the catalog-health branch
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dev
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --no-dev
+      - name: Get the previous state
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/health"
+          if git ls-remote --exit-code --heads "https://github.com/${REPO}.git" catalog-health >/dev/null; then
+            git clone --quiet --depth 1 --branch catalog-health "https://github.com/${REPO}.git" "$state"
+          else
+            git init --quiet -b catalog-health "$state"
+          fi
+      - name: Check every Catalog Source
+        id: check
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/catalog_health.py \
+            --state "$RUNNER_TEMP/health/state.json" \
+            --report "$RUNNER_TEMP/report.md" \
+            --run-url "$RUN_URL" >> "$GITHUB_OUTPUT"
+      - name: Save the state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/health"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          if git diff --cached --quiet; then
+            echo "State unchanged"
+          else
+            git commit -q -m "chore: Catalog health $(date -u +%F)"
+            git push -q "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" HEAD:refs/heads/catalog-health
+          fi
+      - name: Update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PROBLEMS: ${{ steps.check.outputs.problems }}
+        run: |
+          set -euo pipefail
+          title="Catalog health: Sources need attention"
+          number=$(gh issue list --repo "$REPO" --state open --label catalog \
+            --json number,title | jq -r --arg t "$title" 'map(select(.title == $t)) | .[0].number // empty')
+          if [ "$PROBLEMS" -gt 0 ]; then
+            if [ -n "$number" ]; then
+              gh issue edit "$number" --repo "$REPO" --body-file "$RUNNER_TEMP/report.md"
+            else
+              gh issue create --repo "$REPO" --title "$title" --label catalog \
+                --body-file "$RUNNER_TEMP/report.md"
+            fi
+          elif [ -n "$number" ]; then
+            gh issue close "$number" --repo "$REPO" \
+              --comment "All Catalog Sources healthy as of $(date -u +%F)."
+          fi
