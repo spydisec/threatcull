@@ -8,6 +8,13 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-11
+
+ThreatCull now warns about Sources whose list stopped changing, and the Catalog gains eight Sources.
+Nothing to do when upgrading: database migration 11 runs on start and dates each Source's last change
+from the newest entry it added. Use **Check for updates** on the Sources page to get Catalog revision 4
+on an existing install.
+
 ### Added
 
 - 🆕 **Eight new Catalog Sources**, all disabled until you enable them. IP blocklists: Binary
@@ -400,7 +407,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/spydisec/threatcull/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/spydisec/threatcull/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/spydisec/threatcull/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/spydisec/threatcull/compare/v2.2.1...v2.3.0
