@@ -1,7 +1,7 @@
 {# Shared UI bits. Colour is never the only signal: every pill carries its text. #}
 {% macro pill(status, id=none) -%}
 {%- set tone = {"ok": "ok", "not_modified": "ok", "running": "warn", "skipped": "off",
-                "blocked": "warn", "stale": "warn", "failed": "bad", "error": "bad"}.get(status, "off") -%}
+                "blocked": "warn", "stale": "warn", "frozen": "warn", "failed": "bad", "error": "bad"}.get(status, "off") -%}
 <span class="pill pill-{{ tone }}"{% if id %} id="{{ id }}"{% endif %}>{{ status }}</span>
 {%- endmacro %}
 

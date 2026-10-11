@@ -88,7 +88,9 @@ class Health:
     label: str
 
 
-def health(last_compile: Run | None, blocklists: Sequence[Source], stale: int) -> Health:
+def health(
+    last_compile: Run | None, blocklists: Sequence[Source], stale: int, frozen: int = 0
+) -> Health:
     failing = sum(1 for source in blocklists if source.last_error)
     if last_compile is None:
         return Health("off", "No Compile yet")
@@ -96,8 +98,12 @@ def health(last_compile: Run | None, blocklists: Sequence[Source], stale: int) -
         return Health("bad", "Last Compile failed")
     if last_compile.status == "blocked":
         return Health("warn", "Compile blocked by the Shrink Guard")
-    if failing or stale:
-        problems = [f"{failing} failing" if failing else "", f"{stale} Stale" if stale else ""]
+    if failing or stale or frozen:
+        problems = [
+            f"{failing} failing" if failing else "",
+            f"{stale} Stale" if stale else "",
+            f"{frozen} frozen" if frozen else "",
+        ]
         return Health("warn", "Sources need attention: " + ", ".join(p for p in problems if p))
     if last_compile.status == "running":
         return Health("warn", "Compile running")

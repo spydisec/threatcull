@@ -13,6 +13,8 @@
     <dd><strong>{{ settings.retention_days }} days</strong><span class="sub">Sightings older than this are deleted.</span></dd>
     <dt>Stale after</dt>
     <dd><strong>{{ settings.stale_after_hours }} hours</strong><span class="sub">A Source without a successful Fetch for this long stops counting.</span></dd>
+    <dt>Frozen after</dt>
+    <dd><strong>{{ settings.frozen_after_days }} days</strong><span class="sub">A blocklist Source whose list has not changed for this long is marked frozen. Its entries still count.</span></dd>
     <dt>Confidence Tiers</dt>
     <dd><strong>high ≥ {{ settings.tier_high }}, medium ≥ {{ settings.tier_medium }}</strong><span class="sub">Independent Sources that must list an indicator.</span></dd>
     <dt>Shrink Guard</dt>

@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from threatcull.clock import utcnow
+from threatcull.compiling import frozen_source_ids, is_frozen
 from threatcull.datadir import storage_bytes
 from threatcull.home_detect import Candidate, public_ip_candidate
 from threatcull.lookup import LookupResult, lookup
@@ -46,7 +47,7 @@ MIN_RUNS_LIMIT = 1
 MAX_RUNS_LIMIT = 200
 
 
-def _source_json(source: Source) -> dict[str, Any]:
+def _source_json(source: Source, *, frozen: bool) -> dict[str, Any]:
     return {
         "id": source.id,
         "name": source.name,
@@ -63,6 +64,8 @@ def _source_json(source: Source) -> dict[str, Any]:
         "last_success_at": source.last_success_at,
         "last_attempt_at": source.last_attempt_at,
         "last_error": source.last_error,
+        "last_changed_at": source.last_changed_at,
+        "frozen": frozen,
     }
 
 
@@ -148,6 +151,7 @@ def _settings_json(settings: Settings) -> dict[str, Any]:
         "tier_medium": settings.tier_medium,
         "max_shrink": settings.max_shrink,
         "max_stale_ratio": settings.max_stale_ratio,
+        "frozen_after_days": settings.frozen_after_days,
     }
 
 
@@ -175,7 +179,9 @@ def api_sources(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_api_user)],
 ) -> list[dict[str, Any]]:
-    return [_source_json(source) for source in list_sources(conn)]
+    sources = list_sources(conn)
+    frozen = set(frozen_source_ids(sources, now=utcnow(), settings=load_settings(conn)))
+    return [_source_json(source, frozen=source.id in frozen) for source in sources]
 
 
 @router.post("/sources/{source_id}", dependencies=[Depends(check_csrf)])
@@ -191,7 +197,9 @@ def api_set_source_enabled(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     notify_sources_changed(request)
-    return _source_json(source)
+    return _source_json(
+        source, frozen=is_frozen(source, now=utcnow(), settings=load_settings(conn))
+    )
 
 
 @router.get("/outputs")
