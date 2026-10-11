@@ -66,6 +66,29 @@ def stale_source_ids(
     )
 
 
+def is_frozen(source: Source, *, now: datetime, settings: Settings) -> bool:
+    """True if ``source`` is a Frozen Source (#84).
+
+    An enabled blocklist whose last Fetch succeeded but whose list has not gained
+    or lost an Indicator for ``frozen_after_days``. Its Sightings still count:
+    ThreatCull only warns, and the operator decides whether to disable it.
+    Allowlists (vendor ranges change a few times a year) are never Frozen, and a
+    failing Source shows as failing instead.
+    """
+    if not source.enabled or source.role != "blocklist" or source.last_error:
+        return False
+    if source.last_changed_at is None:
+        return False
+    return source.last_changed_at <= ts(now - timedelta(days=settings.frozen_after_days))
+
+
+def frozen_source_ids(
+    sources: Sequence[Source], *, now: datetime, settings: Settings
+) -> tuple[str, ...]:
+    """Ids of the Frozen Sources among ``sources``."""
+    return tuple(s.id for s in sources if is_frozen(s, now=now, settings=settings))
+
+
 def feeding_sources(spec: OutputSpec, blocklists: Sequence[Source]) -> frozenset[str]:
     """Enabled blocklist Sources whose kind and category can put Indicators in ``spec``."""
     return frozenset(

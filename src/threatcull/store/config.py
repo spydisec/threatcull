@@ -114,6 +114,7 @@ class _SettingsIn(_Strict):
     tier_medium: int | None = Field(default=None, ge=1, le=100)
     max_shrink: float | None = None
     max_stale_ratio: float | None = None
+    frozen_after_days: int | None = Field(default=None, ge=1, le=3650)
 
 
 class _CustomSourceIn(_Strict):
