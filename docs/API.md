@@ -188,5 +188,5 @@ A device given that URL gets redirected to the login page. AdGuard Home, for exa
 
 ## Health check
 
-`GET /healthz` needs no token and returns `{"status": "ok", "version": "2.4.0"}`. The container's
+`GET /healthz` needs no token and returns `{"status": "ok", "version": "2.5.0"}`. The container's
 health check uses it.
