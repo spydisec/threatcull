@@ -45,7 +45,8 @@ The user the token belongs to: `{"username": "admin"}`.
 
 Every Source, enabled or not. Each entry has `id`, `name`, `family`, `url`, `format`, `kind`
 (`ip` or `domain`), `role` (`blocklist` or `allowlist`), `category`, `refresh_minutes`, `custom`,
-`enabled`, `disabled_reason`, `last_success_at`, `last_attempt_at` and `last_error`.
+`enabled`, `disabled_reason`, `last_success_at`, `last_attempt_at`, `last_error`, `last_changed_at`
+(when the list last gained or lost an entry) and `frozen` (true for a Frozen Source).
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" http://<server-ip>:6969/api/v1/sources
@@ -122,7 +123,7 @@ curl -H "Authorization: Bearer $TOKEN" "http://<server-ip>:6969/api/v1/runs?limi
 ### `GET /api/v1/settings`
 
 The Compile settings: `active_window_days`, `retention_days`, `stale_after_hours`, `tier_high`,
-`tier_medium`, `max_shrink` and `max_stale_ratio`. The API can't change them; use
+`tier_medium`, `max_shrink`, `max_stale_ratio` and `frozen_after_days`. The API can't change them; use
 **Settings** in the web UI.
 
 ### `GET /api/v1/lookup?q=<value>`

@@ -100,6 +100,8 @@ def apply_fetched(
             """,
             (etag, last_modified, stamp, stamp, content_sha256, source_id, source_id),
         )
+        if added or removed:
+            conn.execute("UPDATE sources SET last_changed_at = ? WHERE id = ?", (stamp, source_id))
         conn.execute("DELETE FROM fetched")
         conn.execute("DELETE FROM fetched_ids")
     return added, removed

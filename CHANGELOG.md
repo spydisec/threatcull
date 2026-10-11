@@ -8,6 +8,28 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Added
+
+- 🆕 **Eight new Catalog Sources**, all disabled until you enable them. IP blocklists: Binary
+  Defense Artillery ban list (`binarydefense-banlist`), ThreatCluster IPs (`threatcluster-ips`) and
+  SiberKapan honeypot IPs (`siberkapan-ips`). Domain blocklists: abuse.ch ThreatFox
+  (`threatfox-hostfile`), C2IntelFeeds C2 domains (`c2intelfeeds-domain-30d`), ThreatView
+  high-confidence domains (`threatview-domain-high`), ThreatCluster domains
+  (`threatcluster-domains`) and SiberKapan phishing domains (`siberkapan-domains`).
+- 🧊 **Frozen Sources.** ThreatCull records when each Source's list last gained or lost an entry and
+  marks an enabled blocklist Source **frozen** when that is 30 or more days ago
+  (`frozen_after_days`). The Sources page shows "changed 4 months ago" for every Source and has a
+  Frozen filter, the dashboard counts frozen Sources, `/api/v1/sources` returns `last_changed_at` and
+  `frozen`, and `threatcull sources list` prints both. Frozen Sources still count towards scores.
+  After the upgrade, the change date starts from the newest entry each Source added.
+  [#84](https://github.com/spydisec/threatcull/issues/84)
+
+### Changed
+
+- 👪 **Source Families for C2IntelFeeds and ThreatView.** The IP and domain Sources from each
+  publisher now share a Family (`c2intelfeeds`, `threatview`), so together they count once towards
+  a Confidence Score.
+
 ## [2.4.0] - 2026-10-03
 
 Fetch and Compile are about twice as fast, runs show how long each stage took, and Settings shows

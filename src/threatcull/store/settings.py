@@ -9,6 +9,8 @@ from dataclasses import asdict, dataclass, fields
 
 from threatcull.store.db import transaction
 
+MAX_FROZEN_AFTER_DAYS = 3650
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -19,6 +21,7 @@ class Settings:
     tier_medium: int = 2
     max_shrink: float = 0.5
     max_stale_ratio: float = 0.3
+    frozen_after_days: int = 30
 
     def __post_init__(self) -> None:
         if not 1 <= self.tier_medium < self.tier_high:
@@ -29,6 +32,8 @@ class Settings:
             raise ValueError("setting retention_days must be >= active_window_days")
         if not 0 < self.max_shrink < 1 or not 0 < self.max_stale_ratio < 1:
             raise ValueError("setting ratios must be between 0 and 1")
+        if not 1 <= self.frozen_after_days <= MAX_FROZEN_AFTER_DAYS:
+            raise ValueError(f"setting frozen_after_days must be 1 to {MAX_FROZEN_AFTER_DAYS}")
 
 
 _KNOWN = frozenset(f.name for f in fields(Settings))

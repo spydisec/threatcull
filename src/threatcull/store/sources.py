@@ -44,6 +44,7 @@ class Source:
     last_success_at: str | None
     last_attempt_at: str | None
     last_error: str | None
+    last_changed_at: str | None
 
 
 def _to_source(row: sqlite3.Row) -> Source:
@@ -67,6 +68,7 @@ def _to_source(row: sqlite3.Row) -> Source:
         last_success_at=row["last_success_at"],
         last_attempt_at=row["last_attempt_at"],
         last_error=row["last_error"],
+        last_changed_at=row["last_changed_at"],
     )
 
 

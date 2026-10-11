@@ -283,6 +283,7 @@ legend { padding: 0 0.3rem; color: var(--muted); font-size: 0.88em; }
 /* ---- Sources table ---- */
 .sub { margin-top: 0.15rem; color: var(--muted); font-size: 0.82em; line-height: 1.35; }
 .sub-bad { color: var(--bad); }
+.sub-warn { color: var(--warn); }
 .table td { overflow-wrap: break-word; }
 .table-sources td:first-child { min-width: 12rem; }
 .table-sources td:nth-child(3) { max-width: 16rem; }

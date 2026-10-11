@@ -6,7 +6,7 @@
 [![Container image](https://img.shields.io/badge/ghcr.io-spydisec%2Fthreatcull-2496ED?logo=docker&logoColor=white)](https://github.com/spydisec/threatcull/pkgs/container/threatcull)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: AGPL-3.0](https://img.shields.io/github/license/spydisec/threatcull)](LICENSE)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/spydisec/threatcull)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-20808D)](https://deepwiki.com/spydisec/threatcull)
 
 Self-hosted threat-feed compiler. ThreatCull downloads public blocklists, drops duplicates, private
 ranges and your own infrastructure, scores each indicator by how many independent sources list it, and
@@ -162,6 +162,9 @@ uv run threatcull serve --host <lan-ip> --port 6969
 - **Ranges:** outputs list single IP addresses and domains. A source that lists a CIDR range counts on
   the dashboard as "Ranges left out", because one range can block many unrelated hosts. Ranges on
   the allowlist still cover every address inside them.
+- **Frozen sources:** a blocklist source whose list has not gained or lost an entry for 30 days
+  (`frozen_after_days`) shows as **frozen** on the Sources page and the dashboard. Its entries still
+  count; check the feed and disable it if the publisher stopped updating it.
 - **Your network:** add your public addresses to the allowlist with **My network** ticked (or run
   `threatcull allow detect`). ThreatCull keeps them out of every output and warns you when a source
   lists one.
