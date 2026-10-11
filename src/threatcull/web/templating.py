@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,7 @@ from markupsafe import Markup
 from starlette.responses import HTMLResponse, Response
 
 from threatcull.catalog import feed_label
-from threatcull.clock import local
+from threatcull.clock import local, utcnow
 from threatcull.web.dashboard import CATEGORY_LABELS
 from threatcull.web.deps import session_user
 from threatcull.web.security import ensure_csrf_token
@@ -39,6 +40,38 @@ def _when(value: str | None, missing: str = "never") -> Markup:
         return Markup("{}").format(value)
     return Markup('<time datetime="{}" title="{}">{}</time>').format(
         value, value, moment.strftime("%Y-%m-%d %H:%M %Z")
+    )
+
+
+_DAYS_AS_DAYS = 14
+_DAYS_AS_WEEKS = 60
+_DAYS_AS_MONTHS = 730
+
+
+def age_label(then: datetime, now: datetime) -> str:
+    """``3 days``, ``5 weeks``, ``4 months``, ``2 years``: how long ago ``then`` was."""
+    days = (now - then).days
+    if days < 1:
+        return "less than a day"
+    if days < _DAYS_AS_DAYS:
+        return f"{days} day" if days == 1 else f"{days} days"
+    if days < _DAYS_AS_WEEKS:
+        return f"{days // 7} weeks"
+    if days < _DAYS_AS_MONTHS:
+        return f"{days // 30} months"
+    return f"{days // 365} years"
+
+
+def _age(value: str | None) -> Markup:
+    """How long ago a stored timestamp was; the exact UTC time in the tooltip."""
+    if not value:
+        return Markup("never")
+    try:
+        then = datetime.fromisoformat(value)
+    except ValueError:
+        return Markup("{}").format(value)
+    return Markup('<time datetime="{}" title="{}">{}</time>').format(
+        value, value, age_label(then, utcnow())
     )
 
 
@@ -78,6 +111,7 @@ def _size(value: int | None) -> str:
 
 
 _env.filters["when"] = _when
+_env.filters["age"] = _age
 _env.filters["size"] = _size
 _env.filters["duration"] = _duration
 _env.filters["feed_label"] = feed_label

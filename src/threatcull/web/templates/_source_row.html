@@ -1,6 +1,7 @@
 {% from "_ui.html" import pill %}
+{% set frozen = source.id in frozen_ids %}
 <tr id="source-row-{{ source.id }}"{% if not source.enabled %} class="row-off"{% endif %}
-    data-state="{{ 'enabled' if source.enabled else 'disabled' }}{{ ' failed' if source.enabled and source.last_error else '' }} {{ source.role }}">
+    data-state="{{ 'enabled' if source.enabled else 'disabled' }}{{ ' failed' if source.enabled and source.last_error else '' }}{{ ' frozen' if frozen else '' }} {{ source.role }}">
   <td>
     <strong>{{ source.name }}</strong>
     <div class="sub mono">{{ source.id }}</div>
@@ -23,6 +24,9 @@
     {% elif source.last_error %}
     {{ pill("failed") }}
     <div class="sub sub-bad">{{ source.last_error }}</div>
+    {% elif source.last_success_at and frozen %}
+    {{ pill("frozen") }}
+    <div class="sub sub-warn">No entries added or removed for {{ source.last_changed_at | age }}. Check the feed or disable it.</div>
     {% elif source.last_success_at %}
     {{ pill("ok") }}
     {% else %}
@@ -31,6 +35,7 @@
     <div class="sub">First fetch {% if next_fetch %}at {{ next_fetch | when }}{% else %}at the next scheduled run{% endif %}, or click Run now.</div>
     {% endif %}
     {% if source.last_success_at %}<div class="sub nowrap">{{ source.last_success_at | when }}</div>{% endif %}
+    {% if source.last_changed_at %}<div class="sub nowrap">changed {{ source.last_changed_at | age }} ago</div>{% endif %}
   </td>
   <td class="actions">
     {% if source.enabled %}

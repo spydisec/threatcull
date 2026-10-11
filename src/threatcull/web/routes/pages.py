@@ -16,7 +16,7 @@ from starlette.responses import RedirectResponse, Response
 from threatcull.catalog import CatalogError
 from threatcull.catalog_update import MAX_CATALOG_BYTES, active_catalog, apply_update
 from threatcull.clock import ts, utcnow
-from threatcull.compiling import stale_source_ids
+from threatcull.compiling import frozen_source_ids, stale_source_ids
 from threatcull.datadir import storage_bytes
 from threatcull.fetcher import FetchError
 from threatcull.home_detect import public_ip_candidate
@@ -108,6 +108,7 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
     names = {source.id: source.name for source in sources}
     blocklists = [s for s in sources if s.enabled and s.role == "blocklist"]
     stale_ids = stale_source_ids(blocklists, now=now, settings=settings)
+    frozen_ids = frozen_source_ids(blocklists, now=now, settings=settings)
     scheduler: Scheduler | None = getattr(request.app.state, "scheduler", None)
     next_run = scheduler.next_compile_at() if scheduler is not None else None
     last_compile = last_run(conn, "compile")
@@ -125,12 +126,13 @@ def _dashboard_context(request: Request, conn: sqlite3.Connection) -> dict[str, 
         "enabled_blocklist_count": len(blocklists),
         "failing_count": sum(1 for s in blocklists if s.last_error),
         "stale_count": len(stale_ids),
+        "frozen_count": len(frozen_ids),
         "waiting_count": sum(
             1 for s in blocklists if s.last_success_at is None and not s.last_error
         ),
         "allowlist_count": sum(1 for s in sources if s.role == "allowlist"),
         "last_compile": last_compile,
-        "health": health(last_compile, blocklists, len(stale_ids)),
+        "health": health(last_compile, blocklists, len(stale_ids), frozen=len(frozen_ids)),
         "home_alerts": home_alerts,
         "home_hit_count": home_compile.counts.get("home_hits", 0) if home_compile else 0,
         "outputs": outputs,
@@ -212,6 +214,13 @@ def _next_fetches(request: Request) -> dict[str, str]:
     return {source_id: ts(at) for source_id, at in scheduler.next_fetch_times().items()}
 
 
+def _frozen_ids(conn: sqlite3.Connection) -> frozenset[str]:
+    """Ids of the Frozen Sources, for the Sources page rows."""
+    return frozenset(
+        frozen_source_ids(list_sources(conn), now=utcnow(), settings=load_settings(conn))
+    )
+
+
 def _render_sources(
     request: Request,
     conn: sqlite3.Connection,
@@ -224,6 +233,7 @@ def _render_sources(
         "sources": list_sources(conn),
         "catalog": active_catalog(request.app.state.data_dir),
         "next_fetches": _next_fetches(request),
+        "frozen_ids": _frozen_ids(conn),
     }
     page.update(context)
     return render(request, "sources.html", page, status_code=status_code)
@@ -575,7 +585,11 @@ def _apply_enabled_change(
         return render_fragment(
             request,
             "_source_row.html",
-            {"source": source, "next_fetches": _next_fetches(request)},
+            {
+                "source": source,
+                "next_fetches": _next_fetches(request),
+                "frozen_ids": _frozen_ids(conn),
+            },
         )
     return RedirectResponse("/sources", status_code=303)
 
