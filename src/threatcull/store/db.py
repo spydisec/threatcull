@@ -159,6 +159,16 @@ _MIGRATIONS: tuple[str, ...] = (
     ALTER TABLE sources ADD COLUMN content_current INTEGER;
     PRAGMA user_version = 10;
     """,
+    # When each Source's list last gained or lost an Indicator (#84). The backfill
+    # takes the newest first_seen: removals were never timed, so a Source can look
+    # older than it is, never newer, until its next real change.
+    """
+    ALTER TABLE sources ADD COLUMN last_changed_at TEXT;
+    UPDATE sources SET last_changed_at = (
+        SELECT MAX(first_seen) FROM sightings WHERE sightings.source_id = sources.id
+    );
+    PRAGMA user_version = 11;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
