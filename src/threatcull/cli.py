@@ -25,7 +25,7 @@ from threatcull.catalog_update import (
     download_catalog,
 )
 from threatcull.clock import TZ_ENV_VAR, display_zone, utcnow
-from threatcull.compiling import compile_outputs
+from threatcull.compiling import compile_outputs, is_frozen
 from threatcull.datadir import DataDirError, ensure_data_dir
 from threatcull.fetcher import FetchError, HttpFetcher
 from threatcull.fetching import fetch_all
@@ -41,6 +41,7 @@ from threatcull.store.db import connect
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.outputs import ensure_default_outputs, list_outputs, rotate_token
 from threatcull.store.runs import fail_interrupted_runs
+from threatcull.store.settings import load_settings
 from threatcull.store.sources import (
     add_custom_source,
     list_sources,
@@ -299,11 +300,16 @@ def _init(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
 
 
 def _sources_list(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    settings, now = load_settings(conn), utcnow()
     for s in list_sources(conn, enabled_only=args.enabled):
         state = "on " if s.enabled else "off"
         health = s.last_error or (
             f"ok {s.last_success_at}" if s.last_success_at else "never fetched"
         )
+        if s.last_changed_at:
+            health += f" · changed {s.last_changed_at[:10]}"
+        if is_frozen(s, now=now, settings=settings):
+            health += " FROZEN"
         note = f" ({s.disabled_reason})" if s.disabled_reason else ""
         print(f"{state}  {s.id:<30} {s.role:<9} {s.kind:<6} {s.category:<14} {health}{note}")
     return EXIT_OK
