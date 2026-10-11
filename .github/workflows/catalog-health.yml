@@ -78,8 +78,9 @@ jobs:
         run: |
           set -euo pipefail
           title="Catalog health: Sources need attention"
+          # Only the bot's own issue: anyone can open a "catalog" issue with any title.
           number=$(gh issue list --repo "$REPO" --state open --label catalog \
-            --json number,title | jq -r --arg t "$title" 'map(select(.title == $t)) | .[0].number // empty')
+            --author app/github-actions --limit 100 --json number,title | jq -r --arg t "$title" 'map(select(.title == $t)) | .[0].number // empty')
           if [ "$PROBLEMS" -gt 0 ]; then
             if [ -n "$number" ]; then
               gh issue edit "$number" --repo "$REPO" --body-file "$RUNNER_TEMP/report.md"

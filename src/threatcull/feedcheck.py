@@ -14,7 +14,7 @@ from threatcull.catalog import CatalogEntry
 from threatcull.fetcher import Fetcher, FetchError
 from threatcull.fetching import looks_like_html
 from threatcull.indicators import SourceKind, normalize
-from threatcull.parsers import SourceFormat, parse
+from threatcull.parsers import ParseError, SourceFormat, parse
 
 
 @dataclass(frozen=True)
@@ -59,6 +59,8 @@ def probe_feed(entry: Feed | CatalogEntry, fetch: Fetcher) -> FeedProbe:
             else:
                 valid += 1  # every valid line, duplicates included, as before
                 kept.add(indicator.value)
+    except ParseError as exc:  # e.g. a JSON Source serving an HTML challenge page
+        return FeedProbe(0, 0, str(exc))
     finally:
         result.close()
     digest = hashlib.sha256("\n".join(sorted(kept)).encode()).hexdigest() if kept else ""

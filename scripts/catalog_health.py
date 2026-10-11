@@ -121,7 +121,12 @@ def check(
     new_state: dict[str, Record] = {}
     problems: list[Problem] = []
     for entry in entries:
-        record = _next(state.get(entry.id), probe_feed(entry, fetch), stamp)
+        try:
+            probe = probe_feed(entry, fetch)
+        except Exception as exc:
+            # One broken Source must not stop the check or the state of all the others.
+            probe = FeedProbe(0, 0, f"{type(exc).__name__}: {exc}")
+        record = _next(state.get(entry.id), probe, stamp)
         new_state[entry.id] = record
         if (problem := _problem(entry, record, today)) is not None:
             problems.append(problem)
