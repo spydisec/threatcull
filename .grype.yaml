@@ -1,3 +1,27 @@
 # Grype ignore rules. Every entry names the CVE, the package and why ThreatCull is
 # not affected. Remove an entry once the base image ships the fix.
-ignore: []
+ignore:
+  # libexpat1 2.8.3 in the Docker Hardened Images python:3.14 base; fixed in
+  # 2.9.0-1~deb13u1, which DHI has not shipped yet. Expat parses XML only, and
+  # ThreatCull parses no XML: no xml.*, pyexpat or plistlib in src/ or in any
+  # runtime dependency; the feed parsers read plain, hosts, adblock, CSV and JSON.
+  # Drop these entries once Dependabot bumps the DHI digests to an image with
+  # libexpat1 2.9.0.
+  - vulnerability: CVE-2026-66046
+    package:
+      name: libexpat1
+  - vulnerability: CVE-2026-77214
+    package:
+      name: libexpat1
+  - vulnerability: CVE-2026-93990
+    package:
+      name: libexpat1
+  - vulnerability: CVE-2026-76956
+    package:
+      name: libexpat1
+  - vulnerability: CVE-2026-76957
+    package:
+      name: libexpat1
+  - vulnerability: CVE-2026-102633
+    package:
+      name: libexpat1
