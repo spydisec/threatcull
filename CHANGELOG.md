@@ -8,6 +8,24 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-10-19
+
+Updated base images and dependencies. Nothing to do when upgrading.
+
+### Changed
+
+- 📦 **Dependency updates.** The Docker Hardened Images `python:3.14` and `python:3.14-dev` bases move
+  to new digests, the image builds with uv 0.13.1, and FastAPI goes to 0.143.0 and `pydantic` to
+  2.14.1.
+
+### Security
+
+- 🔐 **libexpat1 CVEs in the base image are not reachable.** The `python:3.14` base still ships
+  libexpat1 `2.8.3-1~deb13u1+dhi5`, which has CVE-2026-66046, CVE-2026-77214, CVE-2026-93990,
+  CVE-2026-76956, CVE-2026-76957 and CVE-2026-102633, fixed in `2.9.0-1~deb13u1`. Expat parses XML
+  and ThreatCull parses none, so the image scan ignores these CVEs until a Docker Hardened Images
+  digest ships the fix.
+
 ## [2.5.0] - 2026-10-11
 
 ThreatCull now warns about Sources whose list stopped changing, and the Catalog gains eight Sources.
@@ -407,7 +425,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.5.0...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.5.1...HEAD
+[2.5.1]: https://github.com/spydisec/threatcull/compare/v2.5.0...v2.5.1
 [2.5.0]: https://github.com/spydisec/threatcull/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/spydisec/threatcull/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/spydisec/threatcull/compare/v2.3.0...v2.3.1
