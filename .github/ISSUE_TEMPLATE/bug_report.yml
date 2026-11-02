@@ -45,3 +45,12 @@ body:
         Output of `docker compose logs threatcull`. Remove Feed Tokens, passwords, hostnames and
         addresses from your own network first.
       render: text
+  - type: textarea
+    id: suggested-fix
+    attributes:
+      label: Suggested fix (describe the idea; please don't paste code)
+      description: >-
+        Optional. Explain the idea behind a fix in words. The maintainer implements it, so code
+        pasted here can't be used.
+    validations:
+      required: false

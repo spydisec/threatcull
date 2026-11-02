@@ -35,6 +35,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   the Catalog. Support for Sources that need an API key is tracked in
   [#116](https://github.com/spydisec/threatcull/issues/116).
 
+### Documentation
+
+- 📝 **Contribution policy.** ThreatCull doesn't accept code pull requests from outside contributors
+  for now. Bug reports, feature ideas and Catalog Source suggestions in issues are welcome; describe
+  a fix in words and the maintainer implements it. The bug report and feature request forms have
+  an optional "Suggested fix" field for that. See
+  [CONTRIBUTING.md](CONTRIBUTING.md#contributions-at-the-moment).
+
 ## [2.5.2] - 2026-11-02
 
 Security fix for the CA bundle, and the image moves to Python 3.15. Nothing to do when upgrading.

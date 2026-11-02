@@ -1,3 +1,5 @@
+> Outside code pull requests aren't accepted at the moment; see [CONTRIBUTING.md](https://github.com/spydisec/threatcull/blob/dev/CONTRIBUTING.md#contributions-at-the-moment). Please open an issue instead.
+
 ## Summary
 
 <!-- One sentence: what does this PR do and why? -->
