@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal
 
 from threatcull.clock import ts
-from threatcull.outputs.files import sync_directory
+from threatcull.outputs.files import missing_directories, sync_directory
 from threatcull.outputs.stream import StagedOutput, home_hits, mark_allowlisted, stage_output
 from threatcull.policy.allowlist import Allowlist
 from threatcull.policy.scoring import create_scored_table, drop_scored_table
@@ -221,6 +221,7 @@ def _compile(
             stats = compile_stats(conn, settings)
         sources = {source.id: source for source in list_sources(conn)}
         specs = list_outputs(conn)
+        created = missing_directories(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         with timer.stage("outputs"):
             for spec in specs:
@@ -254,6 +255,9 @@ def _compile(
             for output in staged:
                 output.tmp.replace(output.path)
             sync_directory(out_dir)
+            # A folder this Compile created also needs its entry in the parent synced.
+            for directory in created:
+                sync_directory(directory.parent)
             # One transaction: the shrink guard's baseline (last_count) moves for every
             # Output together, or for none if the write fails.
             with transaction(conn):
