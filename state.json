@@ -270,8 +270,8 @@
     "last_failure_counted": null
   },
   "siberkapan-ips": {
-    "set_sha256": "4a65b89d9501b00a622d53a47c075173b7e9bec98a46e432987533be8cafc36c",
-    "valid": 40832,
+    "set_sha256": "ac4c2494244cff6f7622b26af32193ab9417e0d7ce5a37823418d64173827ec3",
+    "valid": 40834,
     "last_changed": "2026-11-02",
     "last_ok": "2026-11-02",
     "failures": 0,
