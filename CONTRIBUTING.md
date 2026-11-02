@@ -53,7 +53,15 @@ row, and blocklists whose entries have not changed for 30 days. Its history live
 branch. Its weekly schedule is paused until #90; run it by hand from the Actions tab with
 **Run workflow**.
 
-## Licence
+## Licence and Contributor License Agreement
 
-By contributing you agree that your contribution is licensed under the
-[GNU AGPL-3.0](LICENSE).
+ThreatCull is licensed under the [GNU AGPL-3.0](LICENSE). Before we can merge your first pull
+request, you sign the [Contributor License Agreement](CLA.md) (CLA). CLA Assistant comments on the
+pull request with a link: sign in with GitHub and accept. One signature covers all your future
+pull requests, until the text of the CLA changes.
+
+The CLA lets the maintainer license your contribution under other terms as well as the AGPL-3.0,
+for example to offer a commercial edition next to the open source one. You keep the copyright in
+your work. In return, every contribution included in a release stays available under the
+AGPL-3.0 or another open source license. If you contribute as part of your job, check that your
+employer allows it, or ask them to sign the CLA as an entity.

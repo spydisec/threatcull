@@ -197,4 +197,5 @@ to report a vulnerability, and [CHANGELOG.md](CHANGELOG.md) for what changed in 
 
 ## Licence
 
-[GNU AGPL-3.0](LICENSE)
+[GNU AGPL-3.0](LICENSE). Contributions need a signed [Contributor License Agreement](CLA.md); see
+[CONTRIBUTING.md](CONTRIBUTING.md#licence-and-contributor-license-agreement).
