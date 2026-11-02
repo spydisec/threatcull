@@ -46,6 +46,10 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   a fix in words and the maintainer implements it. The bug report and feature request forms have
   an optional "Suggested fix" field for that. See
   [CONTRIBUTING.md](CONTRIBUTING.md#contributions-at-the-moment).
+- 📝 **Supported platforms.** The README lists where ThreatCull runs: Docker on Linux (amd64 or
+  arm64) is supported and tested, and Docker Desktop on Windows or macOS runs the same image but
+  isn't tested. 32-bit ARM and Windows without Docker aren't supported. Keep the named data volume
+  instead of mounting a Windows folder as `/data`.
 
 ## [2.5.2] - 2026-11-02
 

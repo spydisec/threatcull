@@ -49,6 +49,17 @@ https://github.com/user-attachments/assets/d78a93ce-2fdb-4fbf-9664-20ed0162c54a
 
 You need Docker with Compose. The image is published for amd64 and arm64.
 
+| Platform | Status |
+| --- | --- |
+| Docker on Linux, amd64 or arm64 (servers, VMs, a Raspberry Pi with a 64-bit OS) | Supported and tested |
+| Docker Desktop on Windows (WSL 2) or macOS | Runs the same Linux image; not tested |
+| 32-bit ARM, such as 32-bit Raspberry Pi OS | Not supported: no image is published |
+| Windows without Docker | Not supported: use Docker Desktop or WSL 2 |
+
+Keep the `threatcull-data` named volume from the compose file, especially on Docker Desktop.
+Don't mount a Windows folder (such as `C:\threatcull`) as `/data`: the SQLite database needs file
+locking that such mounts don't provide reliably, and the database can lock up or corrupt.
+
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/spydisec/threatcull/main/docker-compose.yaml
 ```
@@ -144,6 +155,9 @@ tokens or threat data. **Settings > Configuration** in the web UI does the same.
 copy the `threatcull-data` volume.
 
 ## Run without Docker
+
+This needs Linux or macOS with Python 3.12 or newer and [uv](https://docs.astral.sh/uv/). Windows
+isn't supported without Docker.
 
 ```bash
 git clone https://github.com/spydisec/threatcull.git && cd threatcull
