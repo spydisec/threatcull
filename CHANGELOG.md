@@ -10,7 +10,7 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ### Added
 
-- 🩺 **Catalog health check.** A workflow, started by hand for now, downloads every Catalog Source
+- 🩺 **Catalog health check.** A workflow that runs every Monday downloads every Catalog Source
   and keeps one issue listing Sources that stopped working or stopped changing, so a broken Source
   is caught before it ships. The Catalog request bot now also rejects suggested feeds that serve an
   HTML page.
