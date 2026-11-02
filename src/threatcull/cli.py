@@ -693,6 +693,7 @@ def _config_import(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
         parse_config(data),
         now=utcnow(),
         restore_tokens=args.restore_tokens,
+        restore_api_tokens=args.restore_tokens,
         outputs_dir=args.data_dir / OUTPUTS_DIRNAME,
     )
     for line in [*result.applied, *result.restored, *result.skipped]:

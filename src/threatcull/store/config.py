@@ -51,6 +51,7 @@ from threatcull.store.sources import (
 CONFIG_VERSION = 1
 _TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00")
 MAX_CONFIG_BYTES = 1024 * 1024
+API_TOKEN_RESTORE_COMMAND = "threatcull config import --restore-tokens"  # noqa: S105 (a command)
 FEEDS_EMPTY_NOTE = (
     "Feeds stay empty until the next Compile: click Run now or wait for the schedule."
 )
@@ -265,13 +266,16 @@ def apply_config(
     now: datetime,
     url_check: Callable[[str], str | None] | None = None,
     restore_tokens: bool = False,
+    restore_api_tokens: bool = False,
     outputs_dir: Path | None = None,
 ) -> ImportResult:
     """Merge ``doc`` into the database in one transaction; never deletes anything.
 
     ``url_check`` returns why a custom Source URL is refused (the web UI confines
     ``file://`` URLs to the imports directory); the CLI passes none. ``restore_tokens``
-    adopts the file's Feed Token and API token hashes; without it they are ignored.
+    adopts the file's Feed Token hashes; without it they are ignored. API token hashes
+    are adopted only with ``restore_api_tokens`` as well, which the CLI sets and the web
+    UI never does: a web session must not be able to mint API tokens.
     ``outputs_dir`` is where Outputs are published: when a restore changes an Output's
     definition, its old published file is removed after the import commits, so the feed
     is empty until the next Compile instead of serving the old list.
@@ -290,8 +294,13 @@ def apply_config(
         _apply_sources(conn, doc, result, url_check)
         _apply_lists(conn, doc, result, now)
         stale = _apply_outputs(conn, doc, result, restore_tokens)
-        if restore_tokens:
+        if restore_tokens and restore_api_tokens:
             _apply_api_tokens(conn, doc, result)
+        elif restore_tokens and doc.api_tokens:
+            result.skipped.append(
+                f"skipped API tokens ({len(doc.api_tokens)}): restore them on the command "
+                f"line with `{API_TOKEN_RESTORE_COMMAND}`"
+            )
     if outputs_dir is not None:
         for old in stale:
             output_path(outputs_dir, old).unlink(missing_ok=True)

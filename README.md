@@ -203,9 +203,10 @@ To restore on a fresh install, import the file with `--restore-tokens`:
 docker compose run --rm -T threatcull config import --restore-tokens - < threatcull-config.yaml
 ```
 
-In the web UI, tick **Restore Feed Tokens and API tokens from the file** on Settings and import the
-file. Old feed URLs and API tokens keep working, so your devices keep pulling their feeds. The feeds
-stay empty until the next Compile, so click **Run now**.
+The command restores Feed Tokens and API tokens. In the web UI, tick **Restore Feed Tokens from the
+file** on Settings and import the file: it restores Feed Tokens only, and API tokens need the command
+above. Old feed URLs keep working, so your devices keep pulling their feeds. The feeds stay empty until
+the next Compile, so click **Run now**.
 
 Once everything works, rotate your Feed Tokens on the Outputs page and update each device. Rotating
 retires the hashes stored in the backup file, which matters most if others may have seen the file.

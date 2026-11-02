@@ -49,13 +49,14 @@
     </label>
     <label class="check">
       <input type="checkbox" name="restore_tokens" value="on">
-      Restore Feed Tokens and API tokens from the file
+      Restore Feed Tokens from the file
     </label>
     <button type="submit" class="btn-secondary">Import</button>
   </form>
   <p class="hint">An import adds and updates, never deletes. Values already on your allowlist keep their note.
-    The restore box brings back Feed Tokens and API tokens; tick it only for a file you exported from your own install: with it, the file's
-    tokens work on this install, and a file from someone else would let them read your feeds.</p>
+    The restore box brings back Feed Tokens; tick it only for a file you exported from your own install: with it, the file's
+    feed URLs work on this install, and a file from someone else would let them read your feeds.
+    API tokens are restored only on the command line: <code>threatcull config import --restore-tokens</code>.</p>
   {% if import_result is defined and import_result %}
   <div class="import-result" role="status">
     {% if import_result.new_feed_tokens %}
