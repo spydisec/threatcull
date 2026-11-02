@@ -147,9 +147,10 @@ def restore_backup(data_dir: Path, source: Path, *, now: datetime) -> RestoreRep
     Holds the data-directory lock throughout (``DataDirLocked`` if ``serve`` or ``run``
     holds it). Order: check ``source``, make a safety copy of the live database into
     ``backups/pre-restore-…db`` (skipped when there is none), then swap ``source`` in.
-    If the swap fails, the safety copy is swapped back the same way and ``BackupError``
-    names what went wrong. The live database is never opened through ``connect()``, so
-    nothing migrates it before the swap.
+    The swap stages a checked copy first; a staging failure changes nothing. If the
+    commit (sidecars removed, rename) fails, the safety copy goes back the same way
+    and ``BackupError`` names what went wrong. The live database is never opened
+    through ``connect()``, so nothing migrates it before the swap.
     """
     with data_dir_lock(data_dir):
         schema = check_backup(source)
@@ -169,12 +170,17 @@ def restore_backup(data_dir: Path, source: Path, *, now: datetime) -> RestoreRep
                     f"files out of {data_dir} first"
                 ) from None
         try:
-            _swap_in(data_dir, source)
+            staged = _stage(data_dir, source)
+        except Exception as exc:
+            # The live database and its -wal/-shm are untouched: no put-back.
+            raise BackupError(f"restore failed: {_describe(exc)}; nothing was changed") from exc
+        try:
+            _commit(data_dir, staged)
         except Exception as exc:
             if safety is None:
                 raise BackupError(f"restore failed: {_describe(exc)}") from exc
             try:
-                _swap_in(data_dir, safety)
+                _commit(data_dir, _stage(data_dir, safety))
             except Exception as put_back:
                 raise BackupError(
                     f"restore failed: {_describe(exc)}; putting the safety copy back also "
@@ -187,10 +193,12 @@ def restore_backup(data_dir: Path, source: Path, *, now: datetime) -> RestoreRep
         return RestoreReport(safety_copy=safety, schema=schema)
 
 
-def _swap_in(data_dir: Path, source: Path) -> None:
-    """Copy ``source`` next to the database, drop the sidecars, rename it into place."""
+def _stage(data_dir: Path, source: Path) -> Path:
+    """Copy ``source`` to a checked, fsynced temp file next to the database; return it.
+
+    Touches nothing but the temp file, which it removes on failure.
+    """
     tmp = data_dir / RESTORE_TMP_NAME
-    db_path = data_dir / DB_NAME
     try:
         tmp.unlink(missing_ok=True)  # a crashed restore's leftover; the lock makes it ours
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, FILE_MODE)
@@ -199,12 +207,21 @@ def _swap_in(data_dir: Path, source: Path) -> None:
             out.flush()
             os.fsync(out.fileno())
         check_backup(tmp)  # what lands is what was checked, even if the source changed
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return tmp
+
+
+def _commit(data_dir: Path, staged: Path) -> None:
+    """Drop the database's -wal/-shm and rename ``staged`` over it; the point of no return."""
+    try:
         for name in SIDECARS:
             (data_dir / name).unlink(missing_ok=True)
-        tmp.replace(db_path)
+        staged.replace(data_dir / DB_NAME)
         sync_directory(data_dir)
     finally:
-        tmp.unlink(missing_ok=True)
+        staged.unlink(missing_ok=True)
 
 
 def _online_copy(db_path: Path, dest: Path) -> None:
