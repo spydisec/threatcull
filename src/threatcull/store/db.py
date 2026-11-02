@@ -200,10 +200,35 @@ def connect(path: Path | str) -> sqlite3.Connection:
 
 
 def migrate(conn: sqlite3.Connection) -> None:
-    current: int = conn.execute("PRAGMA user_version").fetchone()[0]
+    """Bring the schema to SCHEMA_VERSION, one migration per transaction.
+
+    Each migration takes the write lock first (``BEGIN IMMEDIATE``) and reads
+    ``user_version`` inside it, so a second process starting at the same moment
+    (the server and a ``docker compose run`` CLI command after an upgrade) waits,
+    then finds the migration done instead of running it again. The statements run
+    one by one: ``executescript`` would commit the open transaction first.
+    """
     for version, script in enumerate(_MIGRATIONS, start=1):
-        if version > current:
-            conn.executescript(f"BEGIN;\n{script}\nCOMMIT;")
+        if conn.execute("PRAGMA user_version").fetchone()[0] >= version:
+            continue  # cheap check without the lock; repeated under it below
+        with transaction(conn):
+            if conn.execute("PRAGMA user_version").fetchone()[0] >= version:
+                continue
+            for statement in _statements(script):
+                conn.execute(statement)
+
+
+def _statements(script: str) -> Iterator[str]:
+    """Split a migration script into complete SQL statements."""
+    pending = ""
+    for line in script.splitlines(keepends=True):
+        pending += line
+        if sqlite3.complete_statement(pending):
+            if pending.strip():
+                yield pending
+            pending = ""
+    if pending.strip():
+        raise ValueError(f"incomplete SQL statement in a migration: {pending.strip()[:60]!r}")
 
 
 @contextmanager

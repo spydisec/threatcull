@@ -23,6 +23,10 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   New volumes now start as 0700. A volume created before this release keeps 0755: run
   `docker compose run --rm --entrypoint python threatcull -c "import os; os.chmod('/data', 0o700)"`
   once to tighten it.
+- 🔧 **Outputs and upgrades survive a power cut and a second process.** A Compile now writes each
+  Output to disk before it replaces the published file, so a power cut leaves the previous Output or
+  the new one, never an empty file. It records the new Output counts together in one transaction.
+  Starting a CLI command while the server upgrades the database no longer runs a migration twice.
 
 ### Removed
 
