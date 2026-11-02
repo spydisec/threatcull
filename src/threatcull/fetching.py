@@ -97,7 +97,7 @@ def content_digest(source: Source, result: FetchResult) -> str:
     return digest.hexdigest()
 
 
-def _text_of(result: FetchResult) -> str | TextIO:
+def text_of(result: FetchResult) -> str | TextIO:
     """The download as text: the string, or a decoding stream over the spooled file."""
     if result.body is None:
         return result.text
@@ -159,7 +159,7 @@ def fetch_source(
         if error is None:
             candidates = parse(
                 source.format,
-                _text_of(result),
+                text_of(result),
                 csv_column=source.csv_column,
                 json_keys=source.json_keys,
             )
@@ -225,6 +225,11 @@ def fetch_all(
     else:
         sources = list_sources(conn, enabled_only=True)
     return [fetch_source(conn, source, fetcher, now=now) for source in sources]
+
+
+def starts_with_markup(result: FetchResult) -> bool:
+    """True if the download opens with ``<``: an HTML page in any format (no list starts so)."""
+    return _HTML_START.match(_head(result)) is not None
 
 
 def looks_like_html(fmt: SourceFormat, result: FetchResult) -> bool:

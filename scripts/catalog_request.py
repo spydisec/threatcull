@@ -148,27 +148,39 @@ def entry_yaml(entry: CatalogEntry) -> str:
     return "".join(f"  {line}" if line.strip() else line for line in text.splitlines(True))
 
 
+def _probe_problem(request: Request, probe: FeedProbe) -> str:
+    """The submitter-facing wording for ``probe.problem`` (which decides what is wrong)."""
+    kind, detail = probe.problem or ("empty", "")
+    if kind == "download":
+        return f"The feed could not be downloaded: `{_code(detail)}`."
+    if kind == "parse":
+        fmt = request.feed.format.upper() if request.feed else "the chosen Format"
+        return (
+            f"The feed downloaded but could not be read as {fmt}: `{_code(detail)}`. "
+            "Check the Format field and that the URL serves the raw list."
+        )
+    if kind == "html":
+        return (
+            "The feed returned an HTML page, not a list. "
+            "Check the URL points at the raw list, not a web page about it."
+        )
+    return (
+        f"The feed has no usable entries ({probe.rejected} lines rejected). "
+        "Check the URL points at the raw list and the Format and Contains fields."
+    )
+
+
 def report(request: Request, probe: FeedProbe | None) -> Report:
     lines = [MARKER, "### Catalog check", ""]
     problems = list(request.problems)
     if probe is not None:
-        if probe.error:
-            problems.append(f"The feed could not be downloaded: `{_code(probe.error)}`.")
-        elif probe.html:
-            problems.append(
-                "The feed returned an HTML page, not a list. "
-                "Check the URL points at the raw list, not a web page about it."
-            )
-        elif probe.valid == 0:
-            problems.append(
-                f"The feed has no usable entries ({probe.rejected} lines rejected). "
-                "Check the URL points at the raw list and the Format and Contains fields."
-            )
-        else:
+        if probe.problem is None:
             lines.append(
                 f"- ✅ Feed downloaded: **{probe.valid} entries ThreatCull would keep**, "
                 f"{probe.rejected} lines rejected (comments, private or invalid values)."
             )
+        else:
+            problems.append(_probe_problem(request, probe))
     lines += [f"- ❌ {problem}" for problem in problems]
     lines += [f"- 💡 {note}" for note in dict.fromkeys(request.notes)]
     valid = not problems and request.entry is not None
