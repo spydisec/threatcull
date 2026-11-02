@@ -12,7 +12,7 @@ import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Literal, overload
 
 from threatcull.clock import ts
 from threatcull.indicators import IndicatorKind, SourceKind
@@ -32,6 +32,8 @@ OUTPUT_INDICATOR_KINDS: dict[str, tuple[IndicatorKind, ...]] = {
 # (e.g. the web layer's /o/{name} route, before it ever touches the
 # database) can reuse this exact pattern instead of duplicating it.
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+# A stored Feed Token hash: lowercase hex SHA-256.
+TOKEN_HASH = re.compile(r"[0-9a-f]{64}")
 _IP_CATEGORIES = frozenset({"malicious", "c2", "scanner"})
 
 
@@ -80,9 +82,7 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def create_output(conn: sqlite3.Connection, spec: OutputSpec) -> str:
-    """Store ``spec`` and return its new Feed Token (only its hash is kept)."""
-    token = secrets.token_urlsafe(24)
+def _insert_output(conn: sqlite3.Connection, spec: OutputSpec, token_hash: str) -> None:
     conn.execute(
         """
         INSERT INTO outputs (name, kind, categories, min_tier, max_entries, format, feed_token_hash)
@@ -95,16 +95,42 @@ def create_output(conn: sqlite3.Connection, spec: OutputSpec) -> str:
             spec.min_tier,
             spec.max_entries,
             spec.format,
-            _hash(token),
+            token_hash,
         ),
     )
+
+
+def _create_with_new_token(conn: sqlite3.Connection, spec: OutputSpec) -> str:
+    token = secrets.token_urlsafe(24)
+    _insert_output(conn, spec, _hash(token))
     return token
+
+
+@overload
+def create_output(conn: sqlite3.Connection, spec: OutputSpec) -> str: ...
+@overload
+def create_output(
+    conn: sqlite3.Connection, spec: OutputSpec, *, token_hash: str | None
+) -> str | None: ...
+def create_output(
+    conn: sqlite3.Connection, spec: OutputSpec, *, token_hash: str | None = None
+) -> str | None:
+    """Store ``spec``; return its new Feed Token (only its hash is kept).
+
+    With ``token_hash`` the hash is stored as given and no token is returned.
+    """
+    if token_hash is None:
+        return _create_with_new_token(conn, spec)
+    if not TOKEN_HASH.fullmatch(token_hash):
+        raise ValueError("a Feed Token hash must be 64 lowercase hex characters")
+    _insert_output(conn, spec, token_hash)
+    return None
 
 
 def ensure_default_outputs(conn: sqlite3.Connection) -> dict[str, str]:
     existing = {row["name"] for row in conn.execute("SELECT name FROM outputs")}
     return {
-        spec.name: create_output(conn, spec)
+        spec.name: _create_with_new_token(conn, spec)
         for spec in DEFAULT_OUTPUTS
         if spec.name not in existing
     }
@@ -142,6 +168,41 @@ def rotate_token(conn: sqlite3.Connection, name: str) -> str:
     token = secrets.token_urlsafe(24)
     conn.execute("UPDATE outputs SET feed_token_hash = ? WHERE name = ?", (_hash(token), name))
     return token
+
+
+def feed_token_hashes(conn: sqlite3.Connection) -> dict[str, str]:
+    """Output name to stored Feed Token hash."""
+    rows = conn.execute("SELECT name, feed_token_hash FROM outputs ORDER BY name")
+    return {row["name"]: row["feed_token_hash"] for row in rows}
+
+
+def set_feed_token_hash(conn: sqlite3.Connection, name: str, token_hash: str) -> None:
+    if not TOKEN_HASH.fullmatch(token_hash):
+        raise ValueError("a Feed Token hash must be 64 lowercase hex characters")
+    get_output(conn, name)
+    conn.execute("UPDATE outputs SET feed_token_hash = ? WHERE name = ?", (token_hash, name))
+
+
+def update_output(conn: sqlite3.Connection, spec: OutputSpec) -> None:
+    """Replace the definition of the named Output; its Feed Token hash stays.
+
+    The publish fields are cleared: a new definition starts a new baseline, so the old
+    count can't feed the shrink guard for a different list. The caller removes the old
+    published file so the feed doesn't serve it under the new definition.
+    """
+    get_output(conn, spec.name)
+    conn.execute(
+        "UPDATE outputs SET kind = ?, categories = ?, min_tier = ?, max_entries = ?, format = ?, "
+        "last_count = NULL, last_published_at = NULL, last_sources = NULL WHERE name = ?",
+        (
+            spec.kind,
+            json.dumps(sorted(spec.categories)),
+            spec.min_tier,
+            spec.max_entries,
+            spec.format,
+            spec.name,
+        ),
+    )
 
 
 def verify_token(conn: sqlite3.Connection, name: str, token: str) -> bool:

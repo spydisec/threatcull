@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import getpass
 import os
 import sqlite3
@@ -16,6 +17,13 @@ from zoneinfo import ZoneInfoNotFoundError
 import uvicorn
 import yaml
 
+from threatcull.backup import (
+    BackupError,
+    create_backup,
+    default_backup_path,
+    ensure_backups_dir,
+    restore_backup,
+)
 from threatcull.catalog import Category, SourceRole, load_catalog
 from threatcull.catalog_update import (
     DEFAULT_CATALOG_URL,
@@ -26,7 +34,15 @@ from threatcull.catalog_update import (
 )
 from threatcull.clock import TZ_ENV_VAR, display_zone, utcnow
 from threatcull.compiling import compile_outputs, is_frozen
-from threatcull.datadir import DataDirError, ensure_data_dir
+from threatcull.datadir import (
+    LOCK_NAME,
+    OUTPUTS_DIRNAME,
+    DataDirError,
+    DataDirLocked,
+    data_dir_lock,
+    database_lock,
+    ensure_data_dir,
+)
 from threatcull.fetcher import FetchError, HttpFetcher
 from threatcull.fetching import fetch_all
 from threatcull.home_detect import detect_candidates, public_ip_candidate, public_ip_fetcher
@@ -36,8 +52,14 @@ from threatcull.lookup import lookup, output_labels
 from threatcull.parsers import SourceFormat
 from threatcull.store.allowlist import add_entry, import_entries, operator_entries, remove_entry
 from threatcull.store.api_tokens import create_api_token, list_api_tokens, revoke_api_token
-from threatcull.store.config import MAX_CONFIG_BYTES, apply_config, dump_config, parse_config
-from threatcull.store.db import connect
+from threatcull.store.config import (
+    FEEDS_EMPTY_NOTE,
+    MAX_CONFIG_BYTES,
+    apply_config,
+    dump_config,
+    parse_config,
+)
+from threatcull.store.db import SCHEMA_VERSION, connect
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.outputs import ensure_default_outputs, list_outputs, rotate_token
 from threatcull.store.runs import fail_interrupted_runs
@@ -56,6 +78,8 @@ from threatcull.web.security import parse_trusted_proxies
 
 DB_NAME = "threatcull.db"
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED = 0, 1, 2
+# Commands that hold the data-directory lock for their whole run.
+LOCKING_COMMANDS = frozenset({"serve", "run"})
 MINE_HELP = "your own network: never published, and flagged when a Source lists it"
 ADMIN_ENV_VAR = "THREATCULL_ADMIN_PASSWORD"
 ADMIN_FILE_ENV_VAR = "THREATCULL_ADMIN_PASSWORD_FILE"  # a Docker secret; wins over the above
@@ -130,7 +154,27 @@ def build_parser() -> argparse.ArgumentParser:
     _add_api_token_parser(sub)
     _add_config_parser(sub)
     _add_catalog_parser(sub)
+    _add_backup_parser(sub)
     return parser
+
+
+def _add_backup_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    backup = sub.add_parser(
+        "backup", help="Back up or restore the whole database (users, API tokens, history)"
+    )
+    backup_sub = backup.add_subparsers(dest="action", required=True)
+    create = backup_sub.add_parser(
+        "create", help="Write a copy of the database; safe while ThreatCull runs"
+    )
+    create.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        help="file to write (default: <data-dir>/backups/threatcull-<UTC time>.db)",
+    )
+    backup_sub.add_parser(
+        "restore", help="Replace the database with a backup file; stop ThreatCull first"
+    ).add_argument("file", type=Path, help="a file made by `threatcull backup create`")
 
 
 def _add_user_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -173,14 +217,20 @@ def _add_serve_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) 
 
 def _add_config_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     config = sub.add_parser(
-        "config", help="Export or import the configuration as YAML (no passwords or tokens)"
+        "config", help="Export or import the configuration as YAML (no passwords or raw tokens)"
     )
     config_sub = config.add_subparsers(dest="action", required=True)
     export = config_sub.add_parser("export", help="Write the configuration as YAML")
     export.add_argument("-o", "--output", type=Path, help="file to write (default: stdout)")
-    config_sub.add_parser(
+    config_import = config_sub.add_parser(
         "import", help="Merge a YAML configuration file into this install (never deletes)"
-    ).add_argument("file", help="the YAML file, or - to read it from stdin")
+    )
+    config_import.add_argument(
+        "--restore-tokens",
+        action="store_true",
+        help="Also adopt the file's Feed Token and API token hashes (only for your own backups)",
+    )
+    config_import.add_argument("file", help="the YAML file, or - to read it from stdin")
 
 
 def _add_sources_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -253,6 +303,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     except DataDirError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
+    if args.command == "backup":
+        # Before connect(): a restore must not migrate or open the database it replaces.
+        return _backup(args)
+    with contextlib.ExitStack() as stack:
+        try:
+            if args.command in LOCKING_COMMANDS:
+                # Taken before connect() so a locked directory is never migrated or written.
+                stack.enter_context(data_dir_lock(args.data_dir))
+            # Every command below opens the database: hold it shared so a restore waits.
+            stack.enter_context(database_lock(args.data_dir, exclusive=False))
+        except DataDirLocked as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+        except OSError as exc:
+            # e.g. a lock file left behind by root with mode 0600.
+            lock_file = exc.filename or args.data_dir / LOCK_NAME
+            print(f"error: cannot open the lock file {lock_file}: {exc.strerror}", file=sys.stderr)
+            return EXIT_ERROR
+        return _main_locked(args)
+
+
+def _main_locked(args: argparse.Namespace) -> int:
     conn = connect(args.data_dir / DB_NAME)
     try:
         entries = (
@@ -288,6 +360,45 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_ERROR
     finally:
         conn.close()
+
+
+def _backup(args: argparse.Namespace) -> int:
+    try:
+        if args.action == "create":
+            return _backup_create(args)
+        return _backup_restore(args)
+    except (BackupError, DataDirLocked, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+
+def _backup_create(args: argparse.Namespace) -> int:
+    dest = args.output
+    if dest is None:
+        dest = default_backup_path(args.data_dir, now=utcnow())
+        if dest.exists():
+            raise BackupError(f"{dest} already exists; choose another name with --output")
+        if (args.data_dir / DB_NAME).is_file():
+            ensure_backups_dir(args.data_dir)
+    with database_lock(args.data_dir, exclusive=False):  # never copy mid-restore
+        print(create_backup(args.data_dir / DB_NAME, dest))
+    return EXIT_OK
+
+
+def _backup_restore(args: argparse.Namespace) -> int:
+    report = restore_backup(args.data_dir, args.file, now=utcnow())
+    if report.safety_copy is None:
+        print(f"No database in {args.data_dir} before the restore: no safety copy needed.")
+    else:
+        print(f"Safety copy of the previous database: {report.safety_copy}")
+    note = (
+        f" ThreatCull upgrades it to schema {SCHEMA_VERSION} when it next starts."
+        if report.schema < SCHEMA_VERSION
+        else ""
+    )
+    print(f"Restored {args.file} (schema {report.schema}).{note}")
+    print(f"{FEEDS_EMPTY_NOTE} The Output files on disk are from before the restore until then.")
+    return EXIT_OK
 
 
 def _print_token(name: str, token: str) -> None:
@@ -577,13 +688,22 @@ def _config_import(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     else:
         with Path(args.file).open("rb") as handle:
             data = handle.read(MAX_CONFIG_BYTES + 1)
-    result = apply_config(conn, parse_config(data), now=utcnow())
-    for line in [*result.applied, *result.skipped]:
+    result = apply_config(
+        conn,
+        parse_config(data),
+        now=utcnow(),
+        restore_tokens=args.restore_tokens,
+        restore_api_tokens=args.restore_tokens,
+        outputs_dir=args.data_dir / OUTPUTS_DIRNAME,
+    )
+    for line in [*result.applied, *result.restored, *result.skipped]:
         print(line)
     for name, token in result.new_feed_tokens.items():
         print(f"new Feed Token for {name} (shown once): {token}")
-    if not result.applied and not result.skipped:
+    if not result.applied and not result.restored and not result.skipped:
         print("nothing to change: this install already matches the file")
+    if args.restore_tokens:
+        print(FEEDS_EMPTY_NOTE)
     return EXIT_OK
 
 

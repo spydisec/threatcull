@@ -31,7 +31,7 @@ from threatcull.store.allowlist import (
     remove_entry,
     set_mine,
 )
-from threatcull.store.config import apply_config, dump_config, parse_config
+from threatcull.store.config import FEEDS_EMPTY_NOTE, apply_config, dump_config, parse_config
 from threatcull.store.db import transaction
 from threatcull.store.errors import NotFoundError
 from threatcull.store.outputs import OutputSpec, create_output, list_outputs, rotate_token
@@ -803,6 +803,7 @@ def import_settings(
     conn: Annotated[sqlite3.Connection, Depends(get_conn)],
     user: Annotated[str, Depends(require_user)],
     file: Annotated[UploadFile | None, File()] = None,
+    restore_tokens: Annotated[bool, Form()] = False,
 ) -> Response:
     data_dir = request.app.state.data_dir
     try:
@@ -811,9 +812,17 @@ def import_settings(
             parse_config(_read_upload(file)),
             now=utcnow(),
             url_check=lambda url: web_file_url_error(url, data_dir),
+            restore_tokens=restore_tokens,
+            outputs_dir=data_dir / "outputs",
         )
     except ValueError as exc:  # ConfigError, or no file chosen
         context = _settings_context(request, conn, import_error=str(exc))
         return render(request, "settings.html", context, status_code=400)
     _notify_sources_changed(request)
-    return render(request, "settings.html", _settings_context(request, conn, import_result=result))
+    context = _settings_context(
+        request,
+        conn,
+        import_result=result,
+        feeds_empty_note=FEEDS_EMPTY_NOTE if restore_tokens else "",
+    )
+    return render(request, "settings.html", context)

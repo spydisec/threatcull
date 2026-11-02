@@ -12,6 +12,10 @@ Self-hosted threat-feed compiler. ThreatCull downloads public blocklists, drops 
 ranges and your own infrastructure, scores each indicator by how many independent sources list it, and
 serves the result to your firewalls, DNS servers and SIEM.
 
+It's for anyone who runs a firewall, DNS filter or SIEM and wants one curated blocklist instead of many
+raw ones. ThreatCull ships no threat data and doesn't block traffic itself: your devices fetch its
+lists.
+
 ```text
 sources ──> drop duplicates, private ranges, your allowlist ──> score by source agreement ──> feed URLs
 ```
@@ -23,6 +27,8 @@ sources ──> drop duplicates, private ranges, your allowlist ──> score by
 - Outputs as plain, hosts, AdGuard, RPZ, CSV or JSON, each at its own URL with a Feed Token
 - Web UI with a dashboard, lookup, run history and a built-in scheduler
 - Works offline and on a bare LAN IP
+
+A short tour of the web UI:
 
 https://github.com/user-attachments/assets/d78a93ce-2fdb-4fbf-9664-20ed0162c54a
 
@@ -47,7 +53,8 @@ https://github.com/user-attachments/assets/d78a93ce-2fdb-4fbf-9664-20ed0162c54a
 
 ## Quick start
 
-You need Docker with Compose. The image is published for amd64 and arm64.
+You need Docker with Compose. The image is published for amd64 and arm64. ThreatCull runs on these
+platforms:
 
 | Platform | Status |
 | --- | --- |
@@ -60,26 +67,54 @@ Keep the `threatcull-data` named volume from the compose file, especially on Doc
 Don't mount a Windows folder (such as `C:\threatcull`) as `/data`: the SQLite database needs file
 locking that such mounts don't provide reliably, and the database can lock up or corrupt.
 
+To start ThreatCull:
+
+1. Download the compose file:
+
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/spydisec/threatcull/main/docker-compose.yaml
+   ```
+
+2. Set `THREATCULL_ADMIN_PASSWORD` in `docker-compose.yaml` (12 or more characters).
+3. Start the container:
+
+   ```bash
+   docker compose up -d
+   ```
+
+4. Open `http://<server-ip>:6969` and log in as `admin`.
+
+ThreatCull reads the password on the first start only; you can clear it from the file afterwards.
+Data lives on the `threatcull-data` volume.
+
+**Portainer:** go to **Stacks > Add stack**, paste `docker-compose.yaml`, set the password, then click
+**Deploy**.
+
+### Air-gapped install
+
+On a machine with internet access, pull and save the image:
+
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/spydisec/threatcull/main/docker-compose.yaml
+docker pull ghcr.io/spydisec/threatcull:2
+docker save ghcr.io/spydisec/threatcull:2 -o threatcull.tar
 ```
 
-Set `THREATCULL_ADMIN_PASSWORD` in `docker-compose.yaml` (12 or more characters), then:
+Copy `threatcull.tar` and `docker-compose.yaml` to the air-gapped machine, then load the image there:
 
 ```bash
-docker compose up -d
+docker load -i threatcull.tar
 ```
 
-Open `http://<server-ip>:6969` and log in as `admin`. ThreatCull reads the password on the first
-start only; you can clear it from the file afterwards. Data lives on the `threatcull-data` volume.
-
-**Portainer:** Stacks > Add stack, paste `docker-compose.yaml`, set the password, Deploy.
+Start it with `docker compose up -d` as usual. Add
+Sources as `file://` URLs for files in `/data/imports/`, and update the Catalog by uploading the
+file. The web UI loads nothing from the internet.
 
 ## First steps
 
 1. On **Sources**, enable the lists you want.
 2. On **Outputs**, rotate a Feed Token to get the feed URL. Tokens show once.
-3. Click **Run now**, or wait for the hourly schedule.
+3. Click **Run now**, or wait for the schedule: each Source refreshes on its own interval, and the
+   Outputs update every hour.
 4. Point your firewall or DNS server at the feed URL:
 
 ```bash
@@ -132,6 +167,8 @@ VPS):
 
 ## Upgrade
 
+To upgrade, pull the new image and restart:
+
 ```bash
 docker compose pull && docker compose up -d
 ```
@@ -145,19 +182,91 @@ internet access, upload a newer `catalog.yaml` there, or run `threatcull catalog
 
 ## Back up and restore
 
+ThreatCull has two backups. Keep ThreatCull's address stable (a DHCP reservation or a local DNS
+name), because feed URLs contain it.
+
+### Configuration backup (recommended)
+
+Export the configuration to a file:
+
 ```bash
 docker compose run --rm -T threatcull config export > threatcull-config.yaml
-docker compose run --rm -T threatcull config import - < threatcull-config.yaml
 ```
 
-The file holds settings, source choices, the allowlist and outputs. It holds no passwords,
-tokens or threat data. **Settings > Configuration** in the web UI does the same. For a full backup,
-copy the `threatcull-data` volume.
+**Settings > Configuration > Export** in the web UI does the same. The file holds settings, Source
+choices, custom Sources, the allowlist (including My network), Outputs, and the hashes of your Feed
+Tokens and API tokens. It never holds passwords, raw tokens or threat data.
+
+To restore on a fresh install, import the file with `--restore-tokens`:
+
+```bash
+docker compose run --rm -T threatcull config import --restore-tokens - < threatcull-config.yaml
+```
+
+The command restores Feed Tokens and API tokens. In the web UI, tick **Restore Feed Tokens from the
+file** on Settings and import the file: it restores Feed Tokens only, and API tokens need the command
+above. Old feed URLs keep working, so your devices keep pulling their feeds. The feeds stay empty until
+the next Compile, so click **Run now**.
+
+Once everything works, rotate your Feed Tokens on the Outputs page and update each device. Rotating
+retires the hashes stored in the backup file, which matters most if others may have seen the file.
+
+Without the option, an import never adopts the hashes in the file, so importing a file someone else
+shared gives them no access. If API tokens belonged to users other than `admin`, create those users
+before you import.
+
+### Full database backup (optional)
+
+This copies the whole database. It works while ThreatCull runs:
+
+```bash
+docker compose run --rm threatcull backup create
+```
+
+The command prints the file's path, for example `/data/backups/threatcull-20261102T092437Z.db`.
+Copy the file off the host into the current folder:
+
+```bash
+docker compose cp threatcull:/data/backups/threatcull-20261102T092437Z.db .
+```
+
+To restore on the same host, stop ThreatCull, restore the file, then start it again:
+
+```bash
+docker compose stop
+docker compose run --rm threatcull backup restore /data/backups/threatcull-20261102T092437Z.db
+docker compose start
+```
+
+To restore on a new host, put the backup file next to `docker-compose.yaml`, make it readable by the
+image's user, and mount it into a one-off container. Run this before you first start ThreatCull, or
+after `docker compose stop`:
+
+```bash
+chmod 644 threatcull-20261102T092437Z.db
+docker compose run --rm -v "$PWD/threatcull-20261102T092437Z.db:/restore.db:ro" threatcull backup restore /restore.db
+docker compose up -d
+```
+
+The backup file is private (mode 0600) and the image's user can't read it otherwise. Restore copies
+it into the volume, so delete your copy or set it back with `chmod 600` afterwards.
+
+Restore refuses to run while ThreatCull runs. It checks the file first and refuses a backup from a
+newer ThreatCull. It keeps a safety copy of the current database as `/data/backups/pre-restore-…db`.
+Because the ThreatCull container must be stopped, `docker exec` into it can't work. Use
+`docker compose run --rm`, which starts a one-off container as the image's own user.
+
+### What neither backup holds
+
+Some things live outside the database and are in neither backup. Get the Catalog update again with
+**Check for updates** on the Sources page, or upload the Catalog file if you are offline. Copy the
+data directory's `imports/` folder across by hand. The session secret isn't backed up either, so
+everyone logs in again after a restore on a new host.
 
 ## Run without Docker
 
 This needs Linux or macOS with Python 3.12 or newer and [uv](https://docs.astral.sh/uv/). Windows
-isn't supported without Docker.
+isn't supported without Docker. To install and start it:
 
 ```bash
 git clone https://github.com/spydisec/threatcull.git && cd threatcull
@@ -172,7 +281,7 @@ uv run threatcull serve --host <lan-ip> --port 6969
 ## Notes
 
 - **Offline networks:** add a custom source with a `file://` URL. Sources added in the web UI must
-  point to files in `data/imports/`.
+  point to files in the data directory's `imports/` folder (`/data/imports/` in Docker).
 - **Ranges:** outputs list single IP addresses and domains. A source that lists a CIDR range counts on
   the dashboard as "Ranges left out", because one range can block many unrelated hosts. Ranges on
   the allowlist still cover every address inside them.
@@ -190,8 +299,8 @@ uv run threatcull serve --host <lan-ip> --port 6969
   capabilities and blocks privilege escalation. It also works with `read_only: true` and
   `tmpfs: [/tmp]`: SQLite writes its temporary files to `/data`, so they don't use RAM.
 - **Reverse proxy with TLS:** start `serve` with `--secure-cookies` and `--trusted-proxy <proxy-ip>`.
-- **Scheduling:** `serve` runs fetches and compiles itself. Don't also run `threatcull run` from `cron`
-  on the same data directory.
+- **Scheduling:** `serve` runs fetches and compiles itself. `threatcull run` refuses to start while
+  `serve` runs on the same data directory, so don't schedule it from `cron` as well.
 
 ## Sources
 
@@ -200,6 +309,8 @@ you decide which sources to use. The Sources page links each one to its feed, so
 publishes it and follow their terms.
 
 ## Development
+
+To set up a development checkout and run the checks:
 
 ```bash
 make setup   # dependencies and git hooks
