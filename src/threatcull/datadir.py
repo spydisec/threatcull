@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import logging
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -54,6 +57,37 @@ def ensure_data_dir(path: Path) -> None:
             path,
             mode & 0o777,
         )
+
+
+LOCK_NAME = "threatcull.lock"
+
+
+class DataDirLocked(Exception):  # noqa: N818 (name fixed by the restore interface)
+    """Another ThreatCull process (serve or run) holds the data directory."""
+
+
+@contextlib.contextmanager
+def _locked(path: Path) -> Iterator[None]:
+    fd = os.open(path / LOCK_NAME, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise DataDirLocked(f"ThreatCull is running on {path}: stop it first") from None
+        yield
+    finally:
+        os.close(fd)  # closing the descriptor drops the flock
+
+
+def data_dir_lock(path: Path) -> contextlib.AbstractContextManager[None]:
+    """Hold an exclusive lock on the data directory for the ``with`` block.
+
+    ``serve`` and ``run`` take it so that a restore (or a second server) cannot touch the
+    database underneath them. The lock file stays after release; only the flock matters, and
+    the kernel drops it when the process dies. Raises ``DataDirLocked`` if another process
+    holds it. POSIX only.
+    """
+    return _locked(path)
 
 
 DATABASE_FILES = ("threatcull.db", "threatcull.db-wal", "threatcull.db-shm")
