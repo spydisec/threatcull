@@ -8,27 +8,39 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-11-02
+
+Backups that bring an install back with the same feed URLs, and an optional full database backup.
+After upgrading, export your configuration so your backup has the new fields. If a `cron` job runs
+`threatcull run` next to `serve`, remove it: `serve` runs its own schedule, and `run` now refuses to
+start beside it.
+
 ### Added
 
-- 💾 **Configuration and full backups.** `config import --restore-tokens` brings back Feed Token
-  and API token hashes, so old feed URLs and API tokens keep working on a fresh install. The
-  **Restore Feed Tokens from the file** box on Settings restores Feed Tokens only.
-  `threatcull backup create` copies the database while ThreatCull runs, and
-  `threatcull backup restore` replaces it with a checked backup file. Export your configuration after you upgrade, and see the README's "Back up
-  and restore" for the steps. A configuration file exported by this version needs this version or
-  newer to import, because older versions reject the new fields.
+- 💾 **Configuration and full backups.** The configuration export now carries Feed Token and API
+  token hashes (still no passwords or raw tokens). `threatcull config import --restore-tokens`
+  brings them back, so old feed URLs and API tokens keep working on a fresh install. The
+  **Restore Feed Tokens from the file** box on Settings restores Feed Tokens only; API tokens are
+  restored from the command line. `threatcull backup create` copies the whole database while
+  ThreatCull runs, and `threatcull backup restore` replaces it with a checked backup file while
+  ThreatCull is stopped, keeping a safety copy. See the README's "Back up and restore". A
+  configuration file exported by this version needs this version or newer to import, because older
+  versions reject the new fields.
 
 ### Changed
 
 - 🔒 **One ThreatCull per data directory.** `serve` and `run` now hold a lock on the data directory.
   A second `serve`, or `threatcull run` while `serve` runs (for example from `cron`), stops with
-  "ThreatCull is running on …: stop it first".
+  "ThreatCull is running on …: stop it first". Commands also refuse to open the database while a
+  `backup restore` is running.
 
 ### Documentation
 
-- 📝 **Safer full backups.** The README said to copy the `threatcull-data` volume for a full backup.
-  Copying it while ThreatCull runs can give a corrupt database, so stop the container first. The
-  Quick start is also numbered steps now, and the README says who ThreatCull is for.
+- 📝 **Safer full backups.** The README told you to copy the `threatcull-data` volume for a full
+  backup, which can give a corrupt database while ThreatCull runs. It now uses
+  `threatcull backup create` and shows how to restore on a new host. The Quick start is numbered
+  steps, the README says who ThreatCull is for, and an Air-gapped install section covers offline
+  hosts.
 
 ## [2.6.0] - 2026-11-02
 
