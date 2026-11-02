@@ -36,7 +36,13 @@ from threatcull.lookup import lookup, output_labels
 from threatcull.parsers import SourceFormat
 from threatcull.store.allowlist import add_entry, import_entries, operator_entries, remove_entry
 from threatcull.store.api_tokens import create_api_token, list_api_tokens, revoke_api_token
-from threatcull.store.config import MAX_CONFIG_BYTES, apply_config, dump_config, parse_config
+from threatcull.store.config import (
+    FEEDS_EMPTY_NOTE,
+    MAX_CONFIG_BYTES,
+    apply_config,
+    dump_config,
+    parse_config,
+)
 from threatcull.store.db import connect
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.outputs import ensure_default_outputs, list_outputs, rotate_token
@@ -173,14 +179,20 @@ def _add_serve_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) 
 
 def _add_config_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     config = sub.add_parser(
-        "config", help="Export or import the configuration as YAML (no passwords or tokens)"
+        "config", help="Export or import the configuration as YAML (no passwords or raw tokens)"
     )
     config_sub = config.add_subparsers(dest="action", required=True)
     export = config_sub.add_parser("export", help="Write the configuration as YAML")
     export.add_argument("-o", "--output", type=Path, help="file to write (default: stdout)")
-    config_sub.add_parser(
+    config_import = config_sub.add_parser(
         "import", help="Merge a YAML configuration file into this install (never deletes)"
-    ).add_argument("file", help="the YAML file, or - to read it from stdin")
+    )
+    config_import.add_argument(
+        "--restore-tokens",
+        action="store_true",
+        help="Also adopt the file's Feed Token and API token hashes (only for your own backups)",
+    )
+    config_import.add_argument("file", help="the YAML file, or - to read it from stdin")
 
 
 def _add_sources_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -577,13 +589,17 @@ def _config_import(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
     else:
         with Path(args.file).open("rb") as handle:
             data = handle.read(MAX_CONFIG_BYTES + 1)
-    result = apply_config(conn, parse_config(data), now=utcnow())
-    for line in [*result.applied, *result.skipped]:
+    result = apply_config(
+        conn, parse_config(data), now=utcnow(), restore_tokens=args.restore_tokens
+    )
+    for line in [*result.applied, *result.restored, *result.skipped]:
         print(line)
     for name, token in result.new_feed_tokens.items():
         print(f"new Feed Token for {name} (shown once): {token}")
-    if not result.applied and not result.skipped:
+    if not result.applied and not result.restored and not result.skipped:
         print("nothing to change: this install already matches the file")
+    if args.restore_tokens:
+        print(FEEDS_EMPTY_NOTE)
     return EXIT_OK
 
 
