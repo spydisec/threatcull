@@ -28,13 +28,13 @@ How the maintainer builds and changes ThreatCull:
 1. Open an issue first for anything bigger than a small fix, so the approach is agreed.
 2. Branch from `dev` and open the pull request against `dev`. `main` holds releases.
 3. Run `make setup` once, then `make check` before you push. CI runs ruff (with its bandit
-   rules), mypy strict, semgrep, CodeQL, pip-audit, gitleaks, Vale and the Docker build with a
-   smoke test. To build the image yourself, run `docker login dhi.io` with a free Docker account
+   rules), mypy strict, the test suite, semgrep, CodeQL, pip-audit, gitleaks, Vale and the Docker
+   build with a smoke test. Each job runs only when the pull request changes files it checks. To build the image yourself, run `docker login dhi.io` with a free Docker account
    first (the base is a Docker Hardened Image), or build on the standard image instead:
    `docker build --build-arg PYTHON_BUILD_IMAGE=python:3.15-slim --build-arg
    PYTHON_RUNTIME_IMAGE=python:3.15-slim .`
-4. The test suite is kept outside the repository and runs on the machine of the maintainer
-   before each merge. Describe how you checked your change in the pull request.
+4. Add or change tests in `tests/` with the code. `make test` runs the offline suite; tests
+   marked `network` reach real upstream URLs and run only with `uv run pytest -m network`.
 5. Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for anything a user
    would notice: an emoji, a bold one-line summary, then what changed and what to do about it.
 6. Use [Conventional Commits](https://www.conventionalcommits.org/) with a subject of 72

@@ -1,9 +1,12 @@
 name: Lint
 
+# Pull requests, and pushes to dev (a merge can combine two pull requests that each
+# passed alone). main only receives dev through a release pull request, which runs
+# these checks first.
 on:
   pull_request:
   push:
-    branches: [main, dev]
+    branches: [dev]
 
 permissions:
   contents: read
@@ -42,7 +45,7 @@ jobs:
         run: uv run ruff check .
       - name: mypy (strict)
         if: ${{ needs.changes.result != 'success' || needs.changes.outputs.python == 'true' }}
-        run: uv run mypy src scripts # tests/ is local only
+        run: uv run mypy # src, scripts and tests (pyproject.toml)
       - name: docs/CATALOG.md matches catalog.yaml
         if: ${{ needs.changes.result != 'success' || needs.changes.outputs.python == 'true' || needs.changes.outputs.prose == 'true' }}
         run: uv run python scripts/catalog_docs.py --check
@@ -51,6 +54,44 @@ jobs:
         run: |
           uvx vale sync
           uvx vale README.md SECURITY.md CONTRIBUTING.md CHANGELOG.md docs/CATALOG.md .github
+
+  # The offline suite (network tests stay deselected) on the oldest supported Python and
+  # on the one the image ships.
+  pytest:
+    needs: changes
+    # Runs when the change can affect it, and always if the changes check failed.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.python == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.15"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - run: uv sync --frozen
+      - name: pytest (parallel, with coverage)
+        run: uv run pytest -n auto --cov
+
+  # One stable check name for the branch ruleset: passes when every pytest job passed
+  # or all of them were skipped because the change cannot affect them.
+  test:
+    needs: pytest
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULT: ${{ needs.pytest.result }}
+        run: |
+          echo "pytest: $RESULT"
+          [ "$RESULT" = "success" ] || [ "$RESULT" = "skipped" ]
 
   islands:
     needs: changes
