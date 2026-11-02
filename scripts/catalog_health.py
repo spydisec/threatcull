@@ -6,8 +6,10 @@
 
 Each Source is downloaded once with ThreatCull's own fetcher and parser. A Source is
 dead after FAILURES_TO_REPORT failing runs in a row (download error, HTML page or no
-valid entries), and a blocklist is frozen when its entry set has not changed for
-FROZEN_AFTER_DAYS. The state between runs lives in STATE.json.
+valid entries), counting at most one failure per FAILURE_SPACING_DAYS so a re-run or an
+extra manual run in the same week does not count twice. A blocklist is frozen when its
+entry set has not changed for FROZEN_AFTER_DAYS. The state between runs lives in
+STATE.json.
 """
 
 from __future__ import annotations
@@ -28,6 +30,9 @@ from threatcull.feedcheck import FeedProbe, probe_feed
 from threatcull.fetcher import USER_AGENT, Fetcher, HttpFetcher
 
 FAILURES_TO_REPORT = 2
+# A failure counts only this many days after the last counted one: a weekly schedule
+# counts every run, a re-run or an extra manual run in the same week does not.
+FAILURE_SPACING_DAYS = 6
 FROZEN_AFTER_DAYS = 30
 _DETAIL_MAX = 120
 
@@ -41,6 +46,7 @@ class Record:
     failures: int = 0
     failing_since: str | None = None
     last_error: str | None = None
+    last_failure_counted: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,14 +74,19 @@ def _next(previous: Record | None, probe: FeedProbe, today: str) -> Record:
     prev = previous or Record()
     error = _failure(probe)
     if error is not None:
+        counted = prev.last_failure_counted
+        counts = counted is None or date.fromisoformat(today) >= date.fromisoformat(
+            counted
+        ) + timedelta(days=FAILURE_SPACING_DAYS)
         return Record(
             set_sha256=prev.set_sha256,
             valid=prev.valid,
             last_changed=prev.last_changed,
             last_ok=prev.last_ok,
-            failures=prev.failures + 1,
+            failures=prev.failures + 1 if counts else prev.failures,
             failing_since=prev.failing_since if prev.failures else today,
             last_error=error,
+            last_failure_counted=today if counts else counted,
         )
     changed = previous is None or prev.set_sha256 != probe.set_sha256 or not prev.last_changed
     return Record(
@@ -96,9 +107,10 @@ def _problem(entry: CatalogEntry, record: Record, today: date) -> Problem | None
             record.failing_since or today.isoformat(),
             record.last_error or "",
         )
+    # Not dead (checked above): a frozen blocklist stays listed through a single failed
+    # run, so the issue doesn't close and reopen when a frozen feed has one bad week.
     if (
         entry.role == "blocklist"
-        and record.failures == 0
         and record.last_changed is not None
         and date.fromisoformat(record.last_changed) <= today - timedelta(days=FROZEN_AFTER_DAYS)
     ):
