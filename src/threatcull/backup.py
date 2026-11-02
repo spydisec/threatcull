@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from threatcull.datadir import DATABASE_FILES, PRIVATE_MODE, data_dir_lock
+from threatcull.datadir import DATABASE_FILES, PRIVATE_MODE, data_dir_lock, database_lock
 from threatcull.outputs.files import sync_directory
 from threatcull.store.db import BUSY_TIMEOUT_S, SCHEMA_VERSION
 
@@ -144,15 +144,16 @@ def check_backup(path: Path) -> int:
 def restore_backup(data_dir: Path, source: Path, *, now: datetime) -> RestoreReport:
     """Replace ``<data-dir>/threatcull.db`` with ``source``; ThreatCull must be stopped.
 
-    Holds the data-directory lock throughout (``DataDirLocked`` if ``serve`` or ``run``
-    holds it). Order: check ``source``, make a safety copy of the live database into
+    Holds the data-directory lock and the database lock exclusively throughout
+    (``DataDirLocked`` if ``serve``, ``run`` or any command using the database holds
+    one). Order: check ``source``, make a safety copy of the live database into
     ``backups/pre-restore-…db`` (skipped when there is none), then swap ``source`` in.
     The swap stages a checked copy first; a staging failure changes nothing. If the
     commit (sidecars removed, rename) fails, the safety copy goes back the same way
     and ``BackupError`` names what went wrong. The live database is never opened
     through ``connect()``, so nothing migrates it before the swap.
     """
-    with data_dir_lock(data_dir):
+    with data_dir_lock(data_dir), database_lock(data_dir, exclusive=True):
         schema = check_backup(source)
         db_path = data_dir / DB_NAME
         if db_path.exists() and _same_file(source, db_path):

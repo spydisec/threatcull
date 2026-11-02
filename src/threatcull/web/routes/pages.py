@@ -813,6 +813,7 @@ def import_settings(
             now=utcnow(),
             url_check=lambda url: web_file_url_error(url, data_dir),
             restore_tokens=restore_tokens,
+            outputs_dir=data_dir / "outputs",
         )
     except ValueError as exc:  # ConfigError, or no file chosen
         context = _settings_context(request, conn, import_error=str(exc))

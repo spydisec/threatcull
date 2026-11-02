@@ -14,6 +14,7 @@ import sqlite3
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Literal
 
 import yaml
@@ -22,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from threatcull.catalog import LEGACY_FIELDS, Category, SourceRole
 from threatcull.clock import ts
 from threatcull.indicators import SourceKind
+from threatcull.outputs.files import output_path
 from threatcull.parsers import SourceFormat
 from threatcull.policy.scoring import Tier
 from threatcull.store.allowlist import add_entry, normalize_allow_value, operator_entries, set_mine
@@ -263,14 +265,19 @@ def apply_config(
     now: datetime,
     url_check: Callable[[str], str | None] | None = None,
     restore_tokens: bool = False,
+    outputs_dir: Path | None = None,
 ) -> ImportResult:
     """Merge ``doc`` into the database in one transaction; never deletes anything.
 
     ``url_check`` returns why a custom Source URL is refused (the web UI confines
     ``file://`` URLs to the imports directory); the CLI passes none. ``restore_tokens``
     adopts the file's Feed Token and API token hashes; without it they are ignored.
+    ``outputs_dir`` is where Outputs are published: when a restore changes an Output's
+    definition, its old published file is removed after the import commits, so the feed
+    is empty until the next Compile instead of serving the old list.
     """
     result = ImportResult()
+    stale: list[OutputSpec] = []
     with transaction(conn):
         if doc.settings is not None:
             given = doc.settings.model_dump(exclude_none=True)
@@ -282,9 +289,12 @@ def apply_config(
             result.applied.append(f"updated settings: {', '.join(sorted(given)) or 'none'}")
         _apply_sources(conn, doc, result, url_check)
         _apply_lists(conn, doc, result, now)
-        _apply_outputs(conn, doc, result, restore_tokens)
+        stale = _apply_outputs(conn, doc, result, restore_tokens)
         if restore_tokens:
             _apply_api_tokens(conn, doc, result)
+    if outputs_dir is not None:
+        for old in stale:
+            output_path(outputs_dir, old).unlink(missing_ok=True)
     return result
 
 
@@ -373,8 +383,11 @@ def _apply_lists(
 
 def _apply_outputs(
     conn: sqlite3.Connection, doc: ConfigDocument, result: ImportResult, restore_tokens: bool
-) -> None:
+) -> list[OutputSpec]:
+    """Apply the file's Outputs; return the previous definitions a restore replaced."""
     existing = {o.name: o for o in list_outputs(conn)}
+    hashes = feed_token_hashes(conn) if restore_tokens else {}
+    replaced: list[OutputSpec] = []
     seen: set[str] = set()
     for item in doc.outputs:
         if item.name in seen:
@@ -417,11 +430,14 @@ def _apply_outputs(
                 )
             continue
         if _definition(current) != _definition(spec):
-            update_output(conn, spec)
+            update_output(conn, spec)  # also clears its publish baseline
+            replaced.append(current)
             result.applied.append(f"restored Output {spec.name} from the file")
-        if feed_token_hashes(conn)[spec.name] != token_hash:
+        if hashes.get(spec.name) != token_hash:
             set_feed_token_hash(conn, spec.name, token_hash)
+            hashes[spec.name] = token_hash
             result.restored.append(f"restored Feed Token for Output {spec.name}")
+    return replaced
 
 
 def _apply_api_tokens(conn: sqlite3.Connection, doc: ConfigDocument, result: ImportResult) -> None:

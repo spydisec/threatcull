@@ -184,11 +184,16 @@ def set_feed_token_hash(conn: sqlite3.Connection, name: str, token_hash: str) ->
 
 
 def update_output(conn: sqlite3.Connection, spec: OutputSpec) -> None:
-    """Replace the definition of the named Output; its hash and publish fields stay."""
+    """Replace the definition of the named Output; its Feed Token hash stays.
+
+    The publish fields are cleared: a new definition starts a new baseline, so the old
+    count can't feed the shrink guard for a different list. The caller removes the old
+    published file so the feed doesn't serve it under the new definition.
+    """
     get_output(conn, spec.name)
     conn.execute(
-        "UPDATE outputs SET kind = ?, categories = ?, min_tier = ?, max_entries = ?, format = ? "
-        "WHERE name = ?",
+        "UPDATE outputs SET kind = ?, categories = ?, min_tier = ?, max_entries = ?, format = ?, "
+        "last_count = NULL, last_published_at = NULL, last_sources = NULL WHERE name = ?",
         (
             spec.kind,
             json.dumps(sorted(spec.categories)),

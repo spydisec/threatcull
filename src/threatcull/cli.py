@@ -36,9 +36,11 @@ from threatcull.clock import TZ_ENV_VAR, display_zone, utcnow
 from threatcull.compiling import compile_outputs, is_frozen
 from threatcull.datadir import (
     LOCK_NAME,
+    OUTPUTS_DIRNAME,
     DataDirError,
     DataDirLocked,
     data_dir_lock,
+    database_lock,
     ensure_data_dir,
 )
 from threatcull.fetcher import FetchError, HttpFetcher
@@ -309,12 +311,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.command in LOCKING_COMMANDS:
                 # Taken before connect() so a locked directory is never migrated or written.
                 stack.enter_context(data_dir_lock(args.data_dir))
+            # Every command below opens the database: hold it shared so a restore waits.
+            stack.enter_context(database_lock(args.data_dir, exclusive=False))
         except DataDirLocked as exc:
             print(f"error: {exc}", file=sys.stderr)
             return EXIT_ERROR
         except OSError as exc:
             # e.g. a lock file left behind by root with mode 0600.
-            lock_file = args.data_dir / LOCK_NAME
+            lock_file = exc.filename or args.data_dir / LOCK_NAME
             print(f"error: cannot open the lock file {lock_file}: {exc.strerror}", file=sys.stderr)
             return EXIT_ERROR
         return _main_locked(args)
@@ -376,7 +380,8 @@ def _backup_create(args: argparse.Namespace) -> int:
             raise BackupError(f"{dest} already exists; choose another name with --output")
         if (args.data_dir / DB_NAME).is_file():
             ensure_backups_dir(args.data_dir)
-    print(create_backup(args.data_dir / DB_NAME, dest))
+    with database_lock(args.data_dir, exclusive=False):  # never copy mid-restore
+        print(create_backup(args.data_dir / DB_NAME, dest))
     return EXIT_OK
 
 
@@ -684,7 +689,11 @@ def _config_import(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
         with Path(args.file).open("rb") as handle:
             data = handle.read(MAX_CONFIG_BYTES + 1)
     result = apply_config(
-        conn, parse_config(data), now=utcnow(), restore_tokens=args.restore_tokens
+        conn,
+        parse_config(data),
+        now=utcnow(),
+        restore_tokens=args.restore_tokens,
+        outputs_dir=args.data_dir / OUTPUTS_DIRNAME,
     )
     for line in [*result.applied, *result.restored, *result.skipped]:
         print(line)

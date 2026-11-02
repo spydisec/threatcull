@@ -90,6 +90,41 @@ def data_dir_lock(path: Path) -> contextlib.AbstractContextManager[None]:
     return _locked(path)
 
 
+DB_LOCK_NAME = "threatcull.db.lock"
+
+
+@contextlib.contextmanager
+def _db_locked(path: Path, *, exclusive: bool) -> Iterator[None]:
+    fd = os.open(path / DB_LOCK_NAME, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, (fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH) | fcntl.LOCK_NB)
+        except BlockingIOError:
+            if exclusive:
+                raise DataDirLocked(
+                    f"ThreatCull or another threatcull command is using the database in "
+                    f"{path}: stop it first"
+                ) from None
+            raise DataDirLocked(
+                f"a restore is running on {path}: try again when it finishes"
+            ) from None
+        yield
+    finally:
+        os.close(fd)
+
+
+def database_lock(path: Path, *, exclusive: bool) -> contextlib.AbstractContextManager[None]:
+    """Hold the database-access lock for the ``with`` block.
+
+    Every command that opens the database holds it shared, so any number of them can run
+    together; ``backup restore`` holds it exclusive, so it never swaps the file under an
+    open connection, and nothing opens the database mid-swap. Raises ``DataDirLocked``
+    when the other kind is held. Separate from ``data_dir_lock``, which keeps a second
+    ``serve`` or ``run`` out. POSIX only.
+    """
+    return _db_locked(path, exclusive=exclusive)
+
+
 DATABASE_FILES = ("threatcull.db", "threatcull.db-wal", "threatcull.db-shm")
 OUTPUTS_DIRNAME = "outputs"
 
