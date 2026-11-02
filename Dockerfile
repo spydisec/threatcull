@@ -7,17 +7,17 @@
 # and package tools for the build stage; the runtime variant has neither, runs no
 # shell and ships signed SBOMs, provenance and VEX. Pulling needs `docker login dhi.io`
 # (a free Docker account); ThreatCull users pull the finished image from ghcr.io.
-# Building without a Docker account: pass python:3.14-slim for both build arguments;
+# Building without a Docker account: pass python:3.15-slim for both build arguments;
 # BuildKit then skips the dhi-* stages and never contacts dhi.io.
 # The DHI images sit in plain FROM lines, pinned by multi-arch digest, so Dependabot can
 # see and update them (it does not follow FROM ${ARG}).
 ARG PYTHON_BUILD_IMAGE=dhi-build
 ARG PYTHON_RUNTIME_IMAGE=dhi-runtime
 
-FROM dhi.io/python:3.14-dev@sha256:df0b3685c0d843d3d978c74b50f5fb7b55640d1fe24e90cb9ab4c5212307616d AS dhi-build
-FROM dhi.io/python:3.14@sha256:2af3a6573fdecaaeb5c5a8073ced2d511cafa38b4b1205ee8d4ab820b866bd20 AS dhi-runtime
+FROM dhi.io/python:3.15-dev@sha256:74f0261e2bfead93cb7b7c553b198ce2a7b8ddeae8e35264043e1864379976ac AS dhi-build
+FROM dhi.io/python:3.15@sha256:8b0f1de0f2a53209a735cab91d52116938aa38858c24537f454f87bbaa718c5a AS dhi-runtime
 
-FROM ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
 
 FROM ${PYTHON_BUILD_IMAGE} AS build
 COPY --link --from=uv /uv /usr/local/bin/uv
@@ -45,8 +45,10 @@ LABEL org.opencontainers.image.title="ThreatCull" \
       org.opencontainers.image.version="${VERSION}"
 # uid 10001, as in 1.x and 2.0 images, so existing /data volumes stay writable. The
 # hardened image's own non-root user is 65532; any numeric uid works without an
-# /etc/passwd entry.
-COPY --link --from=build --chown=10001:10001 /rootfs/data /data
+# /etc/passwd entry. Copy /rootfs/, not /rootfs/data: COPY of a directory copies its
+# contents and creates the destination as 0755, while an entry inside keeps its 0700.
+# A new volume takes this mode from the image.
+COPY --link --from=build --chown=10001:10001 /rootfs/ /
 # Root owns the code: the app user can read it but not change it.
 COPY --link --from=build /app/.venv /app/.venv
 WORKDIR /app

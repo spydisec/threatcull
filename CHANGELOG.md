@@ -8,6 +8,59 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Fixed
+
+- 🔧 **The image creates `/data` as 0700.** Since 2.1.0 the image created `/data` as 0755, so every
+  new Docker volume started readable by other users and ThreatCull logged a warning on each start.
+  New volumes now start as 0700. A volume created before this release keeps 0755: run
+  `docker compose run --rm --entrypoint python threatcull -c "import os; os.chmod('/data', 0o700)"`
+  once to tighten it.
+
+## [2.5.2] - 2026-11-02
+
+Security fix for the CA bundle, and the image moves to Python 3.15. Nothing to do when upgrading.
+
+### Security
+
+- 🔐 **`certifi` 2026.10.23 drops the compromised `emSign` roots** (GHSA-6q48-6c7w-9gw2).
+  `certifi` 2026.7.22 trusted `emSign` root certificates whose intermediate keys leaked, and
+  ThreatCull uses that bundle for every HTTPS feed fetch. Upgrade to stop trusting certificates
+  signed with those keys.
+- 🔐 **libexpat1 2.9.0 in the base image.** The Docker Hardened Images `python:3.15` base ships
+  libexpat1 `2.9.0-1~deb13u1+dhi1`, which fixes the six CVEs that 2.5.1 listed as not reachable, so
+  the image scan no longer ignores them.
+
+### Changed
+
+- 📦 **Python 3.15 and dependency updates.** The image runs on the Docker Hardened Images
+  `python:3.15` base (Python 3.15.2) and builds with uv 0.13.6. FastAPI goes to 0.162.0 and the web
+  UI charts to Chart.js 4.6.1.
+
+## [2.5.1] - 2026-10-19
+
+Updated base images and dependencies. Nothing to do when upgrading.
+
+### Changed
+
+- 📦 **Dependency updates.** The Docker Hardened Images `python:3.14` and `python:3.14-dev` bases move
+  to new digests, the image builds with uv 0.13.1, and FastAPI goes to 0.143.0 and `pydantic` to
+  2.14.1.
+
+### Security
+
+- 🔐 **libexpat1 CVEs in the base image are not reachable.** The `python:3.14` base still ships
+  libexpat1 `2.8.3-1~deb13u1+dhi5`, which has CVE-2026-66046, CVE-2026-77214, CVE-2026-93990,
+  CVE-2026-76956, CVE-2026-76957 and CVE-2026-102633, fixed in `2.9.0-1~deb13u1`. Expat parses XML
+  and ThreatCull parses none, so the image scan ignores these CVEs until a Docker Hardened Images
+  digest ships the fix.
+
+## [2.5.0] - 2026-10-11
+
+ThreatCull now warns about Sources whose list stopped changing, and the Catalog gains eight Sources.
+Nothing to do when upgrading: database migration 11 runs on start and dates each Source's last change
+from the newest entry it added. Use **Check for updates** on the Sources page to get Catalog revision 4
+on an existing install.
+
 ### Added
 
 - 🆕 **Eight new Catalog Sources**, all disabled until you enable them. IP blocklists: Binary
@@ -405,7 +458,9 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.5.1...HEAD
+[2.5.1]: https://github.com/spydisec/threatcull/compare/v2.5.0...v2.5.1
+[2.5.0]: https://github.com/spydisec/threatcull/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/spydisec/threatcull/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/spydisec/threatcull/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/spydisec/threatcull/compare/v2.2.1...v2.3.0
