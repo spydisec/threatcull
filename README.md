@@ -192,7 +192,7 @@ make setup   # dependencies and git hooks
 make check   # lint, types and security checks, as in CI
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for issues and pull requests, [SECURITY.md](SECURITY.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for reporting issues and suggesting changes, [SECURITY.md](SECURITY.md)
 to report a vulnerability, and [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 ## Licence
