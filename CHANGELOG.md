@@ -16,6 +16,13 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   `docker compose run --rm --entrypoint python threatcull -c "import os; os.chmod('/data', 0o700)"`
   once to tighten it.
 
+### Removed
+
+- 🗑️ **Two dead abuse.ch Sources leave the Catalog (revision 5).** abuse.ch retired the
+  `urlhaus.abuse.ch/downloads/hostfile/` and `threatfox.abuse.ch/downloads/hostfile/` lists, which
+  now answer HTTP 410, so `urlhaus-hostfile` and `threatfox-hostfile` only produced fetch errors. Use **Check for updates** on the Sources page:
+  ThreatCull disables both on an existing install and marks them removed from the Catalog.
+
 ## [2.5.2] - 2026-11-02
 
 Security fix for the CA bundle, and the image moves to Python 3.15. Nothing to do when upgrading.
