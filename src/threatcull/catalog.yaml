@@ -8,16 +8,6 @@ revision: 5
 requires: "2.0.0"
 sources:
   # ---------------------------------------------------------------- IP blocklists
-  - id: feodotracker-ipblocklist
-    name: abuse.ch Feodo Tracker botnet C2 IPs
-    family: abuse-ch
-    url: https://feodotracker.abuse.ch/downloads/ipblocklist.txt
-    format: plain
-    kind: ip
-    category: c2
-    refresh_minutes: 60
-    default_enabled: true
-
   - id: ipsum-level3
     name: IPsum (reported by 3+ lists)
     family: ipsum
