@@ -1,7 +1,7 @@
 {
   "repo_notes": [
     {
-      "content": "ThreatCull is a self-hosted threat-feed compiler: Python 3.12+, FastAPI, SQLite, Jinja2 + htmx pages with small TypeScript islands (no SPA), AGPL-3.0, shipped as the container image ghcr.io/spydisec/threatcull. Pipeline: Fetch the enabled Sources, cull (drop duplicates, private and reserved ranges, Allowlist entries and the operator's own network), score each Indicator by how many independent Sources list it (confidence tiers), Compile Outputs, and serve each Output over a URL protected by its Feed Token. Use the project's own terms consistently: Source, Catalog (the bundled catalog.yaml of vetted Sources), Indicator, Sighting, Allowlist, My network (called home in code, see home_detect.py), Output, Feed Token, API token, Fetch, Compile, Run. Stored and scheduled times are UTC; only the web UI converts them to the TZ timezone. CIDR ranges are left out of Outputs. Every Catalog Source carries licence evidence and a business-use flag; a Source whose terms turn restricted is disabled until the operator acknowledges the change. The design notes and ADRs are not in the public repository: explain behaviour from the code, README.md, CHANGELOG.md, SECURITY.md and CONTRIBUTING.md."
+      "content": "ThreatCull is a self-hosted threat-feed compiler: Python 3.12+, FastAPI, SQLite, Jinja2 + htmx pages with small TypeScript islands (no SPA), AGPL-3.0, shipped as the container image ghcr.io/spydisec/threatcull. Pipeline: Fetch the enabled Sources, cull (drop duplicates, private and reserved ranges, Allowlist entries and the operator's own network), score each Indicator by how many independent Sources list it (confidence tiers), Compile Outputs, and serve each Output over a URL protected by its Feed Token. Use the project's own terms consistently: Source, Catalog (the bundled catalog.yaml of vetted Sources), Indicator, Sighting, Allowlist, My network (called home in code, see home_detect.py), Output, Feed Token, API token, Fetch, Compile, Run. Stored and scheduled times are UTC; only the web UI converts them to the TZ timezone. CIDR ranges are left out of Outputs. Catalog Sources carry no licence data since 2.0: a Source needs a working public feed, and operators decide which Sources to use. A blocklist whose entries stop changing is flagged Frozen, and a weekly Catalog health check (scripts/catalog_health.py) reports dead or frozen Catalog Sources. Outside code pull requests aren't accepted; issues are (see CONTRIBUTING.md). The design notes and ADRs are not in the public repository: explain behaviour from the code, README.md, CHANGELOG.md, SECURITY.md and CONTRIBUTING.md."
     }
   ],
   "pages": [
@@ -25,7 +25,7 @@
     },
     {
       "title": "Sources and Catalog",
-      "purpose": "Catalog YAML sync, Catalog updates between releases (catalog_update.py: download, --file upload, revision checks, refusing older or unsafe files), custom allowlist/blocklist Sources, licence classes and restricted terms, enable/disable policy.",
+      "purpose": "Catalog YAML sync, Catalog updates between releases (catalog_update.py: download, --file upload, revision checks, refusing older or unsafe files), custom allowlist/blocklist Sources, enable/disable policy, Frozen Sources, the Catalog health check workflow.",
       "parent": "Threat Data Pipeline"
     },
     {
