@@ -2,17 +2,19 @@
 """Configuration export/import as YAML: settings, Source choices, custom Sources, the
 Allowlist (including the operator's own network) and Output definitions.
 
-A configuration file never holds passwords, API tokens, Feed Tokens, their hashes, the
-session secret or threat data (Sightings, Runs, Indicators): it is safe to keep next to
-backups and to move between installs.
+A configuration file holds no passwords, no raw tokens, no session secret and no threat
+data (Sightings, Runs, Indicators). It does hold Feed Token and API token hashes, so a
+restore keeps feed URLs and API tokens working; the import adopts them only on request.
 """
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Literal
 
 import yaml
@@ -21,11 +23,23 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from threatcull.catalog import LEGACY_FIELDS, Category, SourceRole
 from threatcull.clock import ts
 from threatcull.indicators import SourceKind
+from threatcull.outputs.files import output_path
 from threatcull.parsers import SourceFormat
 from threatcull.policy.scoring import Tier
 from threatcull.store.allowlist import add_entry, normalize_allow_value, operator_entries, set_mine
+from threatcull.store.api_tokens import ApiTokenRecord, export_api_tokens, import_api_token
 from threatcull.store.db import transaction
-from threatcull.store.outputs import OutputFormat, OutputSpec, create_output, list_outputs
+from threatcull.store.errors import NotFoundError
+from threatcull.store.outputs import (
+    TOKEN_HASH,
+    OutputFormat,
+    OutputSpec,
+    create_output,
+    feed_token_hashes,
+    list_outputs,
+    set_feed_token_hash,
+    update_output,
+)
 from threatcull.store.settings import load_settings, save_settings
 from threatcull.store.sources import (
     add_custom_source,
@@ -35,16 +49,23 @@ from threatcull.store.sources import (
 )
 
 CONFIG_VERSION = 1
+_TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00")
 MAX_CONFIG_BYTES = 1024 * 1024
+API_TOKEN_RESTORE_COMMAND = "threatcull config import --restore-tokens"  # noqa: S105 (a command)
+FEEDS_EMPTY_NOTE = (
+    "Feeds stay empty until the next Compile: click Run now or wait for the schedule."
+)
 
 _HEADER = (
     "# ThreatCull configuration (format {version}).\n"
-    "# It contains no passwords, tokens or threat data.\n"
+    "# It contains no passwords, no raw tokens and no threat data. It holds Feed Token and\n"
+    "# API token hashes so a restore keeps feed URLs and API tokens working.\n"
 )
 
 
 def export_config(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
     sources = list_sources(conn)
+    hashes = feed_token_hashes(conn)
     return {
         "threatcull_config": CONFIG_VERSION,
         "exported_at": ts(now),
@@ -80,8 +101,18 @@ def export_config(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
                 "min_tier": o.min_tier,
                 "max_entries": o.max_entries,
                 "format": o.format,
+                "feed_token_hash": hashes[o.name],
             }
             for o in sorted(list_outputs(conn), key=lambda o: o.name)
+        ],
+        "api_tokens": [
+            {
+                "name": t.name,
+                "user": t.username,
+                "token_hash": t.token_hash,
+                "created_at": t.created_at,
+            }
+            for t in export_api_tokens(conn)
         ],
     }
 
@@ -160,6 +191,14 @@ class _OutputIn(_Strict):
     min_tier: Tier
     max_entries: int | None = Field(default=None, ge=1)
     format: OutputFormat
+    feed_token_hash: str | None = None  # only adopted when the import asks for it
+
+
+class _ApiTokenIn(_Strict):
+    name: str
+    user: str
+    token_hash: str
+    created_at: str
 
 
 class ConfigDocument(_Strict):
@@ -174,6 +213,7 @@ class ConfigDocument(_Strict):
     allowlist: list[_AllowIn] = Field(default_factory=list)
     home_network: list[_HomeIn] = Field(default_factory=list)  # before v1.1
     outputs: list[_OutputIn] = Field(default_factory=list)
+    api_tokens: list[_ApiTokenIn] = Field(default_factory=list)
 
 
 class _NoAliasLoader(yaml.SafeLoader):
@@ -216,6 +256,7 @@ class ImportResult:
     applied: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     new_feed_tokens: dict[str, str] = field(default_factory=dict)
+    restored: list[str] = field(default_factory=list)
 
 
 def apply_config(
@@ -224,13 +265,23 @@ def apply_config(
     *,
     now: datetime,
     url_check: Callable[[str], str | None] | None = None,
+    restore_tokens: bool = False,
+    restore_api_tokens: bool = False,
+    outputs_dir: Path | None = None,
 ) -> ImportResult:
     """Merge ``doc`` into the database in one transaction; never deletes anything.
 
     ``url_check`` returns why a custom Source URL is refused (the web UI confines
-    ``file://`` URLs to the imports directory); the CLI passes none.
+    ``file://`` URLs to the imports directory); the CLI passes none. ``restore_tokens``
+    adopts the file's Feed Token hashes; without it they are ignored. API token hashes
+    are adopted only with ``restore_api_tokens`` as well, which the CLI sets and the web
+    UI never does: a web session must not be able to mint API tokens.
+    ``outputs_dir`` is where Outputs are published: when a restore changes an Output's
+    definition, its old published file is removed after the import commits, so the feed
+    is empty until the next Compile instead of serving the old list.
     """
     result = ImportResult()
+    stale: list[OutputSpec] = []
     with transaction(conn):
         if doc.settings is not None:
             given = doc.settings.model_dump(exclude_none=True)
@@ -242,7 +293,17 @@ def apply_config(
             result.applied.append(f"updated settings: {', '.join(sorted(given)) or 'none'}")
         _apply_sources(conn, doc, result, url_check)
         _apply_lists(conn, doc, result, now)
-        _apply_outputs(conn, doc, result)
+        stale = _apply_outputs(conn, doc, result, restore_tokens)
+        if restore_tokens and restore_api_tokens:
+            _apply_api_tokens(conn, doc, result)
+        elif restore_tokens and doc.api_tokens:
+            result.skipped.append(
+                f"skipped API tokens ({len(doc.api_tokens)}): restore them on the command "
+                f"line with `{API_TOKEN_RESTORE_COMMAND}`"
+            )
+    if outputs_dir is not None:
+        for old in stale:
+            output_path(outputs_dir, old).unlink(missing_ok=True)
     return result
 
 
@@ -329,8 +390,13 @@ def _apply_lists(
             result.applied.append(f"added {label} {value}")
 
 
-def _apply_outputs(conn: sqlite3.Connection, doc: ConfigDocument, result: ImportResult) -> None:
+def _apply_outputs(
+    conn: sqlite3.Connection, doc: ConfigDocument, result: ImportResult, restore_tokens: bool
+) -> list[OutputSpec]:
+    """Apply the file's Outputs; return the previous definitions a restore replaced."""
     existing = {o.name: o for o in list_outputs(conn)}
+    hashes = feed_token_hashes(conn) if restore_tokens else {}
+    replaced: list[OutputSpec] = []
     seen: set[str] = set()
     for item in doc.outputs:
         if item.name in seen:
@@ -349,16 +415,71 @@ def _apply_outputs(conn: sqlite3.Connection, doc: ConfigDocument, result: Import
         except ValueError as exc:
             result.skipped.append(f"skipped Output {item.name}: {exc}")
             continue
+        token_hash = item.feed_token_hash if restore_tokens else None
+        if token_hash is not None and not TOKEN_HASH.fullmatch(token_hash):
+            result.skipped.append(
+                f"skipped Feed Token for Output {spec.name}: the hash must be 64 lowercase "
+                "hex characters"
+            )
+            token_hash = None
         current = existing.get(spec.name)
         if current is None:
-            result.new_feed_tokens[spec.name] = create_output(conn, spec)
+            raw = create_output(conn, spec, token_hash=token_hash)
+            if raw is not None:
+                result.new_feed_tokens[spec.name] = raw
             result.applied.append(f"created Output {spec.name}")
+            if token_hash is not None:
+                result.restored.append(f"restored Feed Token for Output {spec.name}")
+            continue
+        if token_hash is None:
+            if _definition(current) != _definition(spec):
+                result.skipped.append(
+                    f"skipped Output {spec.name}: exists with a different definition; "
+                    "edit it on the Outputs page"
+                )
             continue
         if _definition(current) != _definition(spec):
+            update_output(conn, spec)  # also clears its publish baseline
+            replaced.append(current)
+            result.applied.append(f"restored Output {spec.name} from the file")
+        if hashes.get(spec.name) != token_hash:
+            set_feed_token_hash(conn, spec.name, token_hash)
+            hashes[spec.name] = token_hash
+            result.restored.append(f"restored Feed Token for Output {spec.name}")
+    return replaced
+
+
+def _apply_api_tokens(conn: sqlite3.Connection, doc: ConfigDocument, result: ImportResult) -> None:
+    for item in doc.api_tokens:
+        label = f"skipped API token {item.name}: "
+        if not _is_timestamp(item.created_at):
             result.skipped.append(
-                f"skipped Output {spec.name}: exists with a different definition; "
-                "edit it on the Outputs page"
+                label + "created_at must be a UTC timestamp like 2026-01-31T12:00:00+00:00"
             )
+            continue
+        record = ApiTokenRecord(item.name, item.user, item.token_hash, item.created_at)
+        try:
+            import_api_token(conn, record)
+        except NotFoundError:
+            result.skipped.append(label + f"user {item.user} doesn't exist")
+        except ValueError as exc:
+            if "already exists" in str(exc):
+                result.skipped.append(label + "a token with this name already exists")
+            else:
+                result.skipped.append(label + str(exc))
+        else:
+            result.restored.append(f"restored API token {item.name} for user {item.user}")
+
+
+def _is_timestamp(value: str) -> bool:
+    """True for exactly what ``ts()`` writes: UTC, ISO-8601, second precision."""
+    if not _TIMESTAMP.fullmatch(value):
+        return False
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return parsed.utcoffset() is not None and ts(parsed.astimezone(UTC)) == value
 
 
 def _yaml_problem(exc: yaml.YAMLError) -> str:

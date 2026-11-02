@@ -36,7 +36,7 @@
 <section class="card" id="configuration">
   <h2>Configuration file</h2>
   <p>Settings, Source choices, custom Sources, the allowlist (including your network) and
-    Output definitions. No passwords, tokens or threat data.</p>
+    Output definitions, plus the hashes of your Feed Tokens and API tokens. No passwords, raw tokens or threat data.</p>
   <p><a class="button btn-secondary" href="/settings/export" download>Export configuration</a></p>
   <h3>Import</h3>
   {% if import_error is defined and import_error %}
@@ -47,9 +47,16 @@
     <label>A ThreatCull .yaml file, up to 1 MiB
       <input type="file" name="file" accept=".yaml,.yml,application/yaml,text/yaml" required>
     </label>
+    <label class="check">
+      <input type="checkbox" name="restore_tokens" value="on">
+      Restore Feed Tokens from the file
+    </label>
     <button type="submit" class="btn-secondary">Import</button>
   </form>
-  <p class="hint">An import adds and updates, never deletes. Values already on your allowlist keep their note.</p>
+  <p class="hint">An import adds and updates, never deletes. Values already on your allowlist keep their note.
+    The restore box brings back Feed Tokens; tick it only for a file you exported from your own install: with it, the file's
+    feed URLs work on this install, and a file from someone else would let them read your feeds.
+    API tokens are restored only on the command line: <code>threatcull config import --restore-tokens</code>.</p>
   {% if import_result is defined and import_result %}
   <div class="import-result" role="status">
     {% if import_result.new_feed_tokens %}
@@ -60,14 +67,20 @@
       {% endfor %}
     </div>
     {% endif %}
+    {% if import_result.restored %}
+    <ul class="result-list">{% for line in import_result.restored %}<li>{{ line }}</li>{% endfor %}</ul>
+    {% endif %}
     {% if import_result.applied %}
     <ul class="result-list">{% for line in import_result.applied %}<li>{{ line }}</li>{% endfor %}</ul>
     {% endif %}
     {% if import_result.skipped %}
     <ul class="result-list skipped">{% for line in import_result.skipped %}<li>{{ line }}</li>{% endfor %}</ul>
     {% endif %}
-    {% if not import_result.applied and not import_result.skipped %}
+    {% if not import_result.applied and not import_result.restored and not import_result.skipped %}
     <p class="muted">Nothing to change: this install already matches the file.</p>
+    {% endif %}
+    {% if feeds_empty_note is defined and feeds_empty_note %}
+    <p class="muted">{{ feeds_empty_note }}</p>
     {% endif %}
   </div>
   {% endif %}
