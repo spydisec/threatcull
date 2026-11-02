@@ -65,7 +65,7 @@ A workflow (`.github/workflows/catalog-health.yml`) downloads every Catalog Sour
 one open issue, "Catalog health: Sources need attention" with the `catalog-health` label, listing
 Sources that failed, served an HTML page, could not be parsed or had no valid entries two weeks in a
 row, and blocklists whose entries have not changed for 30 days. Its history lives in `state.json` on the `catalog-health` branch; never merge that
-branch. Its weekly schedule is paused until #90; run it by hand from the Actions tab with
+branch. It runs every Monday at 05:00 UTC; to check sooner, start it from the Actions tab with
 **Run workflow**.
 
 ## Licence

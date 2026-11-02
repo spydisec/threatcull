@@ -5,8 +5,11 @@ name: Catalog health
 # catalog-health branch. One open issue labelled "catalog-health" lists dead and frozen
 # Sources; it is rewritten each run and closed when every Source is healthy.
 
-# The weekly schedule (cron '0 5 * * 1') is paused until #90: run it by hand for now.
+# Every Monday at 05:00 UTC, and by hand with Run workflow in the Actions tab. A
+# failure counts once per 6 days, so an extra manual run in the same week is free.
 on:
+  schedule:
+    - cron: "0 5 * * 1"
   workflow_dispatch:
 
 permissions:
