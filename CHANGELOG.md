@@ -8,6 +8,11 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-11-02
+
+A Catalog health check, a private `/data` for new volumes, and the abuse.ch Sources leave the Catalog.
+After upgrading, use **Check for updates** on the Sources page to get Catalog revision 5.
+
 ### Added
 
 - 🩺 **Catalog health check.** A workflow that runs every Monday downloads every Catalog Source
