@@ -8,6 +8,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Fixed
+
+- 🔧 **The image creates `/data` as 0700.** Since 2.1.0 the image created `/data` as 0755, so every
+  new Docker volume started readable by other users and ThreatCull logged a warning on each start.
+  New volumes now start as 0700. A volume created before this release keeps 0755: run
+  `docker compose run --rm --entrypoint python threatcull -c "import os; os.chmod('/data', 0o700)"`
+  once to tighten it.
+
 ## [2.5.2] - 2026-11-02
 
 Security fix for the CA bundle, and the image moves to Python 3.15. Nothing to do when upgrading.
