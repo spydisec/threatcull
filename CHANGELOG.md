@@ -8,6 +8,26 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.5.2] - 2026-11-02
+
+Security fix for the CA bundle, and the image moves to Python 3.15. Nothing to do when upgrading.
+
+### Security
+
+- 🔐 **`certifi` 2026.10.23 drops the compromised `emSign` roots** (GHSA-6q48-6c7w-9gw2).
+  `certifi` 2026.7.22 trusted `emSign` root certificates whose intermediate keys leaked, and
+  ThreatCull uses that bundle for every HTTPS feed fetch. Upgrade to stop trusting certificates
+  signed with those keys.
+- 🔐 **libexpat1 2.9.0 in the base image.** The Docker Hardened Images `python:3.15` base ships
+  libexpat1 `2.9.0-1~deb13u1+dhi1`, which fixes the six CVEs that 2.5.1 listed as not reachable, so
+  the image scan no longer ignores them.
+
+### Changed
+
+- 📦 **Python 3.15 and dependency updates.** The image runs on the Docker Hardened Images
+  `python:3.15` base (Python 3.15.2) and builds with uv 0.13.6. FastAPI goes to 0.162.0 and the web
+  UI charts to Chart.js 4.6.1.
+
 ## [2.5.1] - 2026-10-19
 
 Updated base images and dependencies. Nothing to do when upgrading.
