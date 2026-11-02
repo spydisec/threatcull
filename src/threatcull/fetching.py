@@ -20,7 +20,7 @@ from typing import Literal, TextIO
 from threatcull import __version__
 from threatcull.fetcher import Fetcher, FetchError, FetchResult
 from threatcull.indicators import Indicator, SourceKind, normalize
-from threatcull.parsers import ParseError, parse
+from threatcull.parsers import ParseError, SourceFormat, parse
 from threatcull.store.errors import PolicyError
 from threatcull.store.runs import finish_run, start_run
 from threatcull.store.sightings import (
@@ -97,7 +97,7 @@ def content_digest(source: Source, result: FetchResult) -> str:
     return digest.hexdigest()
 
 
-def _text_of(result: FetchResult) -> str | TextIO:
+def text_of(result: FetchResult) -> str | TextIO:
     """The download as text: the string, or a decoding stream over the spooled file."""
     if result.body is None:
         return result.text
@@ -155,11 +155,11 @@ def fetch_source(
             )
             finish_run(conn, run_id, "not_modified", now=now, stats=_timings(timer))
             return FetchOutcome(source.id, "not_modified")
-        error = NOT_A_LIST if _looks_like_html(source, result) else None
+        error = NOT_A_LIST if looks_like_html(source.format, result) else None
         if error is None:
             candidates = parse(
                 source.format,
-                _text_of(result),
+                text_of(result),
                 csv_column=source.csv_column,
                 json_keys=source.json_keys,
             )
@@ -227,8 +227,14 @@ def fetch_all(
     return [fetch_source(conn, source, fetcher, now=now) for source in sources]
 
 
-def _looks_like_html(source: Source, result: FetchResult) -> bool:
-    if source.format not in _LINE_FORMATS:
+def starts_with_markup(result: FetchResult) -> bool:
+    """True if the download opens with ``<``: an HTML page in any format (no list starts so)."""
+    return _HTML_START.match(_head(result)) is not None
+
+
+def looks_like_html(fmt: SourceFormat, result: FetchResult) -> bool:
+    """True if a line-format download is an HTML page (an error or login page), not a list."""
+    if fmt not in _LINE_FORMATS:
         return False
     media_type = (result.content_type or "").split(";", 1)[0].strip().lower()
     return media_type == "text/html" or _HTML_START.match(_head(result)) is not None

@@ -45,8 +45,10 @@ LABEL org.opencontainers.image.title="ThreatCull" \
       org.opencontainers.image.version="${VERSION}"
 # uid 10001, as in 1.x and 2.0 images, so existing /data volumes stay writable. The
 # hardened image's own non-root user is 65532; any numeric uid works without an
-# /etc/passwd entry.
-COPY --link --from=build --chown=10001:10001 /rootfs/data /data
+# /etc/passwd entry. Copy /rootfs/, not /rootfs/data: COPY of a directory copies its
+# contents and creates the destination as 0755, while an entry inside keeps its 0700.
+# A new volume takes this mode from the image.
+COPY --link --from=build --chown=10001:10001 /rootfs/ /
 # Root owns the code: the app user can read it but not change it.
 COPY --link --from=build /app/.venv /app/.venv
 WORKDIR /app

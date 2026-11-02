@@ -1,6 +1,19 @@
 # Contributing
 
-Bug reports, Source suggestions and pull requests are welcome.
+Bug reports, feature ideas and Catalog Source suggestions are welcome.
+
+## Contributions at the moment
+
+ThreatCull doesn't accept code pull requests from outside contributors right now.
+
+Issues are welcome: bug reports, feature ideas, and new Catalog Sources through the
+**Add a Source to the Catalog** issue form.
+
+If you have a fix, describe it in an issue instead of posting a patch: say what's wrong and the
+idea behind the fix, and the maintainer will implement it.
+
+This may change in the future. If it does, contributors will be asked to sign a Contributor
+License Agreement first.
 
 ## Issues
 
@@ -8,9 +21,11 @@ Use the issue forms: bug report, feature request or a new Catalog Source. Report
 privately (see [SECURITY.md](SECURITY.md)). Before pasting logs or config, remove Feed Tokens,
 passwords, hostnames and addresses from your own network.
 
-## Pull requests
+## Development
 
-1. Open an issue first for anything bigger than a small fix, so we agree on the approach.
+How the maintainer builds and changes ThreatCull:
+
+1. Open an issue first for anything bigger than a small fix, so the approach is agreed.
 2. Branch from `dev` and open the pull request against `dev`. `main` holds releases.
 3. Run `make setup` once, then `make check` before you push. CI runs ruff (with its bandit
    rules), mypy strict, semgrep, CodeQL, pip-audit, gitleaks, Vale and the Docker build with a
@@ -46,7 +61,14 @@ change with **Check for updates**, and only a higher revision replaces the Catal
 `requires` when the change needs a newer ThreatCull. Run `make catalog-docs` to refresh the tables
 in [the Catalog page](docs/CATALOG.md); CI fails when they don't match.
 
+A workflow (`.github/workflows/catalog-health.yml`) downloads every Catalog Source and keeps
+one open issue, "Catalog health: Sources need attention" with the `catalog-health` label, listing
+Sources that failed, served an HTML page, could not be parsed or had no valid entries two weeks in a
+row, and blocklists whose entries have not changed for 30 days. Its history lives in `state.json` on the `catalog-health` branch; never merge that
+branch. It runs every Monday at 05:00 UTC; to check sooner, start it from the Actions tab with
+**Run workflow**.
+
 ## Licence
 
-By contributing you agree that your contribution is licensed under the
-[GNU AGPL-3.0](LICENSE).
+ThreatCull is licensed under the [GNU AGPL-3.0](LICENSE). Outside code contributions aren't
+accepted at the moment; see [Contributions at the moment](#contributions-at-the-moment).

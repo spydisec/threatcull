@@ -8,6 +8,54 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-11-02
+
+A Catalog health check, a private `/data` for new volumes, and the abuse.ch Sources leave the Catalog.
+After upgrading, use **Check for updates** on the Sources page to get Catalog revision 5.
+
+### Added
+
+- 🩺 **Catalog health check.** A workflow that runs every Monday downloads every Catalog Source
+  and keeps one issue listing Sources that stopped working or stopped changing, so a broken Source
+  is caught before it ships. The Catalog request bot now also rejects suggested feeds that serve an
+  HTML page.
+  [#87](https://github.com/spydisec/threatcull/issues/87)
+
+### Fixed
+
+- 🔧 **The image creates `/data` as 0700.** Since 2.1.0 the image created `/data` as 0755, so every
+  new Docker volume started readable by other users and ThreatCull logged a warning on each start.
+  New volumes now start as 0700. A volume created before this release keeps 0755: run
+  `docker compose run --rm --entrypoint python threatcull -c "import os; os.chmod('/data', 0o700)"`
+  once to tighten it.
+- 🔧 **Outputs and upgrades survive a power cut and a second process.** A Compile now writes each
+  Output to disk before it replaces the published file, so a power cut leaves the previous Output or
+  the new one, never an empty file. It records the new Output counts together in one transaction.
+  Starting a CLI command while the server upgrades the database no longer runs a migration twice.
+
+### Removed
+
+- 🗑️ **abuse.ch Sources leave the Catalog (revision 5).** The abuse.ch
+  [terms of use](https://abuse.ch/terms-of-use/) now give access to authenticated users only, for
+  not-for-profit use within query limits, so anonymous downloads no longer fit the Catalog. The
+  Catalog drops `feodotracker-ipblocklist` (enabled by default until now), `urlhaus-hostfile` and
+  `threatfox-hostfile`; the last two already answer HTTP 410. Use **Check for updates** on
+  the Sources page: ThreatCull disables all three on an existing install and marks them removed from
+  the Catalog. Support for Sources that need an API key is tracked in
+  [#116](https://github.com/spydisec/threatcull/issues/116).
+
+### Documentation
+
+- 📝 **Contribution policy.** ThreatCull doesn't accept code pull requests from outside contributors
+  for now. Bug reports, feature ideas and Catalog Source suggestions in issues are welcome; describe
+  a fix in words and the maintainer implements it. The bug report and feature request forms have
+  an optional "Suggested fix" field for that. See
+  [CONTRIBUTING.md](CONTRIBUTING.md#contributions-at-the-moment).
+- 📝 **Supported platforms.** The README lists where ThreatCull runs: Docker on Linux (amd64 or
+  arm64) is supported and tested, and Docker Desktop on Windows or macOS runs the same image but
+  isn't tested. 32-bit ARM and Windows without Docker aren't supported. Keep the named data volume
+  instead of mounting a Windows folder as `/data`.
+
 ## [2.5.2] - 2026-11-02
 
 Security fix for the CA bundle, and the image moves to Python 3.15. Nothing to do when upgrading.

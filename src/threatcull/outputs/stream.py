@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sqlite3
 from collections.abc import Collection, Iterator, Mapping
@@ -120,6 +121,10 @@ def stage_output(
             out.write(head(spec.format, ctx, count).encode("utf-8"))
             shutil.copyfileobj(rendered, out)
             out.write(tail(spec.format, count).encode("utf-8"))
+            # On disk before the publish renames it over the live file: after a power
+            # cut the Output is either the previous one or this one, never empty.
+            out.flush()
+            os.fsync(out.fileno())
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
