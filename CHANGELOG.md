@@ -8,6 +8,16 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Added
+
+- 💾 **Configuration and full backups.** `config import --restore-tokens` (or the **Restore Feed
+  Tokens and API tokens from the file** box on Settings) brings back Feed Token and API token
+  hashes, so old feed URLs and API tokens keep working on a fresh install. `threatcull backup create`
+  copies the database while ThreatCull runs, and `threatcull backup restore` replaces it with a
+  checked backup file. Export your configuration after you upgrade, and see the README's "Back up
+  and restore" for the steps. A configuration file exported by this version needs this version or
+  newer to import, because older versions reject the new fields.
+
 ### Documentation
 
 - 📝 **Safer full backups.** The README said to copy the `threatcull-data` volume for a full backup.

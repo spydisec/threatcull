@@ -90,6 +90,19 @@ Data lives on the `threatcull-data` volume.
 **Portainer:** go to **Stacks > Add stack**, paste `docker-compose.yaml`, set the password, then click
 **Deploy**.
 
+### Air-gapped install
+
+On a machine with internet access, save the image, copy it over, and load it:
+
+```bash
+docker save ghcr.io/spydisec/threatcull:2 -o threatcull.tar
+docker load -i threatcull.tar
+```
+
+Run the `docker save` on the connected machine and the `docker load` on the air-gapped one. Add
+Sources as `file://` URLs for files in `/data/imports/`, and update the Catalog by uploading the
+file. The web UI loads nothing from the internet.
+
 ## First steps
 
 1. On **Sources**, enable the lists you want.
@@ -163,19 +176,61 @@ internet access, upload a newer `catalog.yaml` there, or run `threatcull catalog
 
 ## Back up and restore
 
-To export the configuration to a file and import it again:
+ThreatCull has two backups. Keep ThreatCull's address stable (a DHCP reservation or a local DNS
+name), because feed URLs contain it.
+
+### Configuration backup (recommended)
+
+Export the configuration to a file:
 
 ```bash
 docker compose run --rm -T threatcull config export > threatcull-config.yaml
-docker compose run --rm -T threatcull config import - < threatcull-config.yaml
 ```
 
-The file holds settings, source choices, the allowlist and outputs. It holds no passwords,
-tokens or threat data. **Settings > Configuration** in the web UI does the same.
+**Settings > Configuration > Export** in the web UI does the same. The file holds settings, Source
+choices, custom Sources, the allowlist (including My network), Outputs, and the hashes of your Feed
+Tokens and API tokens. It never holds passwords, raw tokens or threat data.
 
-For a full backup, stop ThreatCull first (`docker compose stop`), copy the `threatcull-data` volume,
-then start it again (`docker compose start`). Copying the volume while ThreatCull runs can give a
-corrupt database.
+To restore on a fresh install, import the file with `--restore-tokens`:
+
+```bash
+docker compose run --rm -T threatcull config import --restore-tokens - < threatcull-config.yaml
+```
+
+In the web UI, tick **Restore Feed Tokens and API tokens from the file** on Settings and import the
+file. Old feed URLs and API tokens keep working. Rotate your Feed Tokens afterwards. The feeds stay
+empty until the next Compile, so click **Run now**.
+
+Without the option, an import never adopts the hashes in the file, so importing a file someone else
+shared gives them no access. If API tokens belonged to users other than `admin`, create those users
+before you import.
+
+Two things live outside the database and are not in the file. Get the Catalog update again with
+**Check for updates** on the Sources page, or upload the Catalog file if you are offline. Copy the
+data directory's `imports/` folder across by hand.
+
+### Full database backup (optional)
+
+This copies the whole database. It works while ThreatCull runs:
+
+```bash
+docker compose run --rm threatcull backup create
+```
+
+The file goes to `/data/backups/` inside the volume. Copy it off the host.
+
+To restore, stop ThreatCull, restore the file, then start it again:
+
+```bash
+docker compose stop
+docker compose run --rm threatcull backup restore /data/backups/FILE
+docker compose start
+```
+
+Restore refuses to run while ThreatCull runs. It checks the file first and refuses a backup from a
+newer ThreatCull. It keeps a safety copy of the current database as `/data/backups/pre-restore-…db`.
+Use `docker compose run`, which runs as the image's own user, and not `docker exec` as root, so the
+restored file stays owned by the right user.
 
 ## Run without Docker
 
