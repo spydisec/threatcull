@@ -17,6 +17,13 @@ from zoneinfo import ZoneInfoNotFoundError
 import uvicorn
 import yaml
 
+from threatcull.backup import (
+    BackupError,
+    create_backup,
+    default_backup_path,
+    ensure_backups_dir,
+    restore_backup,
+)
 from threatcull.catalog import Category, SourceRole, load_catalog
 from threatcull.catalog_update import (
     DEFAULT_CATALOG_URL,
@@ -38,7 +45,7 @@ from threatcull.parsers import SourceFormat
 from threatcull.store.allowlist import add_entry, import_entries, operator_entries, remove_entry
 from threatcull.store.api_tokens import create_api_token, list_api_tokens, revoke_api_token
 from threatcull.store.config import MAX_CONFIG_BYTES, apply_config, dump_config, parse_config
-from threatcull.store.db import connect
+from threatcull.store.db import SCHEMA_VERSION, connect
 from threatcull.store.errors import NotFoundError, PolicyError
 from threatcull.store.outputs import ensure_default_outputs, list_outputs, rotate_token
 from threatcull.store.runs import fail_interrupted_runs
@@ -133,7 +140,27 @@ def build_parser() -> argparse.ArgumentParser:
     _add_api_token_parser(sub)
     _add_config_parser(sub)
     _add_catalog_parser(sub)
+    _add_backup_parser(sub)
     return parser
+
+
+def _add_backup_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    backup = sub.add_parser(
+        "backup", help="Back up or restore the whole database (users, API tokens, history)"
+    )
+    backup_sub = backup.add_subparsers(dest="action", required=True)
+    create = backup_sub.add_parser(
+        "create", help="Write a copy of the database; safe while ThreatCull runs"
+    )
+    create.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        help="file to write (default: <data-dir>/backups/threatcull-<UTC time>.db)",
+    )
+    backup_sub.add_parser(
+        "restore", help="Replace the database with a backup file; stop ThreatCull first"
+    ).add_argument("file", type=Path, help="a file made by `threatcull backup create`")
 
 
 def _add_user_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -256,6 +283,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except DataDirError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
+    if args.command == "backup":
+        # Before connect(): a restore must not migrate or open the database it replaces.
+        return _backup(args)
     with contextlib.ExitStack() as stack:
         try:
             if args.command in LOCKING_COMMANDS:
@@ -303,6 +333,47 @@ def _main_locked(args: argparse.Namespace) -> int:
         return EXIT_ERROR
     finally:
         conn.close()
+
+
+def _backup(args: argparse.Namespace) -> int:
+    try:
+        if args.action == "create":
+            return _backup_create(args)
+        return _backup_restore(args)
+    except (BackupError, DataDirLocked, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+
+def _backup_create(args: argparse.Namespace) -> int:
+    dest = args.output
+    if dest is None:
+        dest = default_backup_path(args.data_dir, now=utcnow())
+        if dest.exists():
+            raise BackupError(f"{dest} already exists; choose another name with --output")
+        if (args.data_dir / DB_NAME).is_file():
+            ensure_backups_dir(args.data_dir)
+    print(create_backup(args.data_dir / DB_NAME, dest))
+    return EXIT_OK
+
+
+def _backup_restore(args: argparse.Namespace) -> int:
+    report = restore_backup(args.data_dir, args.file, now=utcnow())
+    if report.safety_copy is None:
+        print(f"No database in {args.data_dir} before the restore: no safety copy needed.")
+    else:
+        print(f"Safety copy of the previous database: {report.safety_copy}")
+    note = (
+        f" ThreatCull upgrades it to schema {SCHEMA_VERSION} when it next starts."
+        if report.schema < SCHEMA_VERSION
+        else ""
+    )
+    print(f"Restored {args.file} (schema {report.schema}).{note}")
+    print(
+        "Feeds stay empty until the next Compile: click Run now or wait for the schedule. "
+        "The Output files on disk are from before the restore until then."
+    )
+    return EXIT_OK
 
 
 def _print_token(name: str, token: str) -> None:
