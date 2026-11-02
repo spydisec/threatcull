@@ -1,0 +1,342 @@
+{
+  "adaway-hosts": {
+    "set_sha256": "e7f71cbce61bb73bcb7ce62987c7b81e1ee1060fd98ee932c1d93a2848a5ee8e",
+    "valid": 6540,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "binarydefense-banlist": {
+    "set_sha256": "69ad7ac4d5f74b540e737a51d421970fa337ac48f090f6ea6bc1ee226aec2f40",
+    "valid": 1052,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "blackhole-today-ips": {
+    "set_sha256": "2750e2cb5138fa8a0361903ef652281dc4c2f7a607f29d66ce4ad2e98bd3fe77",
+    "valid": 10201,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "blocklist-de-all": {
+    "set_sha256": "6c77b21e0781e63b49c09c979ae17210c7f76795041bf0b15c128a306d10f096",
+    "valid": 25322,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "blocklistproject-ads": {
+    "set_sha256": "25a67e60073cd45463e03bc655afa50fcacd7951f892ce80c78ab3049fc666ba",
+    "valid": 235901,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "blocklistproject-malware": {
+    "set_sha256": "5863993a903240f3b124ed08e89cb093580b3b0576d867cb4ab752c053808db5",
+    "valid": 2655820,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "blocklistproject-phishing": {
+    "set_sha256": "fda35f5c87c461d7a399fbcbd10fdb1250b83345125935b12b0df7873ce1c161",
+    "valid": 190215,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "blocklistproject-ransomware": {
+    "set_sha256": "9ba00ddc4c3e37d6979e3aeb8ab13a28f66e19ee985e3a83f8ff10b688054b75",
+    "valid": 1904,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "blocklistproject-scam": {
+    "set_sha256": "fa513f694de2196b8cb25cd8ef92abf7de539aa18d85d5b12034f13bd7407d9f",
+    "valid": 8527,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "blocklistproject-tracking": {
+    "set_sha256": "07f6b19ade7c34126d5ec7e9ecf8441d016a04cd0b1812e0ede964011fbb7ab7",
+    "valid": 143876,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "botvrij-ip-dst": {
+    "set_sha256": "71feadfa84f01e9545324ef083f4db30badd8d2bb4a2712f128ebe006e6faa7d",
+    "valid": 4,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "c2intelfeeds-domain-30d": {
+    "set_sha256": "53fbe3810806e5184e40c397f4050ec47115e9f31a73123c0d8c001c0ae5bf67",
+    "valid": 85,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "c2intelfeeds-ip-30d": {
+    "set_sha256": "b1043337a0db029fae2041f799f053b1072e76c491cb92b44fac1844343591d5",
+    "valid": 210,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "cins-army": {
+    "set_sha256": "3a42ccf7504180c71822efed62588e84b0ee1939c3deab0252e2d9a92afd5fc9",
+    "valid": 15000,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "cloudflare-ipv4": {
+    "set_sha256": "2c2778ec0209e5550a755826df669abae442baf89088c12b62474a0498512312",
+    "valid": 15,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "cloudflare-ipv6": {
+    "set_sha256": "124cc0c78f217c30db11b2e58d0f2a80b66b85603252769aa6ef24fbc67156b0",
+    "valid": 7,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "digitalside-domains": {
+    "set_sha256": "1d743a59afd9ffe651c662c5077b3d26923adae83ca242e637282187c622ce6e",
+    "valid": 133,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "durablenapkin-scam": {
+    "set_sha256": "471ef5caea717c3de7d5f8090d440add860173a8e09bfdfc49d0f74caeb4a540",
+    "valid": 2193,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "et-compromised-ips": {
+    "set_sha256": "4c90ead6218eae0a4d095dde4edef1749c6f3cbdf2944c8f10d10004d733bd45",
+    "valid": 542,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "fastly-public-ips": {
+    "set_sha256": "2ca2e82100edc560d90151f1976c50048db86cf997730ac316a74265eff58b33",
+    "valid": 24,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "greensnow": {
+    "set_sha256": "4170c9e9afb3150d3c13b038edfc4a2be22dd025c4b31c3383604f8ca7f2789b",
+    "valid": 3924,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "hagezi-tif-domains": {
+    "set_sha256": "561cdd8720003711ad79a95f53ca2d2c7abe8f0e8ff7d05cbf0d98ed8e105691",
+    "valid": 1851038,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "hagezi-tif-ips": {
+    "set_sha256": "91c221c9c64771e3e1696a75e28b3feef5ff053ac158077ec5737ea519ba11bb",
+    "valid": 35906,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "ipsum-level3": {
+    "set_sha256": "8e3294597352c163164d78263d4e8dda5ca6819da81e849aa4d8eba665461e19",
+    "valid": 18245,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "ipthreat-100": {
+    "set_sha256": "3cd1cdbd9f38d59f22142726c9f1435f7e490656cdd483888e1a06050a01abf6",
+    "valid": 977,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "phishing-army-extended": {
+    "set_sha256": "faa916c9d4e49ac4679b1ea239693c4fd8587ab167bd9380a840a612606deca3",
+    "valid": 151724,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "siberkapan-domains": {
+    "set_sha256": "ac57892d8a8cca054497d2be2334cdfabeb8b062bed7e58cbb8f5ad82e23b3b9",
+    "valid": 10680,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "siberkapan-ips": {
+    "set_sha256": "4a65b89d9501b00a622d53a47c075173b7e9bec98a46e432987533be8cafc36c",
+    "valid": 40832,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "stamparm-blackbook": {
+    "set_sha256": "bf00cd322d2f44592ee6c4826e84b6096ac4444ac51b4ba189c695fdb723b17f",
+    "valid": 18150,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "stopforumspam-toxic-domains": {
+    "set_sha256": "e0bc2226065fb3fde32526d3a029cf0b6dfd52e8ed7e42d860fca63618dee313",
+    "valid": 77154,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "threatcluster-domains": {
+    "set_sha256": "935fc7ab6bb6eec909fbca6c719989c126375aba1dd1a77c8fb97344121f5fcb",
+    "valid": 730,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "threatcluster-ips": {
+    "set_sha256": "d6c05d0f59aa95c8fcdd133f90876a94daa22433c7a68f131bc14fc97b56ba2b",
+    "valid": 223,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "threatview-domain-high": {
+    "set_sha256": "378e1e0c61bbf88835eec1cca6d97ce06a488e66a3f5151f60ec178222d1c249",
+    "valid": 550377,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  },
+  "threatview-ip-high": {
+    "set_sha256": "88a0bb089d74474178fd8c2231fe7a2b473d271364208c6dda4444bf8f35ae22",
+    "valid": 16933,
+    "last_changed": "2026-11-02",
+    "last_ok": "2026-11-02",
+    "failures": 0,
+    "failing_since": null,
+    "last_error": null,
+    "last_failure_counted": null
+  }
+}
