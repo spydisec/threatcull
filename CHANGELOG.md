@@ -18,6 +18,12 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   and restore" for the steps. A configuration file exported by this version needs this version or
   newer to import, because older versions reject the new fields.
 
+### Changed
+
+- 🔒 **One ThreatCull per data directory.** `serve` and `run` now hold a lock on the data directory.
+  A second `serve`, or `threatcull run` while `serve` runs (for example from `cron`), stops with
+  "ThreatCull is running on …: stop it first".
+
 ### Documentation
 
 - 📝 **Safer full backups.** The README said to copy the `threatcull-data` volume for a full backup.

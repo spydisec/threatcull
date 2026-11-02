@@ -92,14 +92,20 @@ Data lives on the `threatcull-data` volume.
 
 ### Air-gapped install
 
-On a machine with internet access, save the image, copy it over, and load it:
+On a machine with internet access, pull and save the image:
 
 ```bash
+docker pull ghcr.io/spydisec/threatcull:2
 docker save ghcr.io/spydisec/threatcull:2 -o threatcull.tar
+```
+
+Copy `threatcull.tar` and `docker-compose.yaml` to the air-gapped machine, then load the image there:
+
+```bash
 docker load -i threatcull.tar
 ```
 
-Run the `docker save` on the connected machine and the `docker load` on the air-gapped one. Add
+Start it with `docker compose up -d` as usual. Add
 Sources as `file://` URLs for files in `/data/imports/`, and update the Catalog by uploading the
 file. The web UI loads nothing from the internet.
 
@@ -198,16 +204,15 @@ docker compose run --rm -T threatcull config import --restore-tokens - < threatc
 ```
 
 In the web UI, tick **Restore Feed Tokens and API tokens from the file** on Settings and import the
-file. Old feed URLs and API tokens keep working. Rotate your Feed Tokens afterwards. The feeds stay
-empty until the next Compile, so click **Run now**.
+file. Old feed URLs and API tokens keep working, so your devices keep pulling their feeds. The feeds
+stay empty until the next Compile, so click **Run now**.
+
+Once everything works, rotate your Feed Tokens on the Outputs page and update each device. Rotating
+retires the hashes stored in the backup file, which matters most if others may have seen the file.
 
 Without the option, an import never adopts the hashes in the file, so importing a file someone else
 shared gives them no access. If API tokens belonged to users other than `admin`, create those users
 before you import.
-
-Two things live outside the database and are not in the file. Get the Catalog update again with
-**Check for updates** on the Sources page, or upload the Catalog file if you are offline. Copy the
-data directory's `imports/` folder across by hand.
 
 ### Full database backup (optional)
 
@@ -217,20 +222,45 @@ This copies the whole database. It works while ThreatCull runs:
 docker compose run --rm threatcull backup create
 ```
 
-The file goes to `/data/backups/` inside the volume. Copy it off the host.
+The command prints the file's path, for example `/data/backups/threatcull-20261102T092437Z.db`.
+Copy the file off the host into the current folder:
 
-To restore, stop ThreatCull, restore the file, then start it again:
+```bash
+docker compose cp threatcull:/data/backups/threatcull-20261102T092437Z.db .
+```
+
+To restore on the same host, stop ThreatCull, restore the file, then start it again:
 
 ```bash
 docker compose stop
-docker compose run --rm threatcull backup restore /data/backups/FILE
+docker compose run --rm threatcull backup restore /data/backups/threatcull-20261102T092437Z.db
 docker compose start
 ```
 
+To restore on a new host, put the backup file next to `docker-compose.yaml`, make it readable by the
+image's user, and mount it into a one-off container. Run this before you first start ThreatCull, or
+after `docker compose stop`:
+
+```bash
+chmod 644 threatcull-20261102T092437Z.db
+docker compose run --rm -v "$PWD/threatcull-20261102T092437Z.db:/restore.db:ro" threatcull backup restore /restore.db
+docker compose up -d
+```
+
+The backup file is private (mode 0600) and the image's user can't read it otherwise. Restore copies
+it into the volume, so delete your copy or set it back with `chmod 600` afterwards.
+
 Restore refuses to run while ThreatCull runs. It checks the file first and refuses a backup from a
 newer ThreatCull. It keeps a safety copy of the current database as `/data/backups/pre-restore-…db`.
-Use `docker compose run`, which runs as the image's own user, and not `docker exec` as root, so the
-restored file stays owned by the right user.
+Because the ThreatCull container must be stopped, `docker exec` into it can't work. Use
+`docker compose run --rm`, which starts a one-off container as the image's own user.
+
+### What neither backup holds
+
+Some things live outside the database and are in neither backup. Get the Catalog update again with
+**Check for updates** on the Sources page, or upload the Catalog file if you are offline. Copy the
+data directory's `imports/` folder across by hand. The session secret isn't backed up either, so
+everyone logs in again after a restore on a new host.
 
 ## Run without Docker
 
@@ -268,8 +298,8 @@ uv run threatcull serve --host <lan-ip> --port 6969
   capabilities and blocks privilege escalation. It also works with `read_only: true` and
   `tmpfs: [/tmp]`: SQLite writes its temporary files to `/data`, so they don't use RAM.
 - **Reverse proxy with TLS:** start `serve` with `--secure-cookies` and `--trusted-proxy <proxy-ip>`.
-- **Scheduling:** `serve` runs fetches and compiles itself. Don't also run `threatcull run` from `cron`
-  on the same data directory.
+- **Scheduling:** `serve` runs fetches and compiles itself. `threatcull run` refuses to start while
+  `serve` runs on the same data directory, so don't schedule it from `cron` as well.
 
 ## Sources
 

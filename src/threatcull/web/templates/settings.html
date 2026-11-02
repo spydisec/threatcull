@@ -75,11 +75,11 @@
     {% if import_result.skipped %}
     <ul class="result-list skipped">{% for line in import_result.skipped %}<li>{{ line }}</li>{% endfor %}</ul>
     {% endif %}
-    {% if feeds_empty_note is defined and feeds_empty_note %}
-    <p class="muted">{{ feeds_empty_note }}</p>
-    {% endif %}
     {% if not import_result.applied and not import_result.restored and not import_result.skipped %}
     <p class="muted">Nothing to change: this install already matches the file.</p>
+    {% endif %}
+    {% if feeds_empty_note is defined and feeds_empty_note %}
+    <p class="muted">{{ feeds_empty_note }}</p>
     {% endif %}
   </div>
   {% endif %}
