@@ -8,6 +8,12 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Documentation
+
+- 📝 **Safer full backups.** The README said to copy the `threatcull-data` volume for a full backup.
+  Copying it while ThreatCull runs can give a corrupt database, so stop the container first. The
+  Quick start is also numbered steps now, and the README says who ThreatCull is for.
+
 ## [2.6.0] - 2026-11-02
 
 A Catalog health check, a private `/data` for new volumes, and the abuse.ch Sources leave the Catalog.
