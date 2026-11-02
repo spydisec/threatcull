@@ -34,7 +34,13 @@ from threatcull.catalog_update import (
 )
 from threatcull.clock import TZ_ENV_VAR, display_zone, utcnow
 from threatcull.compiling import compile_outputs, is_frozen
-from threatcull.datadir import DataDirError, DataDirLocked, data_dir_lock, ensure_data_dir
+from threatcull.datadir import (
+    LOCK_NAME,
+    DataDirError,
+    DataDirLocked,
+    data_dir_lock,
+    ensure_data_dir,
+)
 from threatcull.fetcher import FetchError, HttpFetcher
 from threatcull.fetching import fetch_all
 from threatcull.home_detect import detect_candidates, public_ip_candidate, public_ip_fetcher
@@ -306,6 +312,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         except DataDirLocked as exc:
             print(f"error: {exc}", file=sys.stderr)
             return EXIT_ERROR
+        except OSError as exc:
+            # e.g. a lock file left behind by root with mode 0600.
+            lock_file = args.data_dir / LOCK_NAME
+            print(f"error: cannot open the lock file {lock_file}: {exc.strerror}", file=sys.stderr)
+            return EXIT_ERROR
         return _main_locked(args)
 
 
@@ -381,10 +392,7 @@ def _backup_restore(args: argparse.Namespace) -> int:
         else ""
     )
     print(f"Restored {args.file} (schema {report.schema}).{note}")
-    print(
-        "Feeds stay empty until the next Compile: click Run now or wait for the schedule. "
-        "The Output files on disk are from before the restore until then."
-    )
+    print(f"{FEEDS_EMPTY_NOTE} The Output files on disk are from before the restore until then.")
     return EXIT_OK
 
 
