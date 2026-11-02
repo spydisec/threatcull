@@ -1,9 +1,11 @@
 name: Docker
 
+# Pull requests only: a merge into dev or main builds the same tree the pull request
+# already built, and the Release workflow builds the tag itself. Run workflow in the
+# Actions tab builds by hand.
 on:
   pull_request:
-  push:
-    branches: [main, dev]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -44,10 +46,11 @@ jobs:
           < Dockerfile
       - name: Validate docker-compose.yaml
         run: docker compose -f docker-compose.yaml config --quiet
-      # Proves the fork path on every run: with no dhi.io login yet, the fallback build
-      # must not touch the DHI stages (BuildKit skips stages the target doesn't use).
+      # Proves the fork path when the Dockerfile changes: with no dhi.io login yet, the
+      # fallback build must not touch the DHI stages (BuildKit skips stages the target
+      # doesn't use).
       - name: Fallback build without dhi.io (what fork pull requests run)
-        if: env.DHI == 'true'
+        if: ${{ env.DHI == 'true' && (needs.changes.result != 'success' || needs.changes.outputs.dockerfile == 'true') }}
         run: |
           read -ra extra <<< "$FALLBACK_ARGS"
           docker build "${extra[@]}" --build-arg VERSION=ci -t threatcull:fallback .
@@ -84,17 +87,17 @@ jobs:
           only-fixed: true
           output-format: table
 
-  # Releases publish arm64 too (Raspberry Pis): build it here so an arm64 problem
-  # shows on the pull request, not on the release tag. Build only; no push, no run.
+  # Releases publish arm64 too (Raspberry Pis): build and smoke-test it on a native
+  # arm64 runner so an arm64 problem shows on the pull request, not on the release tag.
   arm64:
     needs: changes
     # Runs when the change can affect it, and always if the changes check failed.
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docker == 'true') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
     # Pull requests from forks get no repository secrets: they build on the standard
     # python:3.15-slim image (the Dockerfile's fallback) instead of Docker Hardened
-    # Images, so outside contributions still pass. Nothing from these builds is published.
+    # Images. Nothing from these builds is published.
     env:
       DHI: ${{ secrets.DOCKERHUB_TOKEN != '' }}
       FALLBACK_ARGS: >-
@@ -104,8 +107,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # The base images come from Docker Hardened Images (dhi.io), which needs a Docker
       # account. DOCKERHUB_USERNAME / DOCKERHUB_TOKEN: a read-only access token.
       - name: Log in to dhi.io
@@ -116,6 +117,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build linux/arm64
+        env:
+          DOCKER_BUILDKIT: "1"
         run: |
           if [ "$DHI" = "true" ]; then extra=(); else read -ra extra <<< "$FALLBACK_ARGS"; fi
-          docker buildx build "${extra[@]}" --platform linux/arm64 --build-arg VERSION=ci .
+          docker build "${extra[@]}" --build-arg VERSION=ci -t threatcull:ci .
+      - name: Smoke test (no internet needed)
+        run: scripts/docker-smoke.sh threatcull:ci
