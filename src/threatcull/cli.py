@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import getpass
 import os
 import sqlite3
@@ -26,7 +27,7 @@ from threatcull.catalog_update import (
 )
 from threatcull.clock import TZ_ENV_VAR, display_zone, utcnow
 from threatcull.compiling import compile_outputs, is_frozen
-from threatcull.datadir import DataDirError, ensure_data_dir
+from threatcull.datadir import DataDirError, DataDirLocked, data_dir_lock, ensure_data_dir
 from threatcull.fetcher import FetchError, HttpFetcher
 from threatcull.fetching import fetch_all
 from threatcull.home_detect import detect_candidates, public_ip_candidate, public_ip_fetcher
@@ -56,6 +57,8 @@ from threatcull.web.security import parse_trusted_proxies
 
 DB_NAME = "threatcull.db"
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED = 0, 1, 2
+# Commands that hold the data-directory lock for their whole run.
+LOCKING_COMMANDS = frozenset({"serve", "run"})
 MINE_HELP = "your own network: never published, and flagged when a Source lists it"
 ADMIN_ENV_VAR = "THREATCULL_ADMIN_PASSWORD"
 ADMIN_FILE_ENV_VAR = "THREATCULL_ADMIN_PASSWORD_FILE"  # a Docker secret; wins over the above
@@ -253,6 +256,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     except DataDirError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
+    with contextlib.ExitStack() as stack:
+        try:
+            if args.command in LOCKING_COMMANDS:
+                # Taken before connect() so a locked directory is never migrated or written.
+                stack.enter_context(data_dir_lock(args.data_dir))
+        except DataDirLocked as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+        return _main_locked(args)
+
+
+def _main_locked(args: argparse.Namespace) -> int:
     conn = connect(args.data_dir / DB_NAME)
     try:
         entries = (
