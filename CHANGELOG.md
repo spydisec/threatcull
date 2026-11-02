@@ -16,6 +16,17 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   `docker compose run --rm --entrypoint python threatcull -c "import os; os.chmod('/data', 0o700)"`
   once to tighten it.
 
+### Removed
+
+- 🗑️ **abuse.ch Sources leave the Catalog (revision 5).** The abuse.ch
+  [terms of use](https://abuse.ch/terms-of-use/) now give access to authenticated users only, for
+  not-for-profit use within query limits, so anonymous downloads no longer fit the Catalog. The
+  Catalog drops `feodotracker-ipblocklist` (enabled by default until now), `urlhaus-hostfile` and
+  `threatfox-hostfile`; the last two already answer HTTP 410. Use **Check for updates** on
+  the Sources page: ThreatCull disables all three on an existing install and marks them removed from
+  the Catalog. Support for Sources that need an API key is tracked in
+  [#116](https://github.com/spydisec/threatcull/issues/116).
+
 ## [2.5.2] - 2026-11-02
 
 Security fix for the CA bundle, and the image moves to Python 3.15. Nothing to do when upgrading.
