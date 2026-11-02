@@ -8,6 +8,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Added
+
+- 🩺 **Catalog health check.** A workflow, started by hand for now, downloads every Catalog Source
+  and keeps one issue listing Sources that stopped working or stopped changing, so a broken Source
+  is caught before it ships. The Catalog request bot now also rejects suggested feeds that serve an
+  HTML page.
+  [#87](https://github.com/spydisec/threatcull/issues/87)
+
 ### Fixed
 
 - 🔧 **The image creates `/data` as 0700.** Since 2.1.0 the image created `/data` as 0755, so every
@@ -76,11 +84,6 @@ on an existing install.
   `frozen`, and `threatcull sources list` prints both. Frozen Sources still count towards scores.
   After the upgrade, the change date starts from the newest entry each Source added.
   [#84](https://github.com/spydisec/threatcull/issues/84)
-- 🩺 **Catalog health check.** A workflow, started by hand for now, downloads every Catalog Source
-  and keeps one issue listing Sources that stopped working or stopped changing, so a broken Source
-  is caught before it ships. The Catalog request bot now also rejects suggested feeds that serve an
-  HTML page.
-  [#87](https://github.com/spydisec/threatcull/issues/87)
 
 ### Changed
 
