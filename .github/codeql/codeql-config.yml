@@ -1,0 +1,7 @@
+name: ThreatCull CodeQL
+
+# The test suite feeds the code deliberate bad input (URL strings, fixed hashes,
+# private addresses); alerts on it are noise. The application code is scanned in full.
+paths-ignore:
+  - tests
+  - frontend/node_modules
