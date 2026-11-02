@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from threatcull.clock import ts
 from threatcull.store.errors import NotFoundError
+from threatcull.store.outputs import TOKEN_HASH
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,16 @@ class ApiTokenInfo:
     username: str
     created_at: str
     last_used_at: str | None
+
+
+@dataclass(frozen=True)
+class ApiTokenRecord:
+    """A token as stored, for backup and restore: the hash, never the token."""
+
+    name: str
+    username: str
+    token_hash: str
+    created_at: str
 
 
 def _hash(token: str) -> str:
@@ -109,3 +120,33 @@ def list_api_tokens(conn: sqlite3.Connection) -> list[ApiTokenInfo]:
         )
         for row in rows
     ]
+
+
+def export_api_tokens(conn: sqlite3.Connection) -> list[ApiTokenRecord]:
+    rows = conn.execute(
+        "SELECT name, username, token_hash, created_at FROM api_tokens ORDER BY name"
+    ).fetchall()
+    return [
+        ApiTokenRecord(row["name"], row["username"], row["token_hash"], row["created_at"])
+        for row in rows
+    ]
+
+
+def import_api_token(conn: sqlite3.Connection, record: ApiTokenRecord) -> None:
+    """Insert ``record`` as it is; never replaces an existing token."""
+    if not _NAME.fullmatch(record.name):
+        raise ValueError(f"API token name {record.name!r} is not valid")
+    if not TOKEN_HASH.fullmatch(record.token_hash):
+        raise ValueError("an API token hash must be 64 lowercase hex characters")
+    if (
+        conn.execute("SELECT 1 FROM users WHERE username = ?", (record.username,)).fetchone()
+        is None
+    ):
+        raise NotFoundError(f"no user {record.username!r}")
+    try:
+        conn.execute(
+            "INSERT INTO api_tokens (name, token_hash, username, created_at) VALUES (?, ?, ?, ?)",
+            (record.name, record.token_hash, record.username, record.created_at),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise ValueError(f"API token {record.name!r} already exists") from exc
