@@ -14,10 +14,10 @@
 ARG PYTHON_BUILD_IMAGE=dhi-build
 ARG PYTHON_RUNTIME_IMAGE=dhi-runtime
 
-FROM dhi.io/python:3.15-dev@sha256:74f0261e2bfead93cb7b7c553b198ce2a7b8ddeae8e35264043e1864379976ac AS dhi-build
-FROM dhi.io/python:3.15@sha256:8b0f1de0f2a53209a735cab91d52116938aa38858c24537f454f87bbaa718c5a AS dhi-runtime
+FROM dhi.io/python:3.15-dev@sha256:f9121e954baf4ec5f29d85f5025b64b4274054607db9753ac090a42281c66a7d AS dhi-build
+FROM dhi.io/python:3.15@sha256:99033b12411ffc5b82f9c5175c3e3966022e910837bbd88f28a944c18754466c AS dhi-runtime
 
-FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
 
 FROM ${PYTHON_BUILD_IMAGE} AS build
 COPY --link --from=uv /uv /usr/local/bin/uv
