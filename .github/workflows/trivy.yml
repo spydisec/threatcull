@@ -1,0 +1,81 @@
+name: Trivy
+
+# Second opinion next to Grype. Grype fails a pull request on a fixable high or critical
+# CVE (docker.yml) and scans the published image every week (image-scan.yml). Trivy
+# builds the image from dev and reports its findings as code scanning alerts in the
+# Security tab; it never fails the run on a finding.
+on:
+  push:
+    branches: [dev]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - src/**
+      - .github/workflows/trivy.yml
+  # Pull requests run it only when this file changes, so an edit here gets tested.
+  pull_request:
+    branches: [dev]
+    paths:
+      - .github/workflows/trivy.yml
+  # New CVEs appear without a code change: scan dev every week as well.
+  schedule:
+    - cron: "42 16 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trivy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write # upload the SARIF report to code scanning
+    # Only the Docker Hardened Images build is what releases publish, and dhi.io needs
+    # the Docker Hub secrets. Runs without them (fork pull requests) skip the scan.
+    env:
+      DHI: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: No Docker Hub secrets
+        if: env.DHI != 'true'
+        run: echo "::notice::No Docker Hub secrets, so no Docker Hardened Images build. Trivy scan skipped."
+      - name: Log in to dhi.io
+        if: env.DHI == 'true'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build
+        if: env.DHI == 'true'
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: docker build --build-arg VERSION=ci -t threatcull:ci .
+      # Same policy as the Grype scans: high and critical CVEs that already have a fix.
+      - name: Scan the image for known vulnerabilities (Trivy)
+        if: env.DHI == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: threatcull:ci
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          limit-severities-for-sarif: true
+          format: sarif
+          output: trivy-results.sarif
+      - name: Upload the report to code scanning
+        if: env.DHI == 'true'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image
