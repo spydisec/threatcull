@@ -1,6 +1,6 @@
 [project]
 name = "threatcull"
-version = "2.7.0"
+version = "2.7.1"
 description = "Self-hosted threat-feed compiler: cull the noise, block the threats."
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -8,7 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "apscheduler>=3.10,<4",
     "argon2-cffi>=25.1.0",
-    "fastapi>=0.141.1",
+    "fastapi>=0.163.1",
     "httpx>=0.28",
     "itsdangerous>=2.2.0",
     "jinja2>=3.1.6",
@@ -28,6 +28,7 @@ dev = [
     "pre-commit>=4.0",
     "pytest>=8.3",
     "pytest-cov>=6.0",
+    "pytest-xdist>=3.6",
     "ruff>=0.8",
     "types-PyYAML>=6.0",
 ]
