@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  image:
+  scan:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
