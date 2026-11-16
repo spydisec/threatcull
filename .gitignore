@@ -41,6 +41,10 @@ compose.yaml
 # Claude Code settings (local only)
 .claude/
 
+# Agent skills installed with the skills CLI, and its lock file (local only)
+.agents/
+skills-lock.json
+
 # Launch video renders and their working files (/brag-slim)
 brag-output/
 brag-output-*/
