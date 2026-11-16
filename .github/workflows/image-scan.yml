@@ -1,7 +1,8 @@
 name: Image scan
 
 # New CVEs appear after a release ships: scan the published image every week so a
-# fixable one shows up here instead of waiting for the next pull request.
+# fixable one shows up here instead of waiting for the next pull request. The same
+# findings go to the Security tab as code scanning alerts.
 on:
   schedule:
     - cron: "17 5 * * 1"
@@ -17,6 +18,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      security-events: write # upload the SARIF report to code scanning
     steps:
       # For .grype.yaml: the same ignore rules as the pull-request scan.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -27,6 +29,22 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # The action writes one format per run. This run writes the SARIF report and never
+      # fails, so the upload happens before the scan below fails the job on a finding.
+      - name: Scan ghcr.io/spydisec/threatcull:latest for code scanning (Grype)
+        id: sarif
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ghcr.io/spydisec/threatcull:latest
+          fail-build: false
+          severity-cutoff: high
+          only-fixed: true
+          output-format: sarif
+      - name: Upload the report to code scanning
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ steps.sarif.outputs.sarif }}
+          category: grype-image
       - name: Scan ghcr.io/spydisec/threatcull:latest (Grype)
         uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
