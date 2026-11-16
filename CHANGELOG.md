@@ -8,6 +8,21 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-11-16
+
+Dependency and base image updates, with one security fix. Nothing to do when upgrading.
+
+### Security
+
+- 🔐 **`opentelemetry-api` 1.45.2 fixes a denial of service** (GHSA-mf5v-w3w3-f6cg). FastAPI
+  installs `opentelemetry-api`, and 1.45.1 parsed the `traceparent` header in quadratic time.
+
+### Changed
+
+- 📦 **Dependency and base image updates.** FastAPI goes to 0.163.1, Starlette to 1.10.0, Pydantic
+  to 2.14.3 and python-multipart to 0.0.33. The image builds with uv 0.13.8 on newer digests of the
+  Docker Hardened Images `python:3.15` base.
+
 ## [2.7.0] - 2026-11-02
 
 Backups that bring an install back with the same feed URLs, and an optional full database backup.
@@ -528,7 +543,11 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.5.1...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.7.1...HEAD
+[2.7.1]: https://github.com/spydisec/threatcull/compare/v2.7.0...v2.7.1
+[2.7.0]: https://github.com/spydisec/threatcull/compare/v2.6.0...v2.7.0
+[2.6.0]: https://github.com/spydisec/threatcull/compare/v2.5.2...v2.6.0
+[2.5.2]: https://github.com/spydisec/threatcull/compare/v2.5.1...v2.5.2
 [2.5.1]: https://github.com/spydisec/threatcull/compare/v2.5.0...v2.5.1
 [2.5.0]: https://github.com/spydisec/threatcull/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/spydisec/threatcull/compare/v2.3.1...v2.4.0
