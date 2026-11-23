@@ -8,6 +8,26 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.7.2] - 2026-11-23
+
+A rebuilt image that fixes two high-severity glibc vulnerabilities, and three new Catalog Sources.
+Nothing to do when upgrading. Use **Check for updates** on the Sources page to get Catalog revision 6
+on an existing install.
+
+### Security
+
+- 🔐 **The image's base fixes 14 glibc vulnerabilities**, two of them rated high (CVE-2026-19499
+  and CVE-2026-5435). The image builds on newer digests of the Docker Hardened Images
+  `python:3.15` base, which ship `libc6` 2.41-12+deb13u5, and with uv 0.13.9.
+
+### Added
+
+- 🆕 **Three new Catalog Sources (revision 6)**, all disabled until you enable them: StopForumSpam
+  IPs (`stopforumspam-ips-7d`), BotScout bot IPs (`botscout-7d`) and CyberCrime Tracker C2 IPs
+  (`cybercrime-tracker`). ThreatCull downloads them from the daily FireHOL mirror, because the
+  publishers offer no plain list. Use **Check for updates** on the Sources page to get them on an
+  existing install.
+
 ## [2.7.1] - 2026-11-16
 
 Dependency and base image updates, with one security fix. Nothing to do when upgrading.
@@ -543,7 +563,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.7.1...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.7.2...HEAD
+[2.7.2]: https://github.com/spydisec/threatcull/compare/v2.7.1...v2.7.2
 [2.7.1]: https://github.com/spydisec/threatcull/compare/v2.7.0...v2.7.1
 [2.7.0]: https://github.com/spydisec/threatcull/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/spydisec/threatcull/compare/v2.5.2...v2.6.0
