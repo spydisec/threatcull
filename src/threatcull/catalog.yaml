@@ -4,7 +4,7 @@
 # revision: raise it by one with every change. ThreatCull uses the newest revision
 # it has: the one it shipped with, or one saved by `threatcull catalog update`.
 # requires: the oldest ThreatCull version that understands this file.
-revision: 6
+revision: 7
 requires: "2.0.0"
 sources:
   # ---------------------------------------------------------------- IP blocklists
@@ -55,14 +55,6 @@ sources:
   - id: et-compromised-ips
     name: Proofpoint Emerging Threats compromised IPs
     url: https://rules.emergingthreats.net/blockrules/compromised-ips.txt
-    format: plain
-    kind: ip
-    category: malicious
-    refresh_minutes: 1440
-
-  - id: botvrij-ip-dst
-    name: botvrij.eu destination IPs
-    url: https://www.botvrij.eu/data/ioclist.ip-dst.raw
     format: plain
     kind: ip
     category: malicious
@@ -149,78 +141,6 @@ sources:
     refresh_minutes: 1440
 
   # ------------------------------------------------------------ Domain blocklists
-  - id: blocklistproject-malware
-    name: The Block List Project (malware)
-    family: blocklistproject
-    url: https://blocklistproject.github.io/Lists/malware.txt
-    format: hosts
-    kind: domain
-    category: malicious
-    refresh_minutes: 1440
-
-  - id: blocklistproject-phishing
-    name: The Block List Project (phishing)
-    family: blocklistproject
-    url: https://blocklistproject.github.io/Lists/phishing.txt
-    format: hosts
-    kind: domain
-    category: phishing
-    refresh_minutes: 1440
-    default_enabled: true
-
-  - id: blocklistproject-ransomware
-    name: The Block List Project (ransomware)
-    family: blocklistproject
-    url: https://blocklistproject.github.io/Lists/ransomware.txt
-    format: hosts
-    kind: domain
-    category: malicious
-    refresh_minutes: 1440
-
-  - id: blocklistproject-scam
-    name: The Block List Project (scam)
-    family: blocklistproject
-    url: https://blocklistproject.github.io/Lists/scam.txt
-    format: hosts
-    kind: domain
-    category: spam
-    refresh_minutes: 1440
-
-  - id: blocklistproject-ads
-    name: The Block List Project (ads)
-    family: blocklistproject
-    url: https://blocklistproject.github.io/Lists/ads.txt
-    format: hosts
-    kind: domain
-    category: ads_tracking
-    refresh_minutes: 1440
-    default_enabled: true
-
-  - id: blocklistproject-tracking
-    name: The Block List Project (tracking)
-    family: blocklistproject
-    url: https://blocklistproject.github.io/Lists/tracking.txt
-    format: hosts
-    kind: domain
-    category: ads_tracking
-    refresh_minutes: 1440
-
-  - id: stamparm-blackbook
-    name: Blackbook malware domains
-    url: https://raw.githubusercontent.com/stamparm/blackbook/master/blackbook.txt
-    format: plain
-    kind: domain
-    category: malicious
-    refresh_minutes: 1440
-
-  - id: digitalside-domains
-    name: DigitalSide Threat-Intel latest domains
-    url: https://raw.githubusercontent.com/davidonzo/Threat-Intel/master/lists/latestdomains.txt
-    format: plain
-    kind: domain
-    category: malicious
-    refresh_minutes: 1440
-
   - id: hagezi-tif-domains
     name: HaGeZi Threat Intelligence Feeds (domains)
     family: hagezi
@@ -237,14 +157,6 @@ sources:
     kind: domain
     category: phishing
     refresh_minutes: 360
-
-  - id: adaway-hosts
-    name: AdAway default hosts
-    url: https://adaway.org/hosts.txt
-    format: hosts
-    kind: domain
-    category: ads_tracking
-    refresh_minutes: 1440
 
   - id: stopforumspam-toxic-domains
     name: StopForumSpam toxic domains

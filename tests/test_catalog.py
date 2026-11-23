@@ -93,6 +93,8 @@ SOURCES_SHA256 = {
     5: "66ef1bec4e69bf379b668e768bba754ea6f6447c33123d7d3c5459be71201a82",
     # Three Sources from FireHOL mirrors: StopForumSpam IPs, BotScout, CyberCrime Tracker
     6: "89f540ce94418166246f885629591a9ebf17c47f9820f06a6581c5df872a1e0e",
+    # Ten Sources removed: their publishers stopped updating them
+    7: "a3fbd46f8c2742256e77a4a27013f89d31de2a142ca016f38fe91a6e698d11aa",
 }
 
 
