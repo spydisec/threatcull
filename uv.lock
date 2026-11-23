@@ -1173,7 +1173,7 @@ wheels = [
 
 [[package]]
 name = "threatcull"
-version = "2.7.1"
+version = "2.7.2"
 source = { editable = "." }
 dependencies = [
     { name = "apscheduler" },
