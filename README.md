@@ -8,9 +8,9 @@
 [![License: AGPL-3.0](https://img.shields.io/github/license/spydisec/threatcull)](LICENSE)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-20808D)](https://deepwiki.com/spydisec/threatcull)
 
-Self-hosted threat-feed compiler. ThreatCull downloads public blocklists, drops duplicates, private
-ranges and your own infrastructure, scores each indicator by how many independent sources list it, and
-serves the result to your firewalls, DNS servers and SIEM.
+ThreatCull is a self-hosted threat-feed compiler. It downloads public blocklists, drops duplicates,
+private ranges and your own infrastructure, scores each indicator by how many independent sources list
+it, and serves the result to your firewalls, DNS servers and SIEM.
 
 It's for anyone who runs a firewall, DNS filter or SIEM and wants one curated blocklist instead of many
 raw ones. ThreatCull ships no threat data and doesn't block traffic itself: your devices fetch its
@@ -105,9 +105,9 @@ Copy `threatcull.tar` and `docker-compose.yaml` to the air-gapped machine, then 
 docker load -i threatcull.tar
 ```
 
-Start it with `docker compose up -d` as usual. Add
-Sources as `file://` URLs for files in `/data/imports/`, and update the Catalog by uploading the
-file. The web UI loads nothing from the internet.
+Start it with `docker compose up -d` as usual. Add Sources as `file://` URLs for files in
+`/data/imports/`, and update the Catalog by uploading the file. The web UI loads nothing from the
+internet.
 
 ## First steps
 
@@ -136,9 +136,9 @@ in the web UI to see its UTC value.
 
 ### Sizing
 
-What ThreatCull needs depends on how many lines your enabled Sources list, not on the platform. It
-runs the same on a single-board computer, a small VM or a large server; bigger lists take
-longer on slower processors and disks.
+What ThreatCull needs depends on how many lines your enabled Sources list. It runs the same on a
+single-board computer, a small VM or a large server; bigger lists take longer on slower processors
+and disks.
 
 Measured with `scripts/bench.py` on an 8-core x86 machine with an SSD:
 
@@ -148,12 +148,12 @@ Measured with `scripts/bench.py` on an 8-core x86 machine with an SSD:
 | 1,000,000 domains (600,000) | 19 s | 1 s | 16 s | 79 MB | 96 MB |
 | 3,000,000 domains (1,800,000) | 79 s | 3 s | 56 s | 79 MB | 287 MB |
 
-- **Memory** stays under about 100 MB for lists of any size: downloads go to a temporary
-  file and are read line by line.
-- **Disk:** plan on about 100 MB of database per million unique entries, plus the Output files.
-  Settings and the dashboard show the current sizes.
-- **Time** grows with the number of lines. A Source whose list hasn't changed is skipped in
-  seconds, so only the first Fetch, and Fetches of lists that change, take long.
+- Memory stays under about 100 MB for lists of any size: ThreatCull downloads each list to a
+  temporary file and reads it line by line.
+- Plan on about 100 MB of database per million unique entries, plus the Output files. Settings and
+  the dashboard show the current sizes.
+- Time grows with the number of lines. ThreatCull skips an unchanged list in seconds, so only the
+  first Fetch and Fetches of lists that changed take long.
 
 Run `uv run python scripts/bench.py --lines 1000000` on your own host for numbers that apply to it.
 On a small host (1 to 2 GB of RAM, an SD card or a slow disk, as on a Raspberry Pi or a small
@@ -167,7 +167,7 @@ VPS):
 
 ## Upgrade
 
-To upgrade, pull the new image and restart:
+Pull the new image and restart:
 
 ```bash
 docker compose pull && docker compose up -d
@@ -251,17 +251,18 @@ docker compose up -d
 The backup file is private (mode 0600) and the image's user can't read it otherwise. Restore copies
 it into the volume, so delete your copy or set it back with `chmod 600` afterwards.
 
-Restore refuses to run while ThreatCull runs. It checks the file first and refuses a backup from a
-newer ThreatCull. It keeps a safety copy of the current database as `/data/backups/pre-restore-…db`.
-Because the ThreatCull container must be stopped, `docker exec` into it can't work. Use
-`docker compose run --rm`, which starts a one-off container as the image's own user.
+Restore refuses to run while ThreatCull runs. It checks the file first, refuses a backup from a
+newer ThreatCull, and keeps a safety copy of the current database as
+`/data/backups/pre-restore-…db`. Because the ThreatCull container must be stopped, `docker exec`
+into it can't work. Use `docker compose run --rm`, which starts a one-off container as the image's
+own user.
 
 ### What neither backup holds
 
-Some things live outside the database and are in neither backup. Get the Catalog update again with
-**Check for updates** on the Sources page, or upload the Catalog file if you are offline. Copy the
-data directory's `imports/` folder across by hand. The session secret isn't backed up either, so
-everyone logs in again after a restore on a new host.
+The Catalog update, the `imports/` folder and the session secret live outside the database. Get
+the Catalog update again with **Check for updates** on the Sources page, or upload the Catalog file
+if you are offline. Copy the data directory's `imports/` folder across by hand. The session secret
+isn't backed up, so everyone logs in again after a restore on a new host.
 
 ## Run without Docker
 
