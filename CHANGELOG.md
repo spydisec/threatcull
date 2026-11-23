@@ -8,6 +8,18 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Removed
+
+- 🗑️ **Ten Sources that stopped updating leave the Catalog (revision 7).** The six Block List
+  Project lists (`blocklistproject-ads`, `-tracking`, `-malware`, `-phishing`, `-ransomware` and
+  `-scam`) last changed in July 2026, `botvrij-ip-dst` in February 2026, `adaway-hosts` in
+  December 2025, `stamparm-blackbook` in June 2025 and `digitalside-domains` in October 2024.
+  `blocklistproject-ads` and `blocklistproject-phishing` were enabled by default until now. After
+  **Check for updates**, ThreatCull disables these Sources on an existing install; re-enable one
+  on the Sources page to keep using it. The Catalog now has no ads and tracking Source and enables
+  no domain blocklist by default, so a new install publishes domains once you enable a domain
+  Source.
+
 ## [2.7.2] - 2026-11-23
 
 A rebuilt image that fixes two high-severity glibc vulnerabilities, and three new Catalog Sources.
