@@ -8,6 +8,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Added
+
+- 🆕 **Three new Catalog Sources (revision 6)**, all disabled until you enable them: StopForumSpam
+  IPs (`stopforumspam-ips-7d`), BotScout bot IPs (`botscout-7d`) and CyberCrime Tracker C2 IPs
+  (`cybercrime-tracker`). ThreatCull downloads them from the daily FireHOL mirror, because the
+  publishers offer no plain list. Use **Check for updates** on the Sources page to get them on an
+  existing install.
+
 ## [2.7.1] - 2026-11-16
 
 Dependency and base image updates, with one security fix. Nothing to do when upgrading.

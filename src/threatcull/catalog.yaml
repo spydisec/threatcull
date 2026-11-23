@@ -4,7 +4,7 @@
 # revision: raise it by one with every change. ThreatCull uses the newest revision
 # it has: the one it shipped with, or one saved by `threatcull catalog update`.
 # requires: the oldest ThreatCull version that understands this file.
-revision: 5
+revision: 6
 requires: "2.0.0"
 sources:
   # ---------------------------------------------------------------- IP blocklists
@@ -121,6 +121,33 @@ sources:
     category: scanner
     refresh_minutes: 360
 
+  # Mirrored daily by FireHOL (github.com/firehol/blocklist-ipsets): the publishers
+  # offer no plain list to download.
+  - id: stopforumspam-ips-7d
+    name: StopForumSpam IPs (7 days, via FireHOL)
+    family: stopforumspam
+    url: https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/stopforumspam_7d.ipset
+    format: plain
+    kind: ip
+    category: spam
+    refresh_minutes: 1440
+
+  - id: botscout-7d
+    name: BotScout bot IPs (7 days, via FireHOL)
+    url: https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/botscout_7d.ipset
+    format: plain
+    kind: ip
+    category: spam
+    refresh_minutes: 1440
+
+  - id: cybercrime-tracker
+    name: CyberCrime Tracker C2 IPs (via FireHOL)
+    url: https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/cybercrime.ipset
+    format: plain
+    kind: ip
+    category: c2
+    refresh_minutes: 1440
+
   # ------------------------------------------------------------ Domain blocklists
   - id: blocklistproject-malware
     name: The Block List Project (malware)
@@ -221,6 +248,7 @@ sources:
 
   - id: stopforumspam-toxic-domains
     name: StopForumSpam toxic domains
+    family: stopforumspam
     url: https://www.stopforumspam.com/downloads/toxic_domains_whole.txt
     format: plain
     kind: domain

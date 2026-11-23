@@ -91,6 +91,8 @@ SOURCES_SHA256 = {
     4: "46443d48f7f77b0d6ac0e5e95736cf0238c0c1d9cfa1db94d25e86c896802913",
     # abuse.ch Sources removed: authenticated, not-for-profit access only (terms of use)
     5: "66ef1bec4e69bf379b668e768bba754ea6f6447c33123d7d3c5459be71201a82",
+    # Three Sources from FireHOL mirrors: StopForumSpam IPs, BotScout, CyberCrime Tracker
+    6: "89f540ce94418166246f885629591a9ebf17c47f9820f06a6581c5df872a1e0e",
 }
 
 
