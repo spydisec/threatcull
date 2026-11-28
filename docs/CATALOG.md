@@ -85,8 +85,8 @@ form. [Open requests](https://github.com/spydisec/threatcull/issues?q=is%3Aopen+
 carry the `catalog` label. What happens next:
 
 1. **Automated check, within minutes.** A bot downloads the feed once, parses it the way
-   ThreatCull would and looks for duplicates. It comments with the
-   result and labels the issue `catalog-valid` or `needs-info`. Edit the issue to run it again.
+   ThreatCull would and looks for duplicates. It comments with the result and labels the issue
+   `catalog-valid` or `needs-info`. Edit the issue to run it again.
 2. **Review.** The project owner looks at the list and the publisher and adds the `approved`
    label. Only the owner can approve: the bot removes the label if anyone else adds it.
 3. **Pull request.** Approval opens a pull request that adds the Source, raises the Catalog
@@ -107,8 +107,8 @@ The Catalog is thin in these areas. Suggestions are welcome:
 
 - **Ads and tracking:** maintained advertising and tracker domain lists (no Source since
   revision 7).
-- **Scanners:** mass-scanning and brute-force source IPs (no Source yet).
-- **C2 domains:** command-and-control domains (the C2 Sources cover IPs only).
+- **Scanners:** mass-scanning and brute-force source IPs (one Source so far).
+- **C2 domains:** command-and-control domains (one Source so far).
 - **IPv6:** blocklists with IPv6 addresses.
 
 ### Adding one yourself

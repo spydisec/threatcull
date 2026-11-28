@@ -6,19 +6,15 @@ Bug reports, feature ideas and Catalog Source suggestions are welcome.
 
 ThreatCull doesn't accept code pull requests from outside contributors right now.
 
-Issues are welcome: bug reports, feature ideas, and new Catalog Sources through the
-**Add a Source to the Catalog** issue form.
+Open an issue instead. If you have a fix, describe it there instead of posting a patch: say what's
+wrong and the idea behind the fix, and the maintainer will implement it.
 
-If you have a fix, describe it in an issue instead of posting a patch: say what's wrong and the
-idea behind the fix, and the maintainer will implement it.
-
-This may change in the future. If it does, contributors will be asked to sign a Contributor
-License Agreement first.
+If that changes, ThreatCull will ask contributors to sign a Contributor License Agreement first.
 
 ## Issues
 
-Use the issue forms: bug report, feature request or a new Catalog Source. Report security problems
-privately (see [SECURITY.md](SECURITY.md)). Before pasting logs or config, remove Feed Tokens,
+Use the issue forms: bug report, feature request, or **Add a Source to the Catalog** for a new
+Catalog Source. Report security problems privately (see [SECURITY.md](SECURITY.md)). Before pasting logs or config, remove Feed Tokens,
 passwords, hostnames and addresses from your own network.
 
 ## Development
@@ -29,8 +25,9 @@ How the maintainer builds and changes ThreatCull:
 2. Branch from `dev` and open the pull request against `dev`. `main` holds releases.
 3. Run `make setup` once, then `make check` before you push. CI runs ruff (with its bandit
    rules), mypy strict, the test suite, semgrep, CodeQL, pip-audit, gitleaks, Vale and the Docker
-   build with a smoke test. Each job runs only when the pull request changes files it checks. To build the image yourself, run `docker login dhi.io` with a free Docker account
-   first (the base is a Docker Hardened Image), or build on the standard image instead:
+   build with a smoke test. Each job runs only when the pull request changes files it checks. To
+   build the image yourself, run `docker login dhi.io` with a free Docker account first (the base
+   is a Docker Hardened Image), or build on the standard image instead:
    `docker build --build-arg PYTHON_BUILD_IMAGE=python:3.15-slim --build-arg
    PYTHON_RUNTIME_IMAGE=python:3.15-slim .`
 4. Add or change tests in `tests/` with the code. `make test` runs the offline suite; tests
@@ -43,13 +40,13 @@ How the maintainer builds and changes ThreatCull:
 ## Releases
 
 The usual way: a release pull request renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and
-bumps the version in `pyproject.toml`; after it reaches `main`, pushing the `vX.Y.Z` tag publishes the
-image and the GitHub release, with its notes taken from that CHANGELOG.md section.
+bumps the version in `pyproject.toml`. After it reaches `main`, pushing the `vX.Y.Z` tag publishes
+the image and the GitHub release, with its notes taken from that CHANGELOG.md section.
 
 A release made in the GitHub Release UI works too: tag `vX.Y.Z` on `main`. The Release workflow
 builds that version even if `pyproject.toml` still has the previous one (it warns), and keeps the
-notes written in the UI when CHANGELOG.md has no section for the version. Bump `pyproject.toml` in the
-next pull request.
+notes written in the UI when CHANGELOG.md has no section for the version. Bump `pyproject.toml` in
+the next pull request.
 
 ## Catalog Sources
 
@@ -62,13 +59,12 @@ change with **Check for updates**, and only a higher revision replaces the Catal
 in [the Catalog page](docs/CATALOG.md); CI fails when they don't match.
 
 A workflow (`.github/workflows/catalog-health.yml`) downloads every Catalog Source and keeps
-one open issue, "Catalog health: Sources need attention" with the `catalog-health` label, listing
-Sources that failed, served an HTML page, could not be parsed or had no valid entries two weeks in a
-row, and blocklists whose entries have not changed for 30 days. Its history lives in `state.json` on the `catalog-health` branch; never merge that
-branch. It runs every Monday at 05:00 UTC; to check sooner, start it from the Actions tab with
-**Run workflow**.
+one open issue, "Catalog health: Sources need attention", with the `catalog-health` label. The
+issue lists Sources that failed, served an HTML page, could not be parsed or had no valid entries
+two weeks in a row, and blocklists whose entries have not changed for 30 days. The workflow keeps
+its history in `state.json` on the `catalog-health` branch; never merge that branch. It runs every
+Monday at 05:00 UTC; to check sooner, start it from the Actions tab with **Run workflow**.
 
 ## Licence
 
-ThreatCull is licensed under the [GNU AGPL-3.0](LICENSE). Outside code contributions aren't
-accepted at the moment; see [Contributions at the moment](#contributions-at-the-moment).
+ThreatCull is licensed under the [GNU AGPL-3.0](LICENSE).
