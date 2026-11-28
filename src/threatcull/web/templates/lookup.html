@@ -51,7 +51,7 @@
   <h2>Sightings</h2>
   {% if result.sightings %}
   <div class="table-wrap">
-  <table class="table">
+  <table class="table table-stack">
     <thead>
       <tr><th>Source</th><th>State</th><th>First seen</th><th>Last seen</th><th>Source status</th></tr>
     </thead>
@@ -60,9 +60,9 @@
       <tr>
         <td>{{ s.source_name }}</td>
         <td>{% if s.current %}<span class="pill pill-bad">current</span>{% else %}<span class="pill pill-off">no longer listed</span>{% endif %}</td>
-        <td class="nowrap">{{ s.first_seen | when }}</td>
-        <td class="nowrap">{{ s.last_seen | when }}</td>
-        <td>{{ "enabled" if s.enabled else "Source disabled" }}</td>
+        <td class="nowrap" data-label="First seen">{{ s.first_seen | when }}</td>
+        <td class="nowrap" data-label="Last seen">{{ s.last_seen | when }}</td>
+        <td data-label="Source status">{{ "enabled" if s.enabled else "Source disabled" }}</td>
       </tr>
       {% endfor %}
     </tbody>

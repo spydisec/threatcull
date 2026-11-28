@@ -6,18 +6,18 @@
     <strong>{{ source.name }}</strong>
     <div class="sub mono">{{ source.id }}</div>
   </td>
-  <td>
+  <td data-label="Category">
     {{ category_labels.get(source.category, source.category) }}
     <div class="sub">{{ source.role }} · {{ source.kind }}</div>
   </td>
-  <td>
+  <td data-label="Feed">
     {% if source.url.startswith("http") %}
     <a href="{{ source.url }}" rel="noopener noreferrer">{{ source.url | feed_label }}</a>
     {% else %}
     <span class="muted">local file</span>
     {% endif %}
   </td>
-  <td>
+  <td data-label="Status">
     {% if not source.enabled %}
     <span class="pill pill-off">disabled</span>
     {% if source.disabled_reason %}<div class="sub">{{ source.disabled_reason }}</div>{% endif %}

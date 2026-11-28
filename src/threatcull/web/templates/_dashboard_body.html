@@ -5,7 +5,7 @@
 
 <header class="card dash-head">
   <div>
-    <p class="dash-title">ThreatCull</p>
+    <p class="dash-title" aria-hidden="true">Dashboard</p>
     <p class="muted">
       {% if last_compile %}Last Compile {{ last_compile.finished_at | when("still running") }}{% else %}No Compile has run yet.{% endif %}
       {% if scheduler_on %}· Next compile at {{ next_compile_at | when("not scheduled") }}{% endif %}
@@ -121,7 +121,7 @@
       <div class="tags">
         {% if added or removed %}
         <span class="tag tag-add">+{{ "{:,}".format(added) }} added</span>
-        <span class="tag tag-rem">-{{ "{:,}".format(removed) }} removed</span>
+        <span class="tag {{ 'tag-rem' if removed else 'tag-zero' }}">-{{ "{:,}".format(removed) }} removed</span>
         <span class="tag tag-net">Net {{ "+" if added >= removed }}{{ "{:,}".format(added - removed) }}</span>
         {% else %}<span class="muted">No changes in the newest Fetches.</span>{% endif %}
       </div>
@@ -238,7 +238,7 @@
   <h2 class="caps">Download links</h2>
   {% if outputs %}
   <div class="table-wrap">
-  <table class="table dl-table">
+  <table class="table table-stack dl-table">
     <thead>
       <tr><th>Name</th><th>Min Tier</th><th class="num">Entries</th><th>Last updated</th><th class="col-action"></th></tr>
     </thead>
@@ -250,10 +250,10 @@
       {% for output in group %}
       <tr>
         <td class="nowrap">{{ output.name }} <span class="sub-inline">{{ output.format }}</span></td>
-        <td>{{ output.min_tier }}</td>
-        <td class="num">{{ "{:,}".format(output.last_count) if output.last_count is not none else "-" }}</td>
-        <td class="nowrap">{{ output.last_published_at | when("-") }}</td>
-        <td class="actions">{% if output.last_published_at %}<a class="dl-btn" href="/outputs/{{ output.name }}/download" download>&darr; Download</a>{% endif %}</td>
+        <td data-label="Min Tier">{{ output.min_tier }}</td>
+        <td class="num" data-label="Entries">{{ "{:,}".format(output.last_count) if output.last_count is not none else "-" }}</td>
+        <td class="nowrap" data-label="Last updated">{{ output.last_published_at | when("-") }}</td>
+        <td class="actions">{% if output.last_published_at %}<a class="button btn-secondary btn-small" href="/outputs/{{ output.name }}/download" download>Download</a>{% endif %}</td>
       </tr>
       {% endfor %}
       {% endif %}

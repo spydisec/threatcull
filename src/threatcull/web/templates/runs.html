@@ -59,10 +59,10 @@
     <span class="muted" data-filter-count aria-live="polite"></span>
   </div>
   <div class="table-wrap">
-  <table class="table" id="runs-table">
+  <table class="table table-stack" id="runs-table">
     <thead>
       <tr>
-        <th>Type</th><th>Source</th><th>Started</th><th>Finished</th><th>Took</th><th>Status</th>
+        <th>Type</th><th>Source</th><th>Status</th><th>Started</th><th>Finished</th><th>Took</th>
         <th>Counts</th>
       </tr>
     </thead>
@@ -71,13 +71,13 @@
       <tr data-state="{{ run.type }} {{ run.status }}">
         <td><span class="badge">{{ run.type }}</span></td>
         <td class="nowrap mono">{{ run.source_id or "" }}</td>
-        <td class="nowrap">{{ run.started_at | when }}</td>
-        <td class="nowrap">{{ run.finished_at | when("running") }}</td>
-        <td class="nowrap">
-          {{ run.duration_seconds | duration }}
-          {% if run.timings %}<div class="sub">{% for stage, seconds in run.timings.items() %}{{ stage }} {{ seconds | duration }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}
-        </td>
         <td>{{ pill(run.status) }}</td>
+        <td class="nowrap" data-label="Started">{{ run.started_at | when }}</td>
+        <td class="nowrap" data-label="Finished">{{ run.finished_at | when("running") }}</td>
+        <td data-label="Took">
+          {{ run.duration_seconds | duration }}
+          {% if run.timings %}<div class="sub run-timings">{% for stage, seconds in run.timings.items() %}{{ stage }} {{ seconds | duration }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+        </td>
         <td>
           {{ counts(run.counts) }}
           {% if run.error %}<div class="sub sub-bad">{{ run.error }}</div>{% endif %}

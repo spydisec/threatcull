@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -31,6 +32,7 @@ from threatcull.store.allowlist import (
     remove_entry,
     set_mine,
 )
+from threatcull.store.api_tokens import create_api_token, list_api_tokens, revoke_api_token
 from threatcull.store.config import FEEDS_EMPTY_NOTE, apply_config, dump_config, parse_config
 from threatcull.store.db import transaction
 from threatcull.store.errors import NotFoundError
@@ -71,11 +73,13 @@ from threatcull.web.status import build_status
 from threatcull.web.templating import flash, render, render_fragment
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 RUNS_PAGE_LIMIT = 50
 LOOKUP_MAX_LENGTH = 512  # same cap as /api/v1/lookup
 RUN_STARTED = "Run started."
 ALREADY_RUNNING = "A run is already in progress."
+API_TOKEN_REVOKED = "API token revoked."  # noqa: S105 - a flash message, not a secret
 FORCED_COMPILE_STARTED = "Forced Compile started. The status below shows when it finishes."
 
 
@@ -779,8 +783,77 @@ def _settings_context(request: Request, conn: sqlite3.Connection, **extra: Any) 
         "database_bytes": database,
         "outputs_bytes": outputs,
         "sighting_count": conn.execute("SELECT COUNT(*) FROM sightings").fetchone()[0],
+        "api_tokens": list_api_tokens(conn),
         **extra,
     }
+
+
+# API tokens are managed here and in the CLI only. These are page routes: they need a
+# session and the CSRF token, and page routes ignore ``Authorization: Bearer``, so an
+# API token can't create or revoke tokens.
+@router.post("/settings/api-tokens", dependencies=[Depends(check_csrf)])
+def create_api_token_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    # Defaulted to "" so an empty name reaches the store's own validation message.
+    name: Annotated[str, Form()] = "",
+) -> Response:
+    name = name.strip()
+    try:
+        token = create_api_token(conn, name, user, now=utcnow())
+    except (ValueError, NotFoundError) as exc:
+        context = _settings_context(request, conn, api_token_error=str(exc))
+        return render(request, "settings.html", context, status_code=400)
+    # Logs the token's name, never its value: semgrep's credential-leak rule matches on
+    # the word "token" in the message.
+    log.info("API token %s created for user %s by %s", name, user, user)  # nosemgrep
+    context = _settings_context(request, conn, revealed_api_token=token, revealed_api_name=name)
+    return render(request, "settings.html", context, headers={"Cache-Control": "no-store"})
+
+
+# The name travels as a form field, not in the path: a token named "." or ".." would
+# otherwise give a URL the browser rewrites before it sends it.
+@router.post("/settings/api-tokens/revoke", dependencies=[Depends(check_csrf)])
+def revoke_api_token_page(
+    request: Request,
+    conn: Annotated[sqlite3.Connection, Depends(get_conn)],
+    user: Annotated[str, Depends(require_user)],
+    name: Annotated[str, Form()] = "",
+    # A string, so a hand-made value such as "maybe" gets the message below instead of
+    # FastAPI's JSON 422.
+    confirm: Annotated[str, Form()] = "",
+) -> Response:
+    if confirm != "true":
+        message = "Tick the confirm box to revoke an API token."
+        context = _settings_context(request, conn, api_token_error=message)
+        return render(request, "settings.html", context, status_code=400)
+    # One transaction for the owner check and the delete, so the token cannot change
+    # hands between them.
+    owner: str | None = None
+    try:
+        with transaction(conn):
+            owner = {token.name: token.username for token in list_api_tokens(conn)}.get(name)
+            if owner is None or owner == user:
+                revoke_api_token(conn, name)  # raises NotFoundError for an unknown name
+    except NotFoundError as exc:
+        context = _settings_context(request, conn, api_token_error=str(exc))
+        return render(request, "settings.html", context, status_code=404)
+    if owner != user:
+        # Every user sees every token, but only its owner revokes it here. The command
+        # line stays the way to revoke a token for someone else.
+        message = (
+            f"API token {name} belongs to {owner}, and only {owner} can revoke it here. "
+            f"To revoke it for them, run threatcull api-token revoke {name} on the command line."
+        )
+        context = _settings_context(request, conn, api_token_error=message)
+        return render(request, "settings.html", context, status_code=403)
+    # A name that existed passed the store's name pattern, so it is safe to log; the
+    # value is never logged.
+    log.info("API token %s of user %s revoked by %s", name, owner, user)  # nosemgrep
+    flash(request, API_TOKEN_REVOKED)
+    # No "#api-tokens" fragment: the confirmation shows at the top of the page.
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.get("/settings/export")
