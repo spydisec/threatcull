@@ -43,6 +43,9 @@ class CompileStats:
     # (an Indicator in two categories counts in both). Empty for older Runs.
     kinds: dict[str, dict[str, int]] = field(default_factory=dict)
     categories: dict[str, dict[str, int]] = field(default_factory=dict)
+    # Rows in the sightings table, disabled and Stale Sources included. Counted here, once
+    # per Compile, so the Settings page never scans the table. None for older Runs.
+    sightings: int | None = None
 
     @property
     def duplicates(self) -> int:
@@ -68,6 +71,7 @@ class CompileStats:
             "sources": {sid: [s.entries, s.unique] for sid, s in self.sources.items()},
             "kinds": self.kinds,
             "categories": self.categories,
+            "sightings": self.sightings,
         }
 
     @classmethod
@@ -86,6 +90,7 @@ class CompileStats:
             sources={sid: SourceShare(*pair) for sid, pair in data["sources"].items()},
             kinds={kind: dict(tiers) for kind, tiers in data.get("kinds", {}).items()},
             categories={kind: dict(c) for kind, c in data.get("categories", {}).items()},
+            sightings=data.get("sightings"),
         )
 
 
@@ -125,6 +130,7 @@ def compile_stats(conn: sqlite3.Connection, settings: Settings) -> CompileStats:
         sources={sid: SourceShare(entries[sid], only[sid]) for sid in sorted(entries)},
         kinds={kind: dict(counts) for kind, counts in kinds.items()},
         categories={kind: dict(counts) for kind, counts in categories.items()},
+        sightings=conn.execute("SELECT COUNT(*) FROM sightings").fetchone()[0],
     )
 
 

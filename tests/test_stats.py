@@ -112,3 +112,30 @@ def test_blocklisted_ranges_are_counted_and_left_out_of_every_output(
     published = (tmp_path / "ips.txt").read_text()
     assert "45.9.20.1\n" in published
     assert "45.9.21.0/24" not in published
+
+
+def test_compile_records_the_number_of_sightings(
+    conn: sqlite3.Connection, now: datetime, tmp_path: Path
+) -> None:
+    # Source A lists ten Indicators and Source B one of them (see _setup): eleven Sightings.
+    _setup(conn, now)
+
+    stats = compile_outputs(conn, tmp_path, now=now).stats
+
+    assert stats is not None
+    assert stats.sightings == 11
+    assert CompileStats.from_json(stats.to_json()) == stats
+
+
+def test_stats_from_before_the_sightings_count_read_back_without_it(
+    conn: sqlite3.Connection, now: datetime, tmp_path: Path
+) -> None:
+    _setup(conn, now)
+    stats = compile_outputs(conn, tmp_path, now=now).stats
+    assert stats is not None
+    older = {key: value for key, value in stats.to_json().items() if key != "sightings"}
+
+    restored = CompileStats.from_json(older)
+
+    assert restored is not None
+    assert restored.sightings is None

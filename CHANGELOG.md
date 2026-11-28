@@ -8,6 +8,13 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Fixed
+
+- 🐢 **Settings opens fast on a large database.** The Storage card counted every Sighting on each
+  load, which took seconds on an install with millions of them, and longer right after a restart.
+  ThreatCull now counts once per Compile, and the card shows that number as "Sightings at the last
+  Compile". Until the first Compile after the upgrade, the card says the next Compile counts them.
+
 ## [2.7.3] - 2026-11-28
 
 **After this update your domain feeds may be empty until you enable a domain Source.** Ten Sources
