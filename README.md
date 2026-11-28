@@ -155,24 +155,26 @@ in the web UI to see its UTC value.
 
 ## Sizing
 
-The time and disk space ThreatCull needs depend on the total number of lines in your enabled
-Sources. It runs on a single-board computer, a small VM or a large server; large Sources take longer
-on slower processors and disks.
+What ThreatCull needs depends on how many entries your enabled Sources list in total. It runs on a
+single-board computer, a small VM or a large server. As a rough guide:
 
-Measured with `scripts/bench.py` on an 8-core x86 machine with an SSD:
+| Entries across your enabled Sources | Memory | Disk for `/data` |
+|---|---|---|
+| Up to about a million | 1 GB | 1 GB |
+| A few million | 2 GB | 5 GB |
+| Ten million or more | 4 GB or more | 10 GB or more |
 
-| Lines (unique) | First Fetch | Unchanged re-Fetch | Compile | Peak memory | Database |
-|---|---|---|---|---|---|
-| 500,000 IPs (300,000) | 14 s | 1 s | 8 s | 79 MB | 45 MB |
-| 1,000,000 domains (600,000) | 19 s | 1 s | 16 s | 79 MB | 96 MB |
-| 3,000,000 domains (1,800,000) | 79 s | 3 s | 56 s | 79 MB | 287 MB |
+These are starting points, not limits. ThreatCull also runs with less; Fetches and Compiles then
+take longer.
 
-- Peak memory stayed at 79 MB at every size measured, because ThreatCull downloads each Source to
-  a temporary file and reads it line by line.
-- Plan on about 160 MB of database per million unique entries, plus the Output files. The
-  **Settings** page and the dashboard show the current sizes.
-- Time grows with the number of lines. ThreatCull skips an unchanged Source in seconds, so only the
-  first Fetch and Fetches of Sources that changed take long.
+- **Memory** is mostly for the operating system to keep the database in its file cache. ThreatCull's
+  own process stays small at any size, because it downloads each Source to a temporary file and
+  reads it line by line.
+- **Disk** holds the database and the Output files. The **Settings** page and the dashboard show
+  their current sizes.
+- **CPU:** a Compile uses one core, so a faster core helps more than extra cores.
+- **Time** grows with the number of entries. ThreatCull skips an unchanged Source in seconds, so
+  only the first Fetch and Fetches of Sources that changed take long.
 
 ThreatCull reuses the space that deleted entries leave in the database, but the file itself doesn't
 shrink. To give that space back to the disk, stop ThreatCull and compact the database. It needs free
@@ -184,9 +186,9 @@ docker compose run --rm threatcull db compact
 docker compose start
 ```
 
-From a git checkout (see [Run without Docker](#run-without-docker)), run
-`uv run python scripts/bench.py --lines 1000000` for numbers that apply to your host. On a small host
-(1 to 2 GB of RAM, an SD card or a slow disk, as on a Raspberry Pi or a small VPS):
+To measure your own host, run `uv run python scripts/bench.py --lines 1000000` from a git checkout
+(see [Run without Docker](#run-without-docker)). On a small host (1 to 2 GB of RAM, an SD card or a
+slow disk, as on a Raspberry Pi or a small VPS):
 
 - Start with the Catalog's default Sources and add large Sources one at a time.
 - Remove the `#` in front of `mem_limit: 1g` in `docker-compose.yaml`, so Docker stops ThreatCull
