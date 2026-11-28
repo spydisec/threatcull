@@ -10,12 +10,20 @@ import sqlite3
 from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import TextIO, cast
 from urllib.parse import urlsplit, urlunsplit
 
 from threatcull.indicators import IndicatorKind
 from threatcull.outputs.files import output_path
-from threatcull.outputs.render import Attribution, RenderContext, entry, head, tail
+from threatcull.outputs.render import (
+    LINE_FORMATS,
+    Attribution,
+    RenderContext,
+    entry,
+    head,
+    line,
+    tail,
+)
 from threatcull.policy.allowlist import Allowlist
 from threatcull.policy.scoring import ScoredIndicator, min_score, to_scored
 from threatcull.store.outputs import OUTPUT_INDICATOR_KINDS, OutputSpec
@@ -24,7 +32,7 @@ from threatcull.store.sources import Source
 
 # Same order as ``select()``: strongest first, then most recently seen, then by value.
 _SELECT = """
-    SELECT value, kind, score, source_ids, categories, first_seen, last_seen FROM scored
+    SELECT {columns} FROM scored
     WHERE allowlisted = 0 AND score >= :min_score
         AND kind IN (SELECT value FROM json_each(:kinds))
         AND EXISTS (
@@ -45,6 +53,9 @@ class StagedOutput:
     tmp: Path
     count: int
 
+
+_ALL_COLUMNS = "value, kind, score, source_ids, categories, first_seen, last_seen"
+_BATCH = 10_000
 
 ALLOWLISTED = 1
 HOME_NETWORK = 2  # ``scored.allowlisted`` value of a row an own-network entry excludes
@@ -112,10 +123,13 @@ def stage_output(
     count = 0
     try:
         with body.open("w", encoding="utf-8") as out:
-            for item in _selected(conn, spec, settings):
-                out.write(entry(spec.format, item, ctx, count))
-                contributing.update(item.source_ids)
-                count += 1
+            if spec.format in LINE_FORMATS:
+                count = _write_lines(conn, spec, settings, out, contributing)
+            else:
+                for item in _selected(conn, spec, settings):
+                    out.write(entry(spec.format, item, ctx, count))
+                    contributing.update(item.source_ids)
+                    count += 1
         ctx = RenderContext(spec.name, generated_at, _attributions(contributing, sources), names)
         with tmp.open("wb") as out, body.open("rb") as rendered:
             out.write(head(spec.format, ctx, count).encode("utf-8"))
@@ -133,19 +147,46 @@ def stage_output(
     return StagedOutput(spec.name, path, tmp, count)
 
 
-def _selected(
-    conn: sqlite3.Connection, spec: OutputSpec, settings: Settings
-) -> Iterator[ScoredIndicator]:
-    params = {
+def _params(spec: OutputSpec, settings: Settings) -> dict[str, object]:
+    return {
         "min_score": min_score(spec.min_tier, settings),
         "kinds": json.dumps(OUTPUT_INDICATOR_KINDS[spec.kind]),
         "categories": json.dumps(sorted(spec.categories)),
         "limit": spec.max_entries or -1,
     }
-    for row in conn.execute(_SELECT, params):
+
+
+def _selected(
+    conn: sqlite3.Connection, spec: OutputSpec, settings: Settings
+) -> Iterator[ScoredIndicator]:
+    for row in conn.execute(_SELECT.format(columns=_ALL_COLUMNS), _params(spec, settings)):
         item = to_scored(row, settings)
         if item is not None:
             yield item
+
+
+def _write_lines(
+    conn: sqlite3.Connection,
+    spec: OutputSpec,
+    settings: Settings,
+    out: TextIO,
+    contributing: set[str],
+) -> int:
+    """Write a value-only format in batches; returns the number of entries.
+
+    These formats need the value and nothing else, so this skips building a
+    ScoredIndicator per row. Rows that share a set of Sources share a ``source_ids``
+    string, so the contributing Sources come from the distinct strings.
+    """
+    count = 0
+    combos: set[str] = set()
+    cursor = conn.execute(_SELECT.format(columns="value, source_ids"), _params(spec, settings))
+    while rows := cursor.fetchmany(_BATCH):
+        out.write("".join([line(spec.format, value) for value, _ in rows]))
+        combos.update([source_ids for _, source_ids in rows])
+        count += len(rows)
+    contributing.update(source_id for combo in combos for source_id in combo.split(","))
+    return count
 
 
 def _attributions(

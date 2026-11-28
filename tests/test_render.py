@@ -6,7 +6,14 @@ from dataclasses import replace
 
 import pytest
 
-from threatcull.outputs.render import Attribution, RenderContext, entry, render
+from threatcull.outputs.render import (
+    LINE_FORMATS,
+    Attribution,
+    RenderContext,
+    entry,
+    line,
+    render,
+)
 from threatcull.policy.scoring import ScoredIndicator
 from threatcull.store.outputs import OutputFormat
 
@@ -146,3 +153,24 @@ def test_a_value_with_a_line_break_is_never_written(fmt: OutputFormat) -> None:
     )
     with pytest.raises(ValueError, match="line break"):
         entry(fmt, item, CTX, 0)
+
+
+@pytest.mark.parametrize("fmt", sorted(LINE_FORMATS))
+def test_line_writes_what_entry_writes(fmt: OutputFormat) -> None:
+    # Compile writes these formats from the value alone; the text must not differ.
+    item = ScoredIndicator(
+        "evil.test", "domain", 2, "medium", ("a", "b"), frozenset({"malicious"}), "x", "y"
+    )
+    ctx = RenderContext("out", "2026-01-01T00:00:00+00:00", (), {})
+
+    assert line(fmt, item.value) == entry(fmt, item, ctx, 0)
+
+
+@pytest.mark.parametrize("fmt", sorted(LINE_FORMATS))
+def test_line_refuses_a_value_with_a_line_break(fmt: OutputFormat) -> None:
+    with pytest.raises(ValueError, match="line break"):
+        line(fmt, "evil.test\nother.test")
+
+
+def test_csv_and_json_are_not_line_formats() -> None:
+    assert frozenset({"plain", "hosts", "adguard", "rpz"}) == LINE_FORMATS
