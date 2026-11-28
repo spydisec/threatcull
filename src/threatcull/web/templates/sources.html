@@ -17,7 +17,7 @@
     <span class="muted" data-filter-count aria-live="polite"></span>
   </div>
   <div class="table-wrap">
-  <table class="table table-sources" id="sources-table">
+  <table class="table table-stack table-sources" id="sources-table">
     <thead>
       <tr>
         <th>Source</th><th>Category</th><th>Feed</th>
@@ -113,7 +113,7 @@
       <p>Download the newest Catalog from the ThreatCull repository on GitHub.</p>
       <form method="post" action="/sources/catalog/update">
         <input type="hidden" name="csrf" value="{{ csrf }}">
-        <button type="submit" class="btn-secondary">Check for updates</button>
+        <button type="submit">Check for updates</button>
       </form>
     </div>
     <div>
