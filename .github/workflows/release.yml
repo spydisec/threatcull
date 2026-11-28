@@ -57,11 +57,9 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          awk -v v="$VERSION" '
-            $0 ~ "^## \\[" v "\\]" { found = 1; next }
-            found && /^## \[/ { exit }
-            found { print }
-          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          # CHANGELOG.md wraps its lines and GitHub shows every line break in release
+          # notes: the script joins each wrapped paragraph and list item into one line.
+          python3 scripts/release_notes.py "$VERSION" > "$RUNNER_TEMP/notes.md"
           if grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
             echo "found=true" >> "$GITHUB_OUTPUT"
           else
