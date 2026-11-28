@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import getpass
 import os
+import shutil
 import sqlite3
 import sys
 from collections.abc import Callable, Sequence
@@ -42,6 +43,7 @@ from threatcull.datadir import (
     data_dir_lock,
     database_lock,
     ensure_data_dir,
+    storage_bytes,
 )
 from threatcull.fetcher import FetchError, HttpFetcher
 from threatcull.fetching import fetch_all
@@ -79,7 +81,7 @@ from threatcull.web.security import parse_trusted_proxies
 DB_NAME = "threatcull.db"
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED = 0, 1, 2
 # Commands that hold the data-directory lock for their whole run.
-LOCKING_COMMANDS = frozenset({"serve", "run"})
+LOCKING_COMMANDS = frozenset({"serve", "run", "db"})
 MINE_HELP = "your own network: never published, and flagged when a Source lists it"
 ADMIN_ENV_VAR = "THREATCULL_ADMIN_PASSWORD"
 ADMIN_FILE_ENV_VAR = "THREATCULL_ADMIN_PASSWORD_FILE"  # a Docker secret; wins over the above
@@ -155,6 +157,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_config_parser(sub)
     _add_catalog_parser(sub)
     _add_backup_parser(sub)
+    database = sub.add_parser("db", help="Maintain the database file")
+    database.add_subparsers(dest="action", required=True).add_parser(
+        "compact",
+        help="Give freed space back to the disk; stop ThreatCull first",
+    )
     return parser
 
 
@@ -398,6 +405,31 @@ def _backup_restore(args: argparse.Namespace) -> int:
     )
     print(f"Restored {args.file} (schema {report.schema}).{note}")
     print(f"{FEEDS_EMPTY_NOTE} The Output files on disk are from before the restore until then.")
+    return EXIT_OK
+
+
+def _megabytes(size: int) -> str:
+    return f"{size / (1024 * 1024):,.1f} MB"
+
+
+def _db_compact(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
+    """Rewrite the database file without the space deleted rows left behind.
+
+    SQLite builds the compacted copy next to the database before it replaces it, so
+    the disk needs room for a second copy. ``main`` holds the data-directory lock for
+    this command: it refuses to start while ``serve`` or ``run`` uses the database.
+    """
+    database, _outputs = storage_bytes(args.data_dir)
+    free = shutil.disk_usage(args.data_dir).free
+    if free < database:
+        raise OSError(
+            f"compacting needs about {_megabytes(database)} of free disk space next to the "
+            f"database, and {_megabytes(free)} is free"
+        )
+    conn.execute("VACUUM")
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    after, _outputs = storage_bytes(args.data_dir)
+    print(f"Compacted the database: {_megabytes(database)} before, {_megabytes(after)} now.")
     return EXIT_OK
 
 
@@ -759,6 +791,7 @@ def _api_token_revoke(conn: sqlite3.Connection, args: argparse.Namespace) -> int
 
 
 _HANDLERS: dict[tuple[str, str | None], Handler] = {
+    ("db", "compact"): _db_compact,
     ("init", None): _init,
     ("sources", "list"): _sources_list,
     ("sources", "enable"): _sources_enable,

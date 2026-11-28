@@ -20,6 +20,7 @@ from threatcull.compiling import (
 from threatcull.indicators import Indicator
 from threatcull.outputs.render import tail
 from threatcull.store.allowlist import add_entry
+from threatcull.store.db import connect
 from threatcull.store.outputs import (
     OutputFormat,
     OutputSpec,
@@ -446,3 +447,17 @@ def test_newly_created_output_folders_are_synced_in_their_parents_before_the_cou
     first_record = events.index(("record", ""))
     synced_before = {path for kind, path in events[:first_record] if kind == "fsync"}
     assert {str(out_dir), str(out_dir.parent), str(tmp_path)} <= synced_before
+
+
+def test_compile_empties_the_write_ahead_log(tmp_path: Path, now: datetime) -> None:
+    path = tmp_path / "wal.db"
+    conn = connect(path)
+    try:
+        _setup(conn, now)
+        assert path.with_name("wal.db-wal").stat().st_size > 0
+
+        compile_outputs(conn, tmp_path / "outputs", now=now)
+
+        assert path.with_name("wal.db-wal").stat().st_size == 0
+    finally:
+        conn.close()
