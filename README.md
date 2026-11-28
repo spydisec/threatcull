@@ -87,7 +87,6 @@ To start ThreatCull:
 4. Open `http://<server-ip>:6969` and log in as `admin`.
 
 ThreatCull reads the password on the first start only; you can clear it from the file afterwards.
-Data lives on the `threatcull-data` volume.
 
 **Portainer:** go to **Stacks > Add stack**, paste the contents of `docker-compose.yaml`, set the
 password, then click **Deploy**.
@@ -204,8 +203,8 @@ internet access, upload a newer `catalog.yaml` on the Sources page, or run
 
 ## Back up and restore
 
-ThreatCull has two kinds of backup. Keep ThreatCull's address stable (a DHCP reservation or a local DNS
-name), because feed URLs contain it.
+ThreatCull has two kinds of backup. Keep ThreatCull's address stable (a DHCP reservation or a local
+DNS name), because feed URLs contain it.
 
 ### Configuration backup (recommended)
 
@@ -347,8 +346,9 @@ make setup   # dependencies, git hooks and Vale styles
 make check   # lint, prose, types, UI bundle (needs Node), tests and security checks, as in CI
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for reporting issues and suggesting changes, [SECURITY.md](SECURITY.md)
-to report a vulnerability, and [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for reporting issues and suggesting changes,
+[SECURITY.md](SECURITY.md) to report a vulnerability, and [CHANGELOG.md](CHANGELOG.md) for what
+changed in each release.
 
 ## Threat data and terms
 
