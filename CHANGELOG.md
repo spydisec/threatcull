@@ -8,6 +8,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Added
+
+- 🔑 **API tokens on Settings.** The new **API tokens** card lists every token with its user,
+  creation time and last use, creates a token for the logged-in user and revokes one of that user's tokens after a
+  confirm tick. ThreatCull shows a new token once. Before, tokens needed the command line inside the
+  container, which left installs without a shell on the host (Portainer, for example) with no way to
+  create one. The JSON API still can't create or revoke tokens.
+
 ### Fixed
 
 - 📱 **Row actions are reachable on a phone.** On a narrow screen, Sources, Outputs, Runs, the

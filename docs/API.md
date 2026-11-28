@@ -11,7 +11,10 @@ The examples use `http://<server-ip>:6969` and an API token in `$TOKEN`.
 
 ## API tokens
 
-Create a token inside the container. ThreatCull prints it once:
+Create a token in the web UI: open **Settings**, find **API tokens**, enter a name and select
+**Create token**. ThreatCull shows the token once. The token acts as the user who is logged in.
+
+The command line does the same inside the container, and can create a token for any user:
 
 ```bash
 docker exec threatcull threatcull api-token create monitoring --user admin
@@ -25,7 +28,9 @@ curl -H "Authorization: Bearer $TOKEN" http://<server-ip>:6969/api/v1/me
 ```
 
 A token acts as the user it was created for. ThreatCull stores only a hash, so a lost token can't
-be shown again: revoke it and create a new one.
+be shown again: revoke it and create a new one. The **API tokens** card on Settings lists every token
+with its user, creation time and last use, and revokes one of your own after you tick **Confirm**. The same from
+the command line:
 
 ```bash
 docker exec threatcull threatcull api-token list

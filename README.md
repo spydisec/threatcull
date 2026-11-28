@@ -309,8 +309,8 @@ uv run threatcull serve --host <lan-ip> --port 6969
 
 ## API
 
-Create an API token with
-`docker exec threatcull threatcull api-token create <name> --user admin` and send it as
+Create an API token on the **Settings** page in the web UI, or with
+`docker exec threatcull threatcull api-token create <name> --user admin`, and send it as
 `Authorization: Bearer <token>` to `/api/v1/`. [docs/API.md](docs/API.md) lists every endpoint.
 
 ## Security
