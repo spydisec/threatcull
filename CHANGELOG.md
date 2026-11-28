@@ -21,17 +21,15 @@ compact` once to get the freed disk space back.
 - 🧹 **`threatcull db compact` gives freed disk space back.** The database file never shrank after
   ThreatCull deleted entries. Stop ThreatCull and run `docker compose run --rm threatcull db
   compact`: it rewrites the file without the unused space and needs room for a second copy while it
-  runs. Worth running once after this upgrade, because the new Sightings format leaves the old
-  space behind.
+  runs. Run it once after this upgrade, because migration 12 leaves the old table's space in the
+  file.
 
 ### Changed
 
 - 🗜️ **Sightings take less space, and an unchanged Fetch writes almost nothing.** ThreatCull now
   stores each Sighting as a few numbers. A Fetch that finds its list unchanged used to rewrite every
   Sighting of that Source; it now updates one row. Database migration 12 rewrites the sightings
-  table at the first start after the upgrade, which takes a while on a large database: let it
-  finish. An older ThreatCull can't open the database afterwards, so take a full backup first if
-  you may want to go back.
+  table at the first start after the upgrade.
 - 📉 **The write-ahead log is emptied after each Compile.** SQLite kept the log file at its largest
   size ever; ThreatCull now folds it into the database when a Compile ends.
 - ⏱️ **No Compile after a Fetch that changed nothing.** ThreatCull started a Compile two minutes
@@ -43,10 +41,10 @@ compact` once to get the freed disk space back.
 
 ### Fixed
 
-- 🐢 **Settings opens fast on a large database.** The Storage card counted every Sighting on each
-  load, which took seconds on an install with millions of them, and longer right after a restart.
-  ThreatCull now counts once per Compile, and the card shows that number as "Sightings at the last
-  Compile". Until the first Compile after the upgrade, the card says the next Compile counts them.
+- 🐢 **Settings opens fast on a large database.** The Storage card counted every Sighting each time
+  the page opened, which was slow on a large database and slowest right after a restart. ThreatCull
+  now counts once per Compile, and the card shows that number as "Sightings at the last Compile".
+  Until the first Compile after the upgrade, the card says the next Compile counts them.
 
 ## [2.7.3] - 2026-11-28
 
