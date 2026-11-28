@@ -12,7 +12,7 @@
 {% if revealed_token is defined and revealed_token %}
 <section class="card reveal">
   <h2>New Feed Token for {{ revealed_name }}</h2>
-  <p class="error">
+  <p class="notice notice-warn">
     This token is shown once and will not be shown again.
     {% if revealed_rotated %}The old token for {{ revealed_name }} has stopped working.{% endif %}
   </p>
@@ -31,7 +31,7 @@
 <section class="card">
   {% if outputs %}
   <div class="table-wrap">
-  <table class="table">
+  <table class="table table-stack">
     <thead>
       <tr>
         <th>Output</th><th>Min Tier</th><th class="num">Cap</th>
@@ -43,15 +43,15 @@
       <tr>
         <td><strong>{{ output.name }}</strong> <span class="sub-inline">{{ output.kind }} · {{ output.format }}</span>
           <div class="sub mono feed-url">{{ base_url }}o/{{ output.name }}?token=&lt;feed-token&gt;</div></td>
-        <td>{{ output.min_tier }}</td>
-        <td class="num nowrap">{{ "{:,}".format(output.max_entries) if output.max_entries else "no cap" }}</td>
-        <td class="num">{{ "{:,}".format(output.last_count) if output.last_count is not none else "never" }}</td>
-        <td class="nowrap">{% if output.last_published_at %}{{ output.last_published_at | when }}{% else %}<span class="pill pill-off">not published yet</span><div class="sub">The next Compile writes it; its feed URL answers 404 until then.</div>{% endif %}</td>
+        <td data-label="Min Tier">{{ output.min_tier }}</td>
+        <td class="num nowrap" data-label="Cap">{{ "{:,}".format(output.max_entries) if output.max_entries else "no cap" }}</td>
+        <td class="num" data-label="Entries">{{ "{:,}".format(output.last_count) if output.last_count is not none else "never" }}</td>
+        <td class="nowrap" data-label="Last published">{% if output.last_published_at %}{{ output.last_published_at | when }}{% else %}<span class="pill pill-off">not published yet</span><div class="sub">The next Compile writes it; its feed URL answers 404 until then.</div>{% endif %}</td>
         <td class="actions">
           {% if output.last_published_at %}<a class="button btn-secondary btn-small" href="/outputs/{{ output.name }}/download" download>Download</a>{% endif %}
           <form method="post" action="/outputs/{{ output.name }}/rotate">
             <input type="hidden" name="csrf" value="{{ csrf }}">
-            <button type="submit" class="btn-small">Rotate token</button>
+            <button type="submit" class="btn-secondary btn-small">Rotate token</button>
           </form>
         </td>
       </tr>

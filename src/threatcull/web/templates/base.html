@@ -15,6 +15,7 @@
   {% endif %}
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   {% from "_ui.html" import logo %}
   {% if user %}
   {% set path = request.url.path %}
@@ -32,7 +33,7 @@
         <button type="submit">Log out</button>
       </form>
     </aside>
-    <main>
+    <main id="main" tabindex="-1">
       {% if flash %}
       <p class="flash" role="status">{{ flash }}</p>
       {% endif %}
@@ -43,7 +44,7 @@
     </main>
   </div>
   {% else %}
-  <main class="main-anon">
+  <main class="main-anon" id="main" tabindex="-1">
     {% if flash %}
     <p class="flash" role="status">{{ flash }}</p>
     {% endif %}

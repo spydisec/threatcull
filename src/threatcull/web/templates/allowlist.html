@@ -19,7 +19,7 @@
   </div>
   {% endif %}
   <div class="table-wrap">
-  <table class="table" id="allowlist-table">
+  <table class="table table-stack" id="allowlist-table">
     <thead>
       <tr><th>Value</th><th>Kind</th><th>Note</th><th class="col-action"></th></tr>
     </thead>
@@ -27,8 +27,8 @@
       {% for entry in operator_entries %}
       <tr data-state="{{ 'mine' if entry.mine else '' }}">
         <td><span class="mono">{{ entry.value }}</span>{% if entry.mine %} <span class="pill pill-warn" title="Alerts you when a Source lists it">my network</span>{% endif %}</td>
-        <td>{{ entry.kind }}</td>
-        <td>{{ entry.note }}</td>
+        <td data-label="Kind">{{ entry.kind }}</td>
+        <td data-label="Note">{{ entry.note }}</td>
         <td class="actions">
           <form method="post" action="/allowlist/mine">
             <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -104,13 +104,13 @@
   {% if candidates is not none %}
   {% if candidates %}
   <div class="table-wrap">
-  <table class="table">
+  <table class="table table-stack">
     <thead><tr><th>Candidate</th><th>Found in</th><th class="col-action"></th></tr></thead>
     <tbody>
       {% for candidate in candidates %}
       <tr>
         <td class="mono">{{ candidate.value }}</td>
-        <td>{{ candidate.reason }}</td>
+        <td data-label="Found in">{{ candidate.reason }}</td>
         <td class="actions">
           <form method="post" action="/allowlist">
             <input type="hidden" name="csrf" value="{{ csrf }}">

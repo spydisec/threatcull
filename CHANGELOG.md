@@ -8,6 +8,22 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Fixed
+
+- 📱 **Row actions are reachable on a phone.** On a narrow screen, Sources, Outputs, Runs, the
+  allowlist and the dashboard's download links show each row as a block. Before, Enable, Disable
+  and Rotate token sat off screen and needed a sideways scroll.
+- 🧾 **The Runs history shows Status and Counts again.** Long timings pushed both columns off
+  screen on a desktop. Status now sits next to the Source and the timings wrap.
+- ♿ **A skip link and clearer form fields.** Every page starts with a "Skip to content" link, and
+  empty text fields have a visible border instead of a grey fill.
+
+### Changed
+
+- 🎨 **One set of buttons, headings and notices across the web UI.** Enable is an outlined button,
+  the dashboard's card titles and tables match the other pages, and its banner is titled
+  Dashboard. The "token is shown once" notice uses the warning colour.
+
 ### Removed
 
 - 🗑️ **Ten Sources that stopped updating leave the Catalog (revision 7).** The six Block List
