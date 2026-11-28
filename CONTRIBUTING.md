@@ -41,7 +41,8 @@ How the maintainer builds and changes ThreatCull:
 
 The usual way: a release pull request renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and
 bumps the version in `pyproject.toml`. After it reaches `main`, pushing the `vX.Y.Z` tag publishes
-the image and the GitHub release, with its notes taken from that CHANGELOG.md section.
+the image and the GitHub release, with its notes taken from that CHANGELOG.md section
+(`scripts/release_notes.py` joins the wrapped lines for the release page).
 
 A release made in the GitHub Release UI works too: tag `vX.Y.Z` on `main`. The Release workflow
 builds that version even if `pyproject.toml` still has the previous one (it warns), and keeps the
