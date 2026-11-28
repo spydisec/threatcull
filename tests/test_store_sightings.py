@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from tests.factories import make_entry
-from threatcull.clock import ts
+from threatcull.clock import epoch, ts
 from threatcull.indicators import Indicator
 from threatcull.store.sightings import (
     apply_fetched,
@@ -30,7 +30,7 @@ def _source(conn: sqlite3.Connection) -> None:
 def _current(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute(
         "SELECT i.value FROM sightings s JOIN indicators i ON i.id = s.indicator_id "
-        "WHERE s.source_id = 'src' AND s.current = 1"
+        "WHERE s.source_num = (SELECT num FROM sources WHERE id = 'src') AND s.last_seen IS NULL"
     )
     return {r[0] for r in rows}
 
@@ -55,20 +55,75 @@ def test_later_fetch_marks_missing_indicators_not_current(
     assert result2 == (1, 0)
 
 
-def test_first_seen_is_kept_and_last_seen_moves(conn: sqlite3.Connection, now: datetime) -> None:
+def _sightings(conn: sqlite3.Connection) -> list[tuple[str, int, int | None]]:
+    rows = conn.execute(
+        "SELECT i.value, s.first_seen, s.last_seen FROM sightings s "
+        "JOIN indicators i ON i.id = s.indicator_id ORDER BY i.value"
+    )
+    return [tuple(row) for row in rows]
+
+
+def test_a_listed_sighting_keeps_first_seen_and_is_not_rewritten(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
     record_fetch_success(conn, "src", {A}, now=now, etag=None, last_modified=None)
     later = now + timedelta(days=1)
     record_fetch_success(conn, "src", {A}, now=later, etag=None, last_modified=None)
-    first, last = conn.execute("SELECT first_seen, last_seen FROM sightings").fetchone()
-    assert (first, last) == (ts(now), ts(later))
+    # Still listed: last_seen stays NULL, and the Source's last success is its last-seen time.
+    assert _sightings(conn) == [("1.2.3.4", epoch(now), None)]
+    assert get_source(conn, "src").last_success_at == ts(later)
 
 
-def test_not_modified_refreshes_last_seen(conn: sqlite3.Connection, now: datetime) -> None:
+def test_not_modified_moves_the_source_and_writes_no_sighting(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
     record_fetch_success(conn, "src", {A}, now=now, etag=None, last_modified=None)
     later = now + timedelta(hours=2)
+    before = conn.total_changes
     record_not_modified(conn, "src", now=later)
-    assert conn.execute("SELECT last_seen FROM sightings").fetchone()[0] == ts(later)
+    assert conn.total_changes - before == 1  # the one row in sources
+    assert _sightings(conn) == [("1.2.3.4", epoch(now), None)]
     assert get_source(conn, "src").last_success_at == ts(later)
+
+
+def test_an_indicator_that_leaves_was_last_seen_at_the_previous_fetch(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
+    record_fetch_success(conn, "src", {A, B}, now=now, etag=None, last_modified=None)
+    later = now + timedelta(hours=6)
+    record_fetch_success(conn, "src", {B}, now=later, etag=None, last_modified=None)
+    assert _sightings(conn) == [("1.2.3.4", epoch(now), epoch(now)), ("5.6.7.8", epoch(now), None)]
+
+
+def test_an_indicator_that_returns_keeps_its_first_seen(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
+    record_fetch_success(conn, "src", {A}, now=now, etag=None, last_modified=None)
+    record_fetch_success(
+        conn, "src", {B}, now=now + timedelta(hours=1), etag=None, last_modified=None
+    )
+    back = now + timedelta(hours=2)
+    assert record_fetch_success(conn, "src", {A, B}, now=back, etag=None, last_modified=None) == (
+        1,
+        0,
+    )
+    assert _sightings(conn)[0] == ("1.2.3.4", epoch(now), None)
+
+
+def test_prune_removes_the_sightings_of_a_source_that_stopped_fetching(
+    conn: sqlite3.Connection, now: datetime
+) -> None:
+    sync_catalog(
+        conn,
+        [make_entry(id="src", default_enabled=True), make_entry(id="quiet", default_enabled=True)],
+    )
+    old = now - timedelta(days=40)
+    record_fetch_success(conn, "quiet", {A}, now=old, etag=None, last_modified=None)
+    record_fetch_success(conn, "src", {B}, now=now, etag=None, last_modified=None)
+    # "quiet" still lists A, but its last successful Fetch is older than the retention.
+    assert prune(conn, now=now, retention_days=30) == 1
+    assert [row[0] for row in _sightings(conn)] == ["5.6.7.8"]
+    assert {r[0] for r in conn.execute("SELECT value FROM indicators")} == {"5.6.7.8"}
 
 
 def test_failure_keeps_sightings_and_records_error(conn: sqlite3.Connection, now: datetime) -> None:

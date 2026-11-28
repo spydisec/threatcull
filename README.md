@@ -174,6 +174,16 @@ Measured with `scripts/bench.py` on an 8-core x86 machine with an SSD:
 - Time grows with the number of lines. ThreatCull skips an unchanged Source in seconds, so only the
   first Fetch and Fetches of Sources that changed take long.
 
+ThreatCull reuses the space that deleted entries leave in the database, but the file itself doesn't
+shrink. To give that space back to the disk, stop ThreatCull and compact the database. It needs free
+disk space for a second copy of the database while it runs:
+
+```bash
+docker compose stop
+docker compose run --rm threatcull db compact
+docker compose start
+```
+
 From a git checkout (see [Run without Docker](#run-without-docker)), run
 `uv run python scripts/bench.py --lines 1000000` for numbers that apply to your host. On a small host
 (1 to 2 GB of RAM, an SD card or a slow disk, as on a Raspberry Pi or a small VPS):

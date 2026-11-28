@@ -118,9 +118,9 @@ def builtin_entries(conn: sqlite3.Connection) -> list[AllowlistEntry]:
     rows = conn.execute(
         """
         SELECT i.value, i.kind, s.id, s.name FROM sightings sg
-        JOIN sources s ON s.id = sg.source_id
+        JOIN sources s ON s.num = sg.source_num
         JOIN indicators i ON i.id = sg.indicator_id
-        WHERE s.role = 'allowlist' AND s.enabled = 1 AND sg.current = 1
+        WHERE s.role = 'allowlist' AND s.enabled = 1 AND sg.last_seen IS NULL
         ORDER BY i.value
         """
     )

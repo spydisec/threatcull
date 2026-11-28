@@ -161,6 +161,19 @@ def optimize_database(conn: sqlite3.Connection) -> None:
         log.warning("PRAGMA optimize after the Compile failed", exc_info=True)
 
 
+def trim_write_ahead_log(conn: sqlite3.Connection) -> None:
+    """Move the write-ahead log into the database and empty the log file.
+
+    SQLite never shrinks the log by itself: after one large Fetch it stays at its
+    largest size for good. Best effort: with a reader in the way SQLite reports it
+    as busy and the next Compile tries again; a failure never fails the Compile.
+    """
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except sqlite3.Error:
+        log.warning("emptying the write-ahead log after the Compile failed", exc_info=True)
+
+
 def compile_outputs(
     conn: sqlite3.Connection, out_dir: Path, *, now: datetime, force: bool = False
 ) -> CompileReport:
@@ -192,6 +205,7 @@ def compile_outputs(
         stats={**(report.stats.to_json() if report.stats else {}), "timings": timer.to_json()},
     )
     optimize_database(conn)
+    trim_write_ahead_log(conn)
     return report
 
 

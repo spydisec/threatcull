@@ -35,7 +35,7 @@ def _source(conn: sqlite3.Connection) -> None:
 
 
 def _current_count(conn: sqlite3.Connection) -> int:
-    return int(conn.execute("SELECT COUNT(*) FROM sightings WHERE current = 1").fetchone()[0])
+    return int(conn.execute("SELECT COUNT(*) FROM sightings WHERE last_seen IS NULL").fetchone()[0])
 
 
 def test_ok_fetch_counts_parsed_valid_and_invalid(conn: sqlite3.Connection, now: datetime) -> None:
@@ -250,7 +250,7 @@ def _fetch_domains(
 def _dom_values(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute(
         "SELECT i.value FROM sightings s JOIN indicators i ON i.id = s.indicator_id "
-        "WHERE s.source_id = 'dom' AND s.current = 1"
+        "WHERE s.source_num = (SELECT num FROM sources WHERE id = 'dom') AND s.last_seen IS NULL"
     )
     return {row[0] for row in rows}
 
@@ -362,8 +362,8 @@ def test_unchanged_content_skips_parsing(conn: sqlite3.Connection, now: datetime
     assert (source.etag, source.last_modified) == ('"new"', modified)
     assert source.last_success_at is not None
     assert source.last_success_at.startswith("2026-09-24T13")
-    seen = {row[0] for row in conn.execute("SELECT last_seen FROM sightings")}
-    assert all(stamp.startswith("2026-09-24T13") for stamp in seen)
+    # Still listed: no Sighting was rewritten, the Source's last success covers them.
+    assert {row[0] for row in conn.execute("SELECT last_seen FROM sightings")} == {None}
 
 
 def test_changed_content_is_parsed(conn: sqlite3.Connection, now: datetime) -> None:
