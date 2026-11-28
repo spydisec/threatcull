@@ -8,6 +8,22 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Fixed
+
+- 🐢 **Settings opens fast on a large database.** The Storage card counted every Sighting on each
+  load, which took seconds on an install with millions of them, and longer right after a restart.
+  ThreatCull now counts once per Compile, and the card shows that number as "Sightings at the last
+  Compile". Until the first Compile after the upgrade, the card says the next Compile counts them.
+
+## [2.7.3] - 2026-11-28
+
+**After this update your domain feeds may be empty until you enable a domain Source.** Ten Sources
+that stopped updating leave the Catalog, including the two domain blocklists that were on by
+default. The feed URLs keep answering, so a DNS filter stops blocking those domains without an
+error: enable a domain Source on the Sources page, for example `phishing-army-extended`. This
+release also adds API tokens to the web UI and fixes the web UI on phones. Use **Check for
+updates** on the Sources page to get Catalog revision 8 on an existing install.
+
 ### Added
 
 - 🔑 **API tokens on Settings.** The new **API tokens** card lists every token with its user,
@@ -606,7 +622,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.7.2...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.7.3...HEAD
+[2.7.3]: https://github.com/spydisec/threatcull/compare/v2.7.2...v2.7.3
 [2.7.2]: https://github.com/spydisec/threatcull/compare/v2.7.1...v2.7.2
 [2.7.1]: https://github.com/spydisec/threatcull/compare/v2.7.0...v2.7.1
 [2.7.0]: https://github.com/spydisec/threatcull/compare/v2.6.0...v2.7.0

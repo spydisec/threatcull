@@ -8,8 +8,10 @@ from pathlib import Path
 import yaml
 from fastapi.testclient import TestClient
 
+from tests.test_compiling import _setup
 from threatcull.cli import main
 from threatcull.clock import utcnow
+from threatcull.compiling import compile_outputs
 from threatcull.store.api_tokens import create_api_token, verify_api_token
 from threatcull.store.config import dump_config
 from threatcull.store.db import connect
@@ -102,6 +104,30 @@ def test_settings_page_shows_storage(client: TestClient, logged_in: str) -> None
     page = client.get("/settings").text
     assert 'id="storage"' in page
     assert "Sightings." in page
+
+
+def test_settings_says_the_next_compile_counts_the_sightings(
+    client: TestClient, logged_in: str
+) -> None:
+    assert "The next Compile counts the Sightings." in client.get("/settings").text
+
+
+def test_settings_shows_the_sightings_counted_at_the_last_compile(
+    client: TestClient, logged_in: str, tmp_path: Path
+) -> None:
+    conn = open_db(tmp_path)
+    try:
+        _setup(conn, utcnow())
+        compile_outputs(conn, tmp_path / "outputs", now=utcnow())
+        before = client.get("/settings").text
+        # The page reads the stored number: it must not count 11 million rows on every load.
+        conn.execute("DELETE FROM sightings")
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert "11 Sightings at the last Compile." in before
+    assert "11 Sightings at the last Compile." in client.get("/settings").text
 
 
 def test_dashboard_footer_shows_the_database_size(client: TestClient, logged_in: str) -> None:
