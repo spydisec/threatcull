@@ -241,12 +241,50 @@ def test_a_busy_fetch_tick_arms_one_retry_in_about_three_minutes(tmp_path: Path)
         fake.release.set()
         assert scheduler.runner.wait(WAIT)
     runs_before = len(_runs(tmp_path))
-    # The retry reuses fetch_job: now idle, it fetches and debounces a Compile.
+    # The retry reuses fetch_job: now idle, it fetches.
     scheduler.fetch_job("a")
     runs = _runs(tmp_path)
     assert len(runs) == runs_before + 1
     # Same body as the busy run before it: recognised as unchanged, still a success.
     assert runs[0] == ("fetch", "a", "not_modified")
+    # Nothing changed, so there is nothing for a Compile to do.
+    assert scheduler.scheduler.get_job(DEBOUNCED_COMPILE_JOB_ID) is None
+
+
+def _set_last_success(data_dir: Path, source_id: str, when: datetime) -> None:
+    conn = open_db(data_dir)
+    try:
+        conn.execute("UPDATE sources SET last_success_at = ? WHERE id = ?", (ts(when), source_id))
+    finally:
+        conn.close()
+
+
+def test_an_unchanged_fetch_schedules_no_compile(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    scheduler = _scheduler(tmp_path)
+    scheduler.rescan()
+    scheduler.fetch_job("a")  # the first Fetch adds the list: a Compile is due
+    assert scheduler.scheduler.get_job(DEBOUNCED_COMPILE_JOB_ID) is not None
+    scheduler.scheduler.remove_job(DEBOUNCED_COMPILE_JOB_ID)
+
+    scheduler.fetch_job("a")  # the same list again
+
+    assert _runs(tmp_path)[0] == ("fetch", "a", "not_modified")
+    assert scheduler.scheduler.get_job(DEBOUNCED_COMPILE_JOB_ID) is None
+
+
+def test_an_unchanged_fetch_of_a_stale_source_schedules_a_compile(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    scheduler = _scheduler(tmp_path)
+    scheduler.rescan()
+    scheduler.fetch_job("a")
+    scheduler.scheduler.remove_job(DEBOUNCED_COMPILE_JOB_ID)
+    # Stale: its Sightings stopped counting. This Fetch makes them count again.
+    _set_last_success(tmp_path, "a", utcnow() - timedelta(hours=100))
+
+    scheduler.fetch_job("a")
+
+    assert _runs(tmp_path)[0] == ("fetch", "a", "not_modified")
     assert scheduler.scheduler.get_job(DEBOUNCED_COMPILE_JOB_ID) is not None
 
 

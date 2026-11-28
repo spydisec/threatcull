@@ -4,8 +4,9 @@
 One APScheduler interval job per enabled Source (its ``refresh_minutes``, with
 up to 10% jitter so Sources don't all hit the network together), an hourly
 Compile (which first rescans the Sources, catching changes made by the CLI),
-and a debounced Compile two minutes after any successful (or not-modified)
-Fetch; a later Fetch pushes it back, so a burst of Fetches ends in one Compile.
+and a debounced Compile two minutes after a Fetch that changed a list or brought a
+Stale Source back; a later Fetch pushes it back, so a burst of Fetches ends in one
+Compile. A Fetch that found its list unchanged starts no Compile.
 
 Timers survive restarts: a Source's first Fetch is due ``refresh_minutes``
 after its last attempt, and Sources never fetched (or overdue) are fetched
@@ -277,8 +278,9 @@ class Scheduler:
                 return
             with self._lock:
                 self._remove(fetch_retry_job_id(source_id))  # this Fetch covers it
-            if result.status in ("ok", "not_modified"):
-                # not_modified too: it refreshes last_seen and can revive a Stale Source.
+            if result.status in ("ok", "not_modified") and result.needs_compile:
+                # An unchanged list changes no Output, so it starts no Compile. The
+                # exception is a Source that was Stale: its Sightings count again.
                 self.schedule_debounced_compile()
         except Exception:
             # run_source never raises; this only guards the scheduler itself.
