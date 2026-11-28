@@ -8,6 +8,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-11-28
+
+A faster, smaller ThreatCull on large lists. **The database changes format at the first start after
+this upgrade (migration 12).** Before you upgrade, take a full backup with `threatcull backup
+create`: an older ThreatCull can't open the database afterwards. The migration takes a while on a
+large database, so let the first start finish. Once it has, stop ThreatCull and run `threatcull db
+compact` once to get the freed disk space back.
+
 ### Added
 
 - 🧹 **`threatcull db compact` gives freed disk space back.** The database file never shrank after
@@ -647,7 +655,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.7.3...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/spydisec/threatcull/compare/v2.7.3...v2.8.0
 [2.7.3]: https://github.com/spydisec/threatcull/compare/v2.7.2...v2.7.3
 [2.7.2]: https://github.com/spydisec/threatcull/compare/v2.7.1...v2.7.2
 [2.7.1]: https://github.com/spydisec/threatcull/compare/v2.7.0...v2.7.1
