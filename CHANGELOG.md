@@ -28,6 +28,10 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ### Changed
 
+- 🛡️ **Phishing Army (extended) is on by default for new installs (Catalog revision 8).** Revision 7
+  left no domain blocklist enabled by default. An existing install keeps its own choices: a Catalog
+  update or an image upgrade never enables a Source, so enable `phishing-army-extended` on the
+  Sources page if your domain Outputs are empty.
 - 🎨 **One set of buttons, headings and notices across the web UI.** Enable is an outlined button,
   the dashboard's card titles and tables match the other pages, and its banner is titled
   Dashboard. The "token is shown once" notice uses the warning colour.
@@ -38,11 +42,14 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
   Project lists (`blocklistproject-ads`, `-tracking`, `-malware`, `-phishing`, `-ransomware` and
   `-scam`) last changed in July 2026, `botvrij-ip-dst` in February 2026, `adaway-hosts` in
   December 2025, `stamparm-blackbook` in June 2025 and `digitalside-domains` in October 2024.
-  `blocklistproject-ads` and `blocklistproject-phishing` were enabled by default until now. After
-  **Check for updates**, ThreatCull disables these Sources on an existing install; re-enable one
-  on the Sources page to keep using it. The Catalog now has no ads and tracking Source and enables
-  no domain blocklist by default, so a new install publishes domains once you enable a domain
-  Source.
+  `blocklistproject-ads` and `blocklistproject-phishing` were enabled by default until now.
+  ThreatCull disables these Sources on an existing install after **Check for updates**, or at the
+  first start of this release, and their entries leave the Outputs at the next Compile. **If they
+  were your only domain Sources, your domain Outputs become empty** and the feed URLs keep
+  answering, so your DNS filter stops blocking those domains without an error: enable another
+  domain Source on the Sources page. To keep using a removed list, add it again as a custom Source
+  with the same URL. Re-enabling it on the Sources page lasts only until the next restart. The
+  Catalog has no ads and tracking Source left.
 
 ## [2.7.2] - 2026-11-23
 

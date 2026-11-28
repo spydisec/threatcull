@@ -95,6 +95,8 @@ SOURCES_SHA256 = {
     6: "89f540ce94418166246f885629591a9ebf17c47f9820f06a6581c5df872a1e0e",
     # Ten Sources removed: their publishers stopped updating them
     7: "a3fbd46f8c2742256e77a4a27013f89d31de2a142ca016f38fe91a6e698d11aa",
+    # Phishing Army (extended) on by default: revision 7 left no default domain blocklist
+    8: "dbf58aedcec2610f1c2d7a1a9ef273ef5438b0e3f86660fb744497a31b8c1097",
 }
 
 
