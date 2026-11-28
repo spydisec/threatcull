@@ -10,11 +10,18 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [2.8.0] - 2026-11-28
 
-A faster, smaller ThreatCull on large lists. **The database changes format at the first start after
-this upgrade (migration 12).** Before you upgrade, take a full backup with `threatcull backup
-create`: an older ThreatCull can't open the database afterwards. The migration takes a while on a
-large database, so let the first start finish. Once it has, stop ThreatCull and run `threatcull db
-compact` once to get the freed disk space back.
+A faster, smaller ThreatCull on large lists.
+
+**The database changes format at the first start after this upgrade (migration 12).** An older
+ThreatCull can't open the database afterwards.
+
+### Upgrading
+
+1. Before you upgrade, take a full backup: `docker compose run --rm threatcull backup create`.
+2. Pull the new image and start it. The migration takes a while on a large database, so let the
+   first start finish.
+3. Stop ThreatCull and run `docker compose run --rm threatcull db compact` once to get the freed
+   disk space back.
 
 ### Added
 
