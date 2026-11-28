@@ -8,6 +8,39 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-11-28
+
+A faster, smaller ThreatCull on large lists. **The database changes format at the first start after
+this upgrade (migration 12).** Before you upgrade, take a full backup with `threatcull backup
+create`: an older ThreatCull can't open the database afterwards. The migration takes a while on a
+large database, so let the first start finish. Once it has, stop ThreatCull and run `threatcull db
+compact` once to get the freed disk space back.
+
+### Added
+
+- 🧹 **`threatcull db compact` gives freed disk space back.** The database file never shrank after
+  ThreatCull deleted entries. Stop ThreatCull and run `docker compose run --rm threatcull db
+  compact`: it rewrites the file without the unused space and needs room for a second copy while it
+  runs. Worth running once after this upgrade, because the new Sightings format leaves the old
+  space behind.
+
+### Changed
+
+- 🗜️ **Sightings take less space, and an unchanged Fetch writes almost nothing.** ThreatCull now
+  stores each Sighting as a few numbers. A Fetch that finds its list unchanged used to rewrite every
+  Sighting of that Source; it now updates one row. Database migration 12 rewrites the sightings
+  table at the first start after the upgrade, which takes a while on a large database: let it
+  finish. An older ThreatCull can't open the database afterwards, so take a full backup first if
+  you may want to go back.
+- 📉 **The write-ahead log is emptied after each Compile.** SQLite kept the log file at its largest
+  size ever; ThreatCull now folds it into the database when a Compile ends.
+- ⏱️ **No Compile after a Fetch that changed nothing.** ThreatCull started a Compile two minutes
+  after every Fetch, including one that found its list unchanged. It now starts one only when a
+  list changed or a Stale Source came back. The hourly Compile still runs.
+- 🚀 **Faster Compiles.** The Compile counts its dashboard stats in the database and writes plain,
+  hosts, AdGuard and RPZ Outputs in batches, instead of handling each Indicator in Python. The
+  Output files are the same, byte for byte.
+
 ### Fixed
 
 - 🐢 **Settings opens fast on a large database.** The Storage card counted every Sighting on each
@@ -622,7 +655,8 @@ First release.
 - 🐳 **Container image** for linux/amd64 and linux/arm64 that runs as a non-root user with a health
   check.
 
-[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.7.3...HEAD
+[Unreleased]: https://github.com/spydisec/threatcull/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/spydisec/threatcull/compare/v2.7.3...v2.8.0
 [2.7.3]: https://github.com/spydisec/threatcull/compare/v2.7.2...v2.7.3
 [2.7.2]: https://github.com/spydisec/threatcull/compare/v2.7.1...v2.7.2
 [2.7.1]: https://github.com/spydisec/threatcull/compare/v2.7.0...v2.7.1

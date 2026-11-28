@@ -101,24 +101,34 @@ def compile_stats(conn: sqlite3.Connection, settings: Settings) -> CompileStats:
     categories: dict[str, Counter[str]] = {kind: Counter() for kind in KINDS}
     entries: Counter[str] = Counter()
     only: Counter[str] = Counter()
-    for row in conn.execute("SELECT kind, score, source_ids, categories, allowlisted FROM scored"):
+    # SQLite groups the rows: Indicators that share a kind, score, set of Sources,
+    # categories and Allowlist result count the same way, so Python handles one row per
+    # group instead of one per Indicator.
+    groups = conn.execute(
+        "SELECT kind, score, source_ids, categories, allowlisted, COUNT(*) AS n FROM scored "
+        "GROUP BY kind, score, source_ids, categories, allowlisted"
+    )
+    for row in groups:
+        n: int = row["n"]
         ids = row["source_ids"].split(",")
-        unique += 1
-        listed += len(ids)
-        entries.update(ids)
+        unique += n
+        listed += n * len(ids)
+        for source_id in ids:
+            entries[source_id] += n
         if len(ids) == 1:
-            only[ids[0]] += 1
+            only[ids[0]] += n
         if row["allowlisted"] == HOME_NETWORK:
-            home += 1
+            home += n
         elif row["allowlisted"]:
-            allowlisted += 1
+            allowlisted += n
         elif row["kind"] == "cidr":
-            ranges += 1
+            ranges += n
         elif (tier := tier_for(row["score"], settings)) is not None:
             kind = row["kind"]
-            tiers[tier] += 1
-            kinds[kind][tier] += 1
-            categories[kind].update(row["categories"].split(","))
+            tiers[tier] += n
+            kinds[kind][tier] += n
+            for category in row["categories"].split(","):
+                categories[kind][category] += n
     return CompileStats(
         listed=listed,
         unique=unique,

@@ -120,7 +120,7 @@ def test_settings_shows_the_sightings_counted_at_the_last_compile(
         _setup(conn, utcnow())
         compile_outputs(conn, tmp_path / "outputs", now=utcnow())
         before = client.get("/settings").text
-        # The page reads the stored number: it must not count 11 million rows on every load.
+        # The page reads the stored number: it must not count the table on every load.
         conn.execute("DELETE FROM sightings")
         conn.commit()
     finally:

@@ -53,10 +53,14 @@ def lookup(conn: sqlite3.Connection, raw: str, *, now: datetime) -> LookupResult
         return None
     rows = conn.execute(
         """
-        SELECT s.id, s.name, s.enabled, sg.current, sg.first_seen, sg.last_seen
+        SELECT s.id, s.name, s.enabled, sg.last_seen IS NULL AS current,
+            strftime('%Y-%m-%dT%H:%M:%S+00:00', sg.first_seen, 'unixepoch') AS first_seen,
+            COALESCE(
+                strftime('%Y-%m-%dT%H:%M:%S+00:00', sg.last_seen, 'unixepoch'), s.last_success_at
+            ) AS last_seen
         FROM indicators i
         JOIN sightings sg ON sg.indicator_id = i.id
-        JOIN sources s ON s.id = sg.source_id
+        JOIN sources s ON s.num = sg.source_num
         WHERE i.value = ? ORDER BY s.name
         """,
         (indicator.value,),

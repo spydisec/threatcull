@@ -169,6 +169,40 @@ _MIGRATIONS: tuple[str, ...] = (
     );
     PRAGMA user_version = 11;
     """,
+    # 2.8: Sightings stored compactly, and no longer rewritten by a Fetch that found the
+    # list unchanged. Each Source gets a small integer key (``num``) that Sightings use
+    # instead of repeating its text id, and times are whole seconds since 1970.
+    # ``last_seen`` is NULL while the Source still lists the Indicator: such a Sighting
+    # was last seen at the Source's ``last_success_at``, so a Fetch updates one row in
+    # ``sources`` instead of every Sighting. Once the Indicator leaves the list,
+    # ``last_seen`` holds the time of the last Fetch that still had it.
+    """
+    ALTER TABLE sources ADD COLUMN num INTEGER;
+    UPDATE sources SET num = (SELECT COUNT(*) FROM sources AS other WHERE other.id <= sources.id);
+    CREATE UNIQUE INDEX sources_num ON sources (num);
+    CREATE TRIGGER sources_assign_num AFTER INSERT ON sources WHEN NEW.num IS NULL
+    BEGIN
+        UPDATE sources SET num = (SELECT COALESCE(MAX(num), 0) + 1 FROM sources)
+        WHERE id = NEW.id;
+    END;
+    CREATE TABLE sightings_compact (
+        source_num INTEGER NOT NULL REFERENCES sources (num) ON DELETE CASCADE,
+        indicator_id INTEGER NOT NULL REFERENCES indicators (id) ON DELETE CASCADE,
+        first_seen INTEGER NOT NULL,
+        last_seen INTEGER,
+        PRIMARY KEY (source_num, indicator_id)
+    ) WITHOUT ROWID;
+    INSERT INTO sightings_compact (source_num, indicator_id, first_seen, last_seen)
+        SELECT s.num, g.indicator_id, CAST(strftime('%s', g.first_seen) AS INTEGER),
+            CASE WHEN g.current = 1 THEN NULL
+                 ELSE CAST(strftime('%s', g.last_seen) AS INTEGER) END
+        FROM sightings AS g JOIN sources AS s ON s.id = g.source_id
+        ORDER BY s.num, g.indicator_id;
+    DROP TABLE sightings;
+    ALTER TABLE sightings_compact RENAME TO sightings;
+    CREATE INDEX sightings_indicator ON sightings (indicator_id);
+    PRAGMA user_version = 12;
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)

@@ -7,9 +7,10 @@ import sqlite3
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 
-from threatcull.clock import ts
+from threatcull.clock import epoch, ts
 from threatcull.indicators import Indicator
 from threatcull.store.db import transaction
+from threatcull.store.errors import NotFoundError
 
 
 def stage_fetched(conn: sqlite3.Connection, indicators: Iterable[Indicator]) -> int:
@@ -52,7 +53,17 @@ def apply_fetched(
     it out clears any stored digest, so the next Fetch parses in full.
     """
     stamp = ts(now)
+    seen = epoch(now)
     with transaction(conn):
+        source = conn.execute(
+            "SELECT num, last_success_at FROM sources WHERE id = ?", (source_id,)
+        ).fetchone()
+        if source is None:
+            raise NotFoundError(f"no Source with id {source_id!r}")
+        num: int = source["num"]
+        # An Indicator that left the list was last seen at the previous successful Fetch.
+        previous = source["last_success_at"]
+        last_seen = epoch(datetime.fromisoformat(previous)) if previous else seen
         conn.execute(
             "INSERT OR IGNORE INTO indicators (value, kind) SELECT value, kind FROM fetched"
         )
@@ -67,38 +78,40 @@ def apply_fetched(
         added: int = conn.execute(
             """
             SELECT COUNT(*) FROM fetched_ids f
-            LEFT JOIN sightings s ON s.source_id = ? AND s.indicator_id = f.id
-            WHERE s.indicator_id IS NULL OR s.current = 0
+            LEFT JOIN sightings s ON s.source_num = ? AND s.indicator_id = f.id
+            WHERE s.indicator_id IS NULL OR s.last_seen IS NOT NULL
             """,
-            (source_id,),
+            (num,),
         ).fetchone()[0]
+        # Only new Indicators and returning ones are written: a Sighting the Source
+        # still lists stays untouched (its last-seen time is the Source's last success).
         conn.execute(
             """
-            INSERT INTO sightings (source_id, indicator_id, first_seen, last_seen, current)
-            SELECT ?, id, ?, ?, 1 FROM fetched_ids WHERE true
-            ON CONFLICT (source_id, indicator_id)
-            DO UPDATE SET last_seen = excluded.last_seen, current = 1
+            INSERT INTO sightings (source_num, indicator_id, first_seen, last_seen)
+            SELECT ?, id, ?, NULL FROM fetched_ids WHERE true
+            ON CONFLICT (source_num, indicator_id)
+            DO UPDATE SET last_seen = NULL WHERE last_seen IS NOT NULL
             """,
-            (source_id, stamp, stamp),
+            (num, seen),
         )
         removed = conn.execute(
             """
-            UPDATE sightings SET current = 0
-            WHERE source_id = ? AND current = 1
+            UPDATE sightings SET last_seen = ?
+            WHERE source_num = ? AND last_seen IS NULL
             AND indicator_id NOT IN (SELECT id FROM fetched_ids)
             """,
-            (source_id,),
+            (last_seen, num),
         ).rowcount
         conn.execute(
             """
             UPDATE sources SET etag = ?, last_modified = ?, last_success_at = ?,
                 last_attempt_at = ?, last_error = NULL, content_sha256 = ?,
                 content_current = (
-                    SELECT COUNT(*) FROM sightings WHERE source_id = ? AND current = 1
+                    SELECT COUNT(*) FROM sightings WHERE source_num = ? AND last_seen IS NULL
                 )
             WHERE id = ?
             """,
-            (etag, last_modified, stamp, stamp, content_sha256, source_id, source_id),
+            (etag, last_modified, stamp, stamp, content_sha256, num, source_id),
         )
         if added or removed:
             conn.execute("UPDATE sources SET last_changed_at = ? WHERE id = ?", (stamp, source_id))
@@ -117,9 +130,9 @@ def sightings_unchanged(conn: sqlite3.Connection, source_id: str) -> bool:
     """
     row = conn.execute(
         "SELECT content_current, "
-        "(SELECT COUNT(*) FROM sightings WHERE source_id = ? AND current = 1) AS current_count "
-        "FROM sources WHERE id = ?",
-        (source_id, source_id),
+        "(SELECT COUNT(*) FROM sightings WHERE source_num = sources.num AND last_seen IS NULL) "
+        "AS current_count FROM sources WHERE id = ?",
+        (source_id,),
     ).fetchone()
     return row is not None and row["content_current"] == row["current_count"]
 
@@ -158,17 +171,16 @@ def record_not_modified(
     now: datetime,
     validators: tuple[str | None, str | None] | None = None,
 ) -> None:
-    """Refresh the Source's current Sightings without changing them.
+    """Record a Fetch that found the list unchanged.
+
+    The Source's current Sightings were last seen at its ``last_success_at``, so
+    moving that one value refreshes all of them: no Sighting is written.
 
     ``validators`` is a new (ETag, Last-Modified) pair to store: a download whose
     content was unchanged still carries the server's latest validators.
     """
     stamp = ts(now)
     with transaction(conn):
-        conn.execute(
-            "UPDATE sightings SET last_seen = ? WHERE source_id = ? AND current = 1",
-            (stamp, source_id),
-        )
         conn.execute(
             "UPDATE sources SET last_success_at = ?, last_attempt_at = ?, last_error = NULL "
             "WHERE id = ?",
@@ -191,10 +203,22 @@ def record_fetch_failure(
 
 
 def prune(conn: sqlite3.Connection, *, now: datetime, retention_days: int) -> int:
-    """Delete Sightings older than the retention period and Indicators nobody lists."""
-    cutoff = ts(now - timedelta(days=retention_days))
+    """Delete Sightings older than the retention period and Indicators nobody lists.
+
+    A Sighting whose Indicator left the list is as old as its ``last_seen``. One the
+    Source still lists is as old as the Source's last successful Fetch, which stops
+    moving when the Source is disabled or keeps failing.
+    """
+    cutoff = now - timedelta(days=retention_days)
     with transaction(conn):
-        deleted = conn.execute("DELETE FROM sightings WHERE last_seen < ?", (cutoff,)).rowcount
+        deleted = conn.execute(
+            "DELETE FROM sightings WHERE last_seen < ?", (epoch(cutoff),)
+        ).rowcount
+        deleted += conn.execute(
+            "DELETE FROM sightings WHERE last_seen IS NULL AND source_num IN "
+            "(SELECT num FROM sources WHERE last_success_at < ?)",
+            (ts(cutoff),),
+        ).rowcount
         conn.execute(
             "DELETE FROM indicators WHERE NOT EXISTS "
             "(SELECT 1 FROM sightings s WHERE s.indicator_id = indicators.id)"

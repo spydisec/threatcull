@@ -21,6 +21,13 @@ def ts(dt: datetime) -> str:
     return dt.astimezone(UTC).isoformat(timespec="seconds")
 
 
+def epoch(dt: datetime) -> int:
+    """Whole seconds since 1970, the form the sightings table stores times in."""
+    if dt.tzinfo is None:
+        raise ValueError("timestamps need a timezone")
+    return int(dt.timestamp())
+
+
 def display_zone() -> tzinfo:
     """The zone the web UI shows times in: the IANA name in ``TZ``, such as
     ``Australia/Melbourne``, or UTC when unset.

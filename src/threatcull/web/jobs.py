@@ -20,11 +20,12 @@ from threading import Thread
 from typing import Literal
 
 from threatcull.clock import ts, utcnow
-from threatcull.compiling import compile_outputs
+from threatcull.compiling import compile_outputs, stale_source_ids
 from threatcull.fetcher import Fetcher, HttpFetcher
 from threatcull.fetching import fetch_all, fetch_source
 from threatcull.store.errors import NotFoundError
 from threatcull.store.runs import fail_unfinished_runs, finish_run, latest_run_id, start_run
+from threatcull.store.settings import load_settings
 from threatcull.store.sightings import record_fetch_failure
 from threatcull.store.sources import get_source
 from threatcull.web.deps import open_db
@@ -47,6 +48,9 @@ class RunResult:
     reasons: tuple[str, ...] = ()
     error: str | None = None
     finished_at: str | None = None
+    # False when a Fetch changed nothing a Compile would pick up: the list is the same
+    # and the Source was not Stale before. The scheduler then skips its Compile.
+    needs_compile: bool = True
 
 
 # What started the run in progress, for the status line.
@@ -199,7 +203,11 @@ class PipelineRunner:
                     return SKIPPED
                 if not source.enabled:
                     return SKIPPED
-                outcome = fetch_source(conn, source, self._fetcher_factory(), now=utcnow())
+                now = utcnow()
+                # A Stale Source's Sightings don't count; a Fetch that succeeds brings
+                # them back even when the list itself is unchanged.
+                was_stale = bool(stale_source_ids([source], now=now, settings=load_settings(conn)))
+                outcome = fetch_source(conn, source, self._fetcher_factory(), now=now)
             finally:
                 conn.close()
         except Exception as exc:
@@ -217,7 +225,12 @@ class PipelineRunner:
                 error=outcome.error,
                 finished_at=ts(utcnow()),
             )
-        return RunResult(outcome.status, fetched=1, finished_at=ts(utcnow()))
+        return RunResult(
+            outcome.status,
+            fetched=1,
+            finished_at=ts(utcnow()),
+            needs_compile=outcome.status == "ok" or was_stale,
+        )
 
     def _record_failed_fetch(self, source_id: str, error: str, mark: int | None) -> None:
         """Best effort: a crash outside ``fetch_source`` still shows up in the Runs.
