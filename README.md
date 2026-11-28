@@ -24,9 +24,10 @@ sources ──> drop duplicates, private ranges, your allowlist ──> score by
 - Built-in CDN allowlists, your own entries and your own allowlist URLs; mark your own network to
   get an alert when a source lists it
 - Confidence tiers (high, medium, low) from source agreement
-- Outputs as plain, hosts, AdGuard, RPZ, CSV or JSON, each at its own URL with a Feed Token
+- Outputs as plain, hosts, AdGuard, RPZ, CSV or JSON, each at its own URL, protected by a Feed
+  Token (a secret in the URL)
 - Web UI with a dashboard, lookup, run history and a built-in scheduler
-- Works offline and on a bare LAN IP
+- Works without internet access, and without a domain name or TLS certificate
 
 A short tour of the web UI:
 
@@ -53,8 +54,8 @@ https://github.com/user-attachments/assets/d78a93ce-2fdb-4fbf-9664-20ed0162c54a
 
 ## Quick start
 
-You need Docker with Compose. The image is published for amd64 and arm64. ThreatCull runs on these
-platforms:
+You need Docker with Compose. The image is published for amd64 and arm64. On a small host such as a
+Raspberry Pi, read [Sizing](#sizing) first. Platform support:
 
 | Platform | Status |
 | --- | --- |
@@ -63,9 +64,10 @@ platforms:
 | 32-bit ARM, such as 32-bit Raspberry Pi OS | Not supported: no image is published |
 | Windows without Docker | Not supported: use Docker Desktop or WSL 2 |
 
-Keep the `threatcull-data` named volume from the compose file, especially on Docker Desktop.
-Don't mount a Windows folder (such as `C:\threatcull`) as `/data`: the SQLite database needs file
-locking that such mounts don't provide reliably, and the database can lock up or corrupt.
+The compose file you download below stores data in a named volume, `threatcull-data`. Keep it,
+especially on Docker Desktop. Don't mount a Windows folder (such as `C:\threatcull`) as `/data`: the
+SQLite database needs file locking that such mounts don't provide reliably, and the database can
+lock up or corrupt.
 
 To start ThreatCull:
 
@@ -87,8 +89,8 @@ To start ThreatCull:
 ThreatCull reads the password on the first start only; you can clear it from the file afterwards.
 Data lives on the `threatcull-data` volume.
 
-**Portainer:** go to **Stacks > Add stack**, paste `docker-compose.yaml`, set the password, then click
-**Deploy**.
+**Portainer:** go to **Stacks > Add stack**, paste the contents of `docker-compose.yaml`, set the
+password, then click **Deploy**.
 
 ### Air-gapped install
 
@@ -105,13 +107,22 @@ Copy `threatcull.tar` and `docker-compose.yaml` to the air-gapped machine, then 
 docker load -i threatcull.tar
 ```
 
-Start it with `docker compose up -d` as usual. Add Sources as `file://` URLs for files in
-`/data/imports/`, and update the Catalog by uploading the file. The web UI loads nothing from the
+Start it with `docker compose up -d`. Catalog Sources download from the internet, so on an
+air-gapped host you supply each list yourself. Copy a list into the volume (the file must be
+readable by everyone, mode 644):
+
+```bash
+docker compose cp mylist.txt threatcull:/data/imports/
+```
+
+Then add a Source on the Sources page with the URL `file:///data/imports/mylist.txt`. A `file://`
+Source added in the web UI must point to a file in the data directory's `imports/` folder. To update
+the Catalog, upload a newer `catalog.yaml` on the Sources page. The web UI loads nothing from the
 internet.
 
 ## First steps
 
-1. On **Sources**, enable the lists you want.
+1. On **Sources**, enable the Sources you want.
 2. On **Outputs**, click **Rotate token** on the Output you want, for example `ip-high`
    (high-confidence IPs as plain text). A new install has no token you can read until you rotate
    one. ThreatCull shows the feed URL once, so copy it.
@@ -125,24 +136,29 @@ internet.
    curl http://<server-ip>:6969/o/ip-high/<feed-token>
    ```
 
-## Settings
+Then protect your own network: on the allowlist page, add your public addresses with **My network**
+ticked, or run `threatcull allow detect --apply`. Without `--apply` the command only lists
+candidates; add `--public-ip` to also ask api.ipify.org for your public IP. ThreatCull keeps these
+addresses out of every Output and warns you when a Source lists one.
+
+## Environment variables
 
 Set these under `environment:` in `docker-compose.yaml`.
 
 | Variable | Default | What it does |
 |---|---|---|
 | `THREATCULL_ADMIN_PASSWORD` | none | Creates the `admin` user on the first start (12 or more characters) |
-| `THREATCULL_ADMIN_PASSWORD_FILE` | none | Same, read from a file such as a Docker secret; wins over the above |
+| `THREATCULL_ADMIN_PASSWORD_FILE` | none | Same, read from a file such as a Docker secret; takes precedence over `THREATCULL_ADMIN_PASSWORD` |
 | `TZ` | `UTC` | Timezone for times in the web UI, as an IANA name such as `Australia/Melbourne` |
 
 ThreatCull stores and schedules everything in UTC, so you can change `TZ` at any time. Hover a time
 in the web UI to see its UTC value.
 
-### Sizing
+## Sizing
 
-What ThreatCull needs depends on how many lines your enabled Sources list. It runs the same on a
-single-board computer, a small VM or a large server; bigger lists take longer on slower processors
-and disks.
+The time and disk space ThreatCull needs depend on the total number of lines in your enabled
+Sources. It runs on a single-board computer, a small VM or a large server; large Sources take longer
+on slower processors and disks.
 
 Measured with `scripts/bench.py` on an 8-core x86 machine with an SSD:
 
@@ -152,22 +168,22 @@ Measured with `scripts/bench.py` on an 8-core x86 machine with an SSD:
 | 1,000,000 domains (600,000) | 19 s | 1 s | 16 s | 79 MB | 96 MB |
 | 3,000,000 domains (1,800,000) | 79 s | 3 s | 56 s | 79 MB | 287 MB |
 
-- Memory stays under about 100 MB for lists of any size: ThreatCull downloads each list to a
-  temporary file and reads it line by line.
-- Plan on about 160 MB of database per million unique entries, plus the Output files. Settings and
-  the dashboard show the current sizes.
-- Time grows with the number of lines. ThreatCull skips an unchanged list in seconds, so only the
-  first Fetch and Fetches of lists that changed take long.
+- Peak memory stayed at 79 MB at every size measured, because ThreatCull downloads each Source to
+  a temporary file and reads it line by line.
+- Plan on about 160 MB of database per million unique entries, plus the Output files. The
+  **Settings** page and the dashboard show the current sizes.
+- Time grows with the number of lines. ThreatCull skips an unchanged Source in seconds, so only the
+  first Fetch and Fetches of Sources that changed take long.
 
-Run `uv run python scripts/bench.py --lines 1000000` on your own host for numbers that apply to it.
-On a small host (1 to 2 GB of RAM, an SD card or a slow disk, as on a Raspberry Pi or a small
-VPS):
+From a git checkout (see [Run without Docker](#run-without-docker)), run
+`uv run python scripts/bench.py --lines 1000000` for numbers that apply to your host. On a small host
+(1 to 2 GB of RAM, an SD card or a slow disk, as on a Raspberry Pi or a small VPS):
 
-- start with the catalog's default Sources and add large lists one at a time;
-- remove the `#` in front of `mem_limit: 1g` in `docker-compose.yaml`, so Docker stops ThreatCull
+- Start with the Catalog's default Sources and add large Sources one at a time.
+- Remove the `#` in front of `mem_limit: 1g` in `docker-compose.yaml`, so Docker stops ThreatCull
   before the host runs out of memory, and watch `docker stats` during the first Fetch of a large
-  list;
-- keep other busy containers off the same SD card if you can: database writes compete for it.
+  Source.
+- Keep other busy containers off the same SD card if you can: database writes compete for it.
 
 ## Upgrade
 
@@ -180,13 +196,15 @@ docker compose pull && docker compose up -d
 The `:2` tag follows 2.x releases. Pin a version such as `:2.0.0` to upgrade by hand. Sources you
 disabled stay disabled.
 
-**Catalog only:** to pick up new or corrected sources between releases, use **Check for updates**
-on the Sources page, or run `threatcull catalog update`. New sources arrive disabled. Without
-internet access, upload a newer `catalog.yaml` there, or run `threatcull catalog update --file`.
+**Catalog only:** to pick up new or corrected Sources between releases, use **Check for updates**
+on the Sources page, or run `threatcull catalog update`. New Sources arrive disabled. Without
+internet access, upload a newer `catalog.yaml` on the Sources page, or run
+`threatcull catalog update --file <path>`.
+[Keeping it up to date](docs/CATALOG.md#keeping-it-up-to-date) has the details.
 
 ## Back up and restore
 
-ThreatCull has two backups. Keep ThreatCull's address stable (a DHCP reservation or a local DNS
+ThreatCull has two kinds of backup. Keep ThreatCull's address stable (a DHCP reservation or a local DNS
 name), because feed URLs contain it.
 
 ### Configuration backup (recommended)
@@ -197,27 +215,29 @@ Export the configuration to a file:
 docker compose run --rm -T threatcull config export > threatcull-config.yaml
 ```
 
-**Settings > Configuration > Export** in the web UI does the same. The file holds settings, Source
-choices, custom Sources, the allowlist (including My network), Outputs, and the hashes of your Feed
-Tokens and API tokens. It never holds passwords, raw tokens or threat data.
+**Settings > Configuration file > Export configuration** in the web UI does the same. The file holds
+settings, Source choices, custom Sources, the allowlist (including My network), Outputs, and the
+hashes of your Feed Tokens and API tokens (for scripts, see [API](#api)). It never holds passwords,
+raw tokens or threat data.
 
-To restore on a fresh install, import the file with `--restore-tokens`:
+To restore on a fresh install, start it once so the `admin` user exists. If API tokens belonged to
+users other than `admin`, create those users too. Then import the file with `--restore-tokens`:
 
 ```bash
 docker compose run --rm -T threatcull config import --restore-tokens - < threatcull-config.yaml
 ```
 
 The command restores Feed Tokens and API tokens. In the web UI, tick **Restore Feed Tokens from the
-file** on Settings and import the file: it restores Feed Tokens only, and API tokens need the command
-above. Old feed URLs keep working, so your devices keep pulling their feeds. The feeds stay empty until
-the next Compile, so click **Run now**.
+file** on the **Settings** page and import the file: it restores Feed Tokens only, and API tokens
+need the command above. Old feed URLs keep working, so your devices keep fetching their Outputs. The
+Outputs stay empty until the next Compile, so click **Run now**.
+
+Without `--restore-tokens` or the tick box, an import never adopts the hashes in the file, so
+importing a file someone else shared gives them no access.
 
 Once everything works, rotate your Feed Tokens on the Outputs page and update each device. Rotating
-retires the hashes stored in the backup file, which matters most if others may have seen the file.
-
-Without the option, an import never adopts the hashes in the file, so importing a file someone else
-shared gives them no access. If API tokens belonged to users other than `admin`, create those users
-before you import.
+retires the Feed Token hashes stored in the backup file, which matters most if others may have seen
+the file. To retire the API token hashes, revoke the API tokens and create new ones.
 
 ### Full database backup (optional)
 
@@ -228,7 +248,7 @@ docker compose run --rm threatcull backup create
 ```
 
 The command prints the file's path, for example `/data/backups/threatcull-20261102T092437Z.db`.
-Copy the file off the host into the current folder:
+Copy the file out of the container into the current folder:
 
 ```bash
 docker compose cp threatcull:/data/backups/threatcull-20261102T092437Z.db .
@@ -252,8 +272,9 @@ docker compose run --rm -v "$PWD/threatcull-20261102T092437Z.db:/restore.db:ro" 
 docker compose up -d
 ```
 
-The backup file is private (mode 0600) and the image's user can't read it otherwise. Restore copies
-it into the volume, so delete your copy or set it back with `chmod 600` afterwards.
+The backup file is private (mode 0600), so the image's user can't read it until you run
+`chmod 644`. Restore copies it into the volume, so delete your copy or set it back with `chmod 600`
+afterwards.
 
 Restore refuses to run while ThreatCull runs. It checks the file first, refuses a backup from a
 newer ThreatCull, and keeps a safety copy of the current database as
@@ -268,6 +289,9 @@ the Catalog update again with **Check for updates** on the Sources page, or uplo
 if you are offline. Copy the data directory's `imports/` folder across by hand. The session secret
 isn't backed up, so everyone logs in again after a restore on a new host.
 
+Neither backup holds the published Output files. After a full restore, click **Run now** so the next
+Compile rebuilds them.
+
 ## Run without Docker
 
 This needs Linux or macOS with Python 3.12 or newer and [uv](https://docs.astral.sh/uv/). Windows
@@ -281,28 +305,16 @@ uv run threatcull user create admin
 uv run threatcull serve --host <lan-ip> --port 6969
 ```
 
-`init` prints each default output's Feed Token once. `uv run threatcull --help` lists every command.
+`init` prints each default Output's Feed Token once. `uv run threatcull --help` lists every command.
 
-## Notes
+## API
 
-In Docker, run any `threatcull <command>` shown here as `docker exec threatcull threatcull <command>`
-while ThreatCull runs, or as `docker compose run --rm threatcull <command>` when it is stopped.
+Create an API token with
+`docker exec threatcull threatcull api-token create <name> --user admin` and send it as
+`Authorization: Bearer <token>` to `/api/v1/`. [docs/API.md](docs/API.md) lists every endpoint.
 
-- **Offline networks:** add a custom source with a `file://` URL. Sources added in the web UI must
-  point to files in the data directory's `imports/` folder (`/data/imports/` in Docker).
-- **Ranges:** outputs list single IP addresses and domains. A source that lists a CIDR range counts on
-  the dashboard as "Ranges left out", because one range can block many unrelated hosts. Ranges on
-  the allowlist still cover every address inside them.
-- **Frozen sources:** a blocklist source whose list has not gained or lost an entry for 30 days
-  (`frozen_after_days`) shows as **frozen** on the Sources page and the dashboard. Its entries still
-  count; check the feed and disable it if the publisher stopped updating it.
-- **Your network:** add your public addresses to the allowlist with **My network** ticked, or run
-  `threatcull allow detect --apply`. Without `--apply` the command only lists candidates; add
-  `--public-ip` to also ask api.ipify.org for your public IP. ThreatCull keeps these addresses out of
-  every output and warns you when a source lists one.
-- **Scripts:** create an API token with
-  `docker exec threatcull threatcull api-token create <name> --user admin` and send it as
-  `Authorization: Bearer <token>` to `/api/v1/`. [docs/API.md](docs/API.md) lists every endpoint.
+## Security
+
 - **Hardening:** the image is built on [Docker Hardened Images](https://docs.docker.com/dhi/) (no
   shell or package manager inside) and runs as a non-root user. The compose file drops all Linux
   capabilities and blocks privilege escalation. It also works with `read_only: true` and
@@ -310,14 +322,21 @@ while ThreatCull runs, or as `docker compose run --rm threatcull <command>` when
 - **Reverse proxy with TLS:** add
   `command: serve --host 0.0.0.0 --port 6969 --secure-cookies --trusted-proxy <proxy-ip>` to the
   service in `docker-compose.yaml`. Without Docker, pass the two flags to `serve`.
-- **Scheduling:** `serve` runs fetches and compiles itself. `threatcull run` refuses to start while
+
+## How it behaves
+
+In Docker, run any `threatcull <command>` shown in this file as
+`docker exec threatcull threatcull <command>` while ThreatCull runs, or as
+`docker compose run --rm threatcull <command>` when it is stopped.
+
+- **Ranges:** Outputs list single IP addresses and domains. ThreatCull leaves CIDR ranges out,
+  because one range can block many unrelated hosts, and the dashboard counts them as "Ranges left
+  out". Ranges on the allowlist still cover every address inside them.
+- **Frozen Sources:** a blocklist Source whose list has not gained or lost an entry for 30 days
+  (`frozen_after_days`) shows as **frozen** on the Sources page and the dashboard. Its entries still
+  count; check the Source's URL and disable the Source if the publisher stopped updating it.
+- **Scheduling:** `serve` runs each Fetch and Compile itself. `threatcull run` refuses to start while
   `serve` runs on the same data directory, so don't schedule it from `cron` as well.
-
-## Sources
-
-ThreatCull ships no threat data. Each install downloads every source straight from its publisher, and
-you decide which sources to use. The Sources page links each one to its feed, so you can see who
-publishes it and follow their terms.
 
 ## Development
 
@@ -330,6 +349,13 @@ make check   # lint, prose, types, UI bundle (needs Node), tests and security ch
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for reporting issues and suggesting changes, [SECURITY.md](SECURITY.md)
 to report a vulnerability, and [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+
+## Threat data and terms
+
+ThreatCull ships no threat data. Each install downloads its enabled Sources directly from their
+publishers, and you decide which Sources to use. The Sources page links each Source to its
+publisher's list, so you can see who publishes it and follow their terms.
+[docs/CATALOG.md](docs/CATALOG.md) lists every Source.
 
 ## Licence
 
