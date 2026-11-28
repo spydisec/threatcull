@@ -112,14 +112,18 @@ internet.
 ## First steps
 
 1. On **Sources**, enable the lists you want.
-2. On **Outputs**, rotate a Feed Token to get the feed URL. Tokens show once.
-3. Click **Run now**, or wait for the schedule: each Source refreshes on its own interval, and the
-   Outputs update every hour.
-4. Point your firewall or DNS server at the feed URL:
+2. On **Outputs**, click **Rotate token** on the Output you want, for example `ip-high`
+   (high-confidence IPs as plain text). A new install has no token you can read until you rotate
+   one. ThreatCull shows the feed URL once, so copy it.
+3. Click **Run now** on the dashboard. A run does a Fetch (downloads each enabled Source) and then a
+   Compile (rebuilds every Output). Or wait for the schedule: each Source refreshes on its own
+   interval, and the Outputs update every hour.
+4. Test the feed URL, then add it as a blocklist URL in your firewall or DNS server.
+   [Feed URLs](docs/API.md#feed-urls) explains the address format.
 
-```bash
-curl http://<server-ip>:6969/o/ip-high/<feed-token>
-```
+   ```bash
+   curl http://<server-ip>:6969/o/ip-high/<feed-token>
+   ```
 
 ## Settings
 
@@ -150,7 +154,7 @@ Measured with `scripts/bench.py` on an 8-core x86 machine with an SSD:
 
 - Memory stays under about 100 MB for lists of any size: ThreatCull downloads each list to a
   temporary file and reads it line by line.
-- Plan on about 100 MB of database per million unique entries, plus the Output files. Settings and
+- Plan on about 160 MB of database per million unique entries, plus the Output files. Settings and
   the dashboard show the current sizes.
 - Time grows with the number of lines. ThreatCull skips an unchanged list in seconds, so only the
   first Fetch and Fetches of lists that changed take long.
@@ -281,6 +285,9 @@ uv run threatcull serve --host <lan-ip> --port 6969
 
 ## Notes
 
+In Docker, run any `threatcull <command>` shown here as `docker exec threatcull threatcull <command>`
+while ThreatCull runs, or as `docker compose run --rm threatcull <command>` when it is stopped.
+
 - **Offline networks:** add a custom source with a `file://` URL. Sources added in the web UI must
   point to files in the data directory's `imports/` folder (`/data/imports/` in Docker).
 - **Ranges:** outputs list single IP addresses and domains. A source that lists a CIDR range counts on
@@ -289,9 +296,10 @@ uv run threatcull serve --host <lan-ip> --port 6969
 - **Frozen sources:** a blocklist source whose list has not gained or lost an entry for 30 days
   (`frozen_after_days`) shows as **frozen** on the Sources page and the dashboard. Its entries still
   count; check the feed and disable it if the publisher stopped updating it.
-- **Your network:** add your public addresses to the allowlist with **My network** ticked (or run
-  `threatcull allow detect`). ThreatCull keeps them out of every output and warns you when a source
-  lists one.
+- **Your network:** add your public addresses to the allowlist with **My network** ticked, or run
+  `threatcull allow detect --apply`. Without `--apply` the command only lists candidates; add
+  `--public-ip` to also ask api.ipify.org for your public IP. ThreatCull keeps these addresses out of
+  every output and warns you when a source lists one.
 - **Scripts:** create an API token with
   `docker exec threatcull threatcull api-token create <name> --user admin` and send it as
   `Authorization: Bearer <token>` to `/api/v1/`. [docs/API.md](docs/API.md) lists every endpoint.
@@ -299,7 +307,9 @@ uv run threatcull serve --host <lan-ip> --port 6969
   shell or package manager inside) and runs as a non-root user. The compose file drops all Linux
   capabilities and blocks privilege escalation. It also works with `read_only: true` and
   `tmpfs: [/tmp]`: SQLite writes its temporary files to `/data`, so they don't use RAM.
-- **Reverse proxy with TLS:** start `serve` with `--secure-cookies` and `--trusted-proxy <proxy-ip>`.
+- **Reverse proxy with TLS:** add
+  `command: serve --host 0.0.0.0 --port 6969 --secure-cookies --trusted-proxy <proxy-ip>` to the
+  service in `docker-compose.yaml`. Without Docker, pass the two flags to `serve`.
 - **Scheduling:** `serve` runs fetches and compiles itself. `threatcull run` refuses to start while
   `serve` runs on the same data directory, so don't schedule it from `cron` as well.
 
@@ -314,8 +324,8 @@ publishes it and follow their terms.
 To set up a development checkout and run the checks:
 
 ```bash
-make setup   # dependencies and git hooks
-make check   # lint, types and security checks, as in CI
+make setup   # dependencies, git hooks and Vale styles
+make check   # lint, prose, types, UI bundle (needs Node), tests and security checks, as in CI
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for reporting issues and suggesting changes, [SECURITY.md](SECURITY.md)
