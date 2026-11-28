@@ -27,10 +27,9 @@ export TOKEN=tc_...
 curl -H "Authorization: Bearer $TOKEN" http://<server-ip>:6969/api/v1/me
 ```
 
-A token acts as the user it was created for. ThreatCull stores only a hash, so a lost token can't
-be shown again: revoke it and create a new one. The **API tokens** card on Settings lists every token
-with its user, creation time and last use, and revokes one of your own after you tick **Confirm**. The same from
-the command line:
+ThreatCull stores only a hash, so it can't show a lost token again: revoke it and create a new one.
+The **API tokens** card on Settings lists every token with its user, creation time and last use, and
+revokes one of your own after you tick **Confirm**. The command line lists and revokes any token:
 
 ```bash
 docker exec threatcull threatcull api-token list
@@ -128,8 +127,8 @@ curl -H "Authorization: Bearer $TOKEN" "http://<server-ip>:6969/api/v1/runs?limi
 ### `GET /api/v1/settings`
 
 The Compile settings: `active_window_days`, `retention_days`, `stale_after_hours`, `tier_high`,
-`tier_medium`, `max_shrink`, `max_stale_ratio` and `frozen_after_days`. The API can't change them; use
-**Settings** in the web UI.
+`tier_medium`, `max_shrink`, `max_stale_ratio` and `frozen_after_days`. The API can't change them.
+To change them, import a configuration file on the **Settings** page.
 
 ### `GET /api/v1/lookup?q=<value>`
 
@@ -177,8 +176,8 @@ http://<server-ip>:6969/o/<name>/<feed-token>
 http://<server-ip>:6969/o/<name>?token=<feed-token>
 ```
 
-Get the token by clicking **Rotate token** on **Outputs** (or with the rotate endpoint above). It
-shows once.
+Get the token by clicking **Rotate token** on **Outputs**, or with the rotate endpoint above.
+ThreatCull shows it once.
 
 - `GET` returns the file. `HEAD` returns only its headers.
 - Responses carry `ETag` and `Last-Modified`. A request with a matching `If-None-Match` or
