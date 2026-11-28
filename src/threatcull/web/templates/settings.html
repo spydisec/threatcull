@@ -43,7 +43,7 @@
   <h2>Storage</h2>
   <dl class="settings-list">
     <dt>Database</dt>
-    <dd><strong>{{ database_bytes | size }}</strong><span class="sub">{{ "{:,}".format(sighting_count) }} Sightings. It grows with the lines your Sources list; Sightings older than the retention period are deleted at each Compile.</span></dd>
+    <dd><strong>{{ database_bytes | size }}</strong><span class="sub">{% if sighting_count is not none %}{{ "{:,}".format(sighting_count) }} Sightings at the last Compile.{% else %}The next Compile counts the Sightings.{% endif %} It grows with the lines your Sources list; Sightings older than the retention period are deleted at each Compile.</span></dd>
     <dt>Outputs</dt>
     <dd><strong>{{ outputs_bytes | size }}</strong><span class="sub">The published feed files.</span></dd>
   </dl>

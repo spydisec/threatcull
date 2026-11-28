@@ -778,11 +778,15 @@ def settings_page(
 
 def _settings_context(request: Request, conn: sqlite3.Connection, **extra: Any) -> dict[str, Any]:
     database, outputs = storage_bytes(request.app.state.data_dir)
+    # The number the last Compile recorded. Counting the table here took seconds on a
+    # database with millions of Sightings, on every load of the page.
+    newest = compile_history(conn, limit=1)
+    stats = CompileStats.from_json(newest[-1].stats) if newest else None
     return {
         "settings": load_settings(conn),
         "database_bytes": database,
         "outputs_bytes": outputs,
-        "sighting_count": conn.execute("SELECT COUNT(*) FROM sightings").fetchone()[0],
+        "sighting_count": stats.sightings if stats else None,
         "api_tokens": list_api_tokens(conn),
         **extra,
     }
