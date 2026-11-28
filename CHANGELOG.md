@@ -13,6 +13,9 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 - ⏱️ **No Compile after a Fetch that changed nothing.** ThreatCull started a Compile two minutes
   after every Fetch, including one that found its list unchanged. It now starts one only when a
   list changed or a Stale Source came back. The hourly Compile still runs.
+- 🚀 **Faster Compiles.** The Compile counts its dashboard stats in the database and writes plain,
+  hosts, AdGuard and RPZ Outputs in batches, instead of handling each Indicator in Python. The
+  Output files are the same, byte for byte.
 
 ### Fixed
 

@@ -14,6 +14,15 @@ from threatcull.policy.scoring import ScoredIndicator
 from threatcull.store.outputs import OutputFormat
 
 _COMMENT = {"plain": "#", "hosts": "#", "adguard": "!", "rpz": ";"}
+# Formats whose entry is built from the Indicator's value alone. 0.0.0.0 in "hosts" is
+# the hosts-file sink address (routes nowhere), not a bind address.
+_LINE = {
+    "plain": "{0}\n",
+    "hosts": "0.0.0.0 {0}\n",
+    "adguard": "||{0}^\n",
+    "rpz": "{0} CNAME .\n*.{0} CNAME .\n",
+}
+LINE_FORMATS = frozenset(_LINE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,20 +72,23 @@ def head(fmt: OutputFormat, ctx: RenderContext, count: int) -> str:
     return "".join(f"{line}\n" for line in lines)
 
 
+def line(fmt: OutputFormat, value: str) -> str:
+    """One Indicator's text in a format that needs only its value (``LINE_FORMATS``)."""
+    _refuse_line_breaks(value)
+    return _LINE[fmt].format(value)
+
+
+def _refuse_line_breaks(value: str) -> None:
+    if "\n" in value or "\r" in value:
+        # normalize() refuses these; never let one become extra rules in a feed.
+        raise ValueError(f"refusing to publish a value with a line break: {value!r}")
+
+
 def entry(fmt: OutputFormat, item: ScoredIndicator, ctx: RenderContext, index: int) -> str:
     """One Indicator's text; ``index`` is its 0-based position in the Output."""
-    if "\n" in item.value or "\r" in item.value:
-        # normalize() refuses these; never let one become extra rules in a feed.
-        raise ValueError(f"refusing to publish a value with a line break: {item.value!r}")
-    if fmt == "plain":
-        return f"{item.value}\n"
-    if fmt == "hosts":
-        # 0.0.0.0 here is the hosts-file sink address (routes nowhere), not a bind address.
-        return f"0.0.0.0 {item.value}\n"
-    if fmt == "adguard":
-        return f"||{item.value}^\n"
-    if fmt == "rpz":
-        return f"{item.value} CNAME .\n*.{item.value} CNAME .\n"
+    if fmt in LINE_FORMATS:
+        return line(fmt, item.value)
+    _refuse_line_breaks(item.value)
     names = [ctx.source_names.get(source_id, source_id) for source_id in item.source_ids]
     if fmt == "csv":
         return _csv_row(
