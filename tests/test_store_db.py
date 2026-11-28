@@ -189,6 +189,59 @@ def test_migration_11_backfills_last_changed_at_from_the_newest_first_seen(
     assert rows == {"busy": "2021-10-06T00:00:00+00:00", "empty": None}
 
 
+def test_migration_12_stores_sightings_compactly_and_keeps_them(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    old = _at_version(path, 11)
+    for source_id in ("zeta", "alpha"):
+        old.execute(
+            "INSERT INTO sources (id, name, family, url, format, kind, role, category, "
+            "refresh_minutes, last_success_at) VALUES (?, ?, ?, 'https://x', 'plain', 'ip', "
+            "'blocklist', 'malicious', 60, '2026-10-02T00:00:00+00:00')",
+            (source_id, source_id, source_id),
+        )
+    old.execute("INSERT INTO indicators (id, value, kind) VALUES (1, '45.9.20.1', 'ip')")
+    old.execute("INSERT INTO indicators (id, value, kind) VALUES (2, '45.9.20.2', 'ip')")
+    old.execute(
+        "INSERT INTO sightings (source_id, indicator_id, first_seen, last_seen, current) "
+        "VALUES ('zeta', 1, '2021-01-01T00:00:00+00:00', '2026-10-02T00:00:00+00:00', 1), "
+        "('zeta', 2, '2021-10-06T00:00:00+00:00', '2026-10-01T00:00:00+00:00', 0), "
+        "('alpha', 1, '2022-01-01T00:00:00+00:00', '2026-10-02T00:00:00+00:00', 1)"
+    )
+    old.close()
+
+    upgraded = connect(path)
+    try:
+        nums = {r[0]: r[1] for r in upgraded.execute("SELECT id, num FROM sources")}
+        rows = [
+            tuple(r)
+            for r in upgraded.execute(
+                "SELECT s.id, g.indicator_id, g.first_seen, g.last_seen FROM sightings g "
+                "JOIN sources s ON s.num = g.source_num ORDER BY s.id, g.indicator_id"
+            )
+        ]
+        # A Source added after the upgrade gets the next number, and deleting a Source
+        # still deletes its Sightings.
+        upgraded.execute(
+            "INSERT INTO sources (id, name, family, url, format, kind, role, category, "
+            "refresh_minutes) VALUES ('new', 'new', 'new', 'https://x', 'plain', 'ip', "
+            "'blocklist', 'malicious', 60)"
+        )
+        new_num = upgraded.execute("SELECT num FROM sources WHERE id = 'new'").fetchone()[0]
+        upgraded.execute("DELETE FROM sources WHERE id = 'zeta'")
+        left = upgraded.execute("SELECT COUNT(*) FROM sightings").fetchone()[0]
+    finally:
+        upgraded.close()
+
+    assert nums == {"alpha": 1, "zeta": 2}
+    assert rows == [
+        ("alpha", 1, 1640995200, None),  # still listed: last_seen is the Source's last success
+        ("zeta", 1, 1609459200, None),
+        ("zeta", 2, 1633478400, 1790812800),  # left the list: its own last-seen time
+    ]
+    assert new_num == 3
+    assert left == 1
+
+
 def _open_raw(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(
         path, timeout=db.BUSY_TIMEOUT_S, isolation_level=None, check_same_thread=False

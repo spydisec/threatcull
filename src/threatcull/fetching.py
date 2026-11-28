@@ -249,7 +249,9 @@ def _count_rejection(
         return f"no valid indicators in response ({parsed} lines unparseable)"
     current = int(
         conn.execute(
-            "SELECT COUNT(*) FROM sightings WHERE source_id = ? AND current = 1", (source_id,)
+            "SELECT COUNT(*) FROM sightings WHERE last_seen IS NULL AND source_num = "
+            "(SELECT num FROM sources WHERE id = ?)",
+            (source_id,),
         ).fetchone()[0]
     )
     if current >= COLLAPSE_MIN_CURRENT and valid < current * COLLAPSE_RATIO:

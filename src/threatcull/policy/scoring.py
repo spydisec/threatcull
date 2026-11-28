@@ -15,30 +15,36 @@ from threatcull.store.settings import Settings
 Tier = Literal["high", "medium", "low"]
 TIER_RANK: dict[Tier, int] = {"low": 1, "medium": 2, "high": 3}
 
-# One row per scored Indicator, rebuilt by every Compile. Temp storage stays on disk
+# ``sightings`` stores times as whole seconds since 1970; strftime turns one back into the text
+# the rest of ThreatCull uses. A Sighting the Source still lists (``last_seen IS NULL``) was last
+# seen at the Source's last successful Fetch, so the Active Window and the Stale limit both test
+# that time. One row per scored Indicator, rebuilt by every Compile. Temp storage stays on disk
 # (SQLite's default), so millions of Indicators never have to fit in Python memory.
 _CREATE_SCORED = """
     CREATE TEMP TABLE scored AS
     SELECT i.value, i.kind, COUNT(DISTINCT src.family) AS score,
         GROUP_CONCAT(src.id) AS source_ids, GROUP_CONCAT(DISTINCT src.category) AS categories,
-        MIN(sg.first_seen) AS first_seen, MAX(sg.last_seen) AS last_seen, 0 AS allowlisted
+        strftime('%Y-%m-%dT%H:%M:%S+00:00', MIN(sg.first_seen), 'unixepoch') AS first_seen,
+        MAX(src.last_success_at) AS last_seen, 0 AS allowlisted
     FROM sightings sg
-    JOIN sources src ON src.id = sg.source_id
+    JOIN sources src ON src.num = sg.source_num
     JOIN indicators i ON i.id = sg.indicator_id
-    WHERE src.enabled = 1 AND src.role = 'blocklist' AND sg.current = 1
-        AND sg.last_seen >= :window_start AND src.last_success_at >= :stale_cutoff
+    WHERE src.enabled = 1 AND src.role = 'blocklist' AND sg.last_seen IS NULL
+        AND src.last_success_at >= :window_start AND src.last_success_at >= :stale_cutoff
     GROUP BY i.id
 """
 
 _SCORED_ONE = """
     SELECT i.value, i.kind, COUNT(DISTINCT src.family) AS score,
         GROUP_CONCAT(src.id) AS source_ids, GROUP_CONCAT(DISTINCT src.category) AS categories,
-        MIN(sg.first_seen) AS first_seen, MAX(sg.last_seen) AS last_seen
+        strftime('%Y-%m-%dT%H:%M:%S+00:00', MIN(sg.first_seen), 'unixepoch') AS first_seen,
+        MAX(src.last_success_at) AS last_seen
     FROM indicators i
     JOIN sightings sg ON sg.indicator_id = i.id
-    JOIN sources src ON src.id = sg.source_id
-    WHERE i.value = :value AND src.enabled = 1 AND src.role = 'blocklist' AND sg.current = 1
-        AND sg.last_seen >= :window_start AND src.last_success_at >= :stale_cutoff
+    JOIN sources src ON src.num = sg.source_num
+    WHERE i.value = :value AND src.enabled = 1 AND src.role = 'blocklist'
+        AND sg.last_seen IS NULL
+        AND src.last_success_at >= :window_start AND src.last_success_at >= :stale_cutoff
     GROUP BY i.id
 """
 
