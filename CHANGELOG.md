@@ -8,6 +8,12 @@ and published as `ghcr.io/spydisec/threatcull` for linux/amd64 and linux/arm64.
 
 ## [Unreleased]
 
+### Changed
+
+- ⏱️ **No Compile after a Fetch that changed nothing.** ThreatCull started a Compile two minutes
+  after every Fetch, including one that found its list unchanged. It now starts one only when a
+  list changed or a Stale Source came back. The hourly Compile still runs.
+
 ### Fixed
 
 - 🐢 **Settings opens fast on a large database.** The Storage card counted every Sighting on each
